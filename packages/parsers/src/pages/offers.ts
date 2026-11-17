@@ -173,6 +173,8 @@ export interface Offer {
   shipping?: OfferShipping;
   /** price + shipping when both are known in one currency. */
   total?: Money;
+  /** Set when the total assumes conditional free shipping ("for Prime members"). */
+  total_condition?: string;
   condition: OfferCondition | null;
   /** Heading as shown ("Used - Very Good", "Refurbished - Excellent"). */
   condition_label?: string;
@@ -289,6 +291,8 @@ export interface BuyboxRow {
   /** `data-a-accordion-row-name` ("newAccordionRow", "snsAccordionRowMiddle", ...). */
   name: string;
   caption: string;
+  /** The row header as shown (condition, price, delivery, ships-from / sold-by summary). */
+  text: string;
   active: boolean;
   price?: Money;
 }
@@ -300,7 +304,12 @@ export interface BuyboxInfo {
   availability_text?: string;
   rows: BuyboxRow[];
   add_to_cart_present: boolean;
-  /** Shipping destination line ("Deliver to ..."). */
+  /** Delivery lines of the selected row. */
+  delivery_lines?: string[];
+  /** Ships-from / sold-by of the selected row (read from the collapsed details). */
+  ships_from?: string;
+  sold_by?: string;
+  /** Shipping destination line ("Deliver to ..."): the owner's name and location. */
   deliver_to?: string;
   max_quantity?: number;
   /** Visible protection-plan offer text. */
@@ -359,6 +368,7 @@ export const AOD_HIDDEN_CLASSES: readonly string[] = [
   "a-hidden",
   "aod-hide",
   "aod-visibility-hidden",
+  "a-popover-preload",
 ];
 
 /** Collapsed-but-real panel content: shown again on purpose. */
@@ -678,7 +688,9 @@ function parseSeller(row: DetailRow | undefined, card: DomElement, ctx: CardCtx)
     ) ?? null;
   const href = attr(value === undefined ? undefined : q(value, "a[href]"), "href");
   seller.seller_id = sellerIdFromHref(href);
-  seller.is_amazon = isAmazonName(seller.name);
+  // Amazon's own sold-by carries no storefront link; an Amazon-looking name WITH a seller id
+  // is treated as a third party (fails closed).
+  seller.is_amazon = isAmazonName(seller.name) && seller.seller_id === null;
   if (ratingBlock !== undefined) {
     const icon = q(ratingBlock, "i.a-icon");
     seller.rating_stars =
@@ -972,6 +984,10 @@ function parseOfferCard(
     if (fee !== undefined) {
       const amount = Math.round((price.amount + fee) * 100) / 100;
       offer.total = { amount, currency: price.currency, raw: `$${amount.toFixed(2)}` };
+      // Conditional free shipping: the total holds only when the condition is met.
+      if (shipping.free && shipping.condition !== undefined) {
+        offer.total_condition = shipping.condition;
+      }
     }
   }
   cons.takeAll(qa(card, ".aod-delivery-promise"));
@@ -1149,6 +1165,11 @@ export interface OfferFlagContext {
   subscribe_and_save_default?: boolean;
   protection_plan_prompt?: boolean;
   addon_or_bundle_upsell?: boolean;
+  /**
+   * The account has Prime, so "FREE delivery for Prime members" is free. Unknown (undefined)
+   * fails closed: conditional free shipping then counts as a fee.
+   */
+  prime_member?: boolean;
 }
 
 export type StaticFlagContext = Omit<
@@ -1160,7 +1181,12 @@ export type StaticFlagContext = Omit<
 export function offerFlagContext(
   data: OffersData,
   offer: Offer,
-  request: { now: Date | string; requested_quantity?: number; utc_offset_minutes?: number },
+  request: {
+    now: Date | string;
+    requested_quantity?: number;
+    utc_offset_minutes?: number;
+    prime_member?: boolean;
+  },
 ): OfferFlagContext {
   const ctx: OfferFlagContext = {
     ...staticContext(data, offer),
@@ -1168,6 +1194,7 @@ export function offerFlagContext(
   };
   if (request.requested_quantity !== undefined) ctx.requested_quantity = request.requested_quantity;
   if (request.utc_offset_minutes !== undefined) ctx.utc_offset_minutes = request.utc_offset_minutes;
+  if (request.prime_member !== undefined) ctx.prime_member = request.prime_member;
   return ctx;
 }
 
@@ -1180,7 +1207,8 @@ function staticContext(data: OffersData, offer: Offer): StaticFlagContext {
     protection_plan_prompt: data.buybox.protection_plan_text !== undefined,
     addon_or_bundle_upsell: data.buybox.addon_text !== undefined,
   };
-  const typical = offer.typical_price ?? (offer.pinned ? data.typical_price : undefined);
+  // The product page's typical price is product level: it applies to every offer.
+  const typical = offer.typical_price ?? data.typical_price;
   if (typical !== undefined) ctx.typical_price = typical;
   return ctx;
 }
@@ -1260,7 +1288,8 @@ function staticFlags(offer: Offer, ctx: StaticFlagContext): Set<OfferFlag> {
   if (offer.prime !== true) f.add("not_prime");
   if (
     offer.shipping === undefined ||
-    (!offer.shipping.free && (offer.shipping.amount?.amount ?? 1) > 0)
+    (!offer.shipping.free && (offer.shipping.amount?.amount ?? 1) > 0) ||
+    !shippingConditionMet(offer.shipping.condition, ctx)
   ) {
     f.add("shipping_fee");
   }
@@ -1286,6 +1315,28 @@ function staticFlags(offer: Offer, ctx: StaticFlagContext): Set<OfferFlag> {
   return f;
 }
 
+/**
+ * Free shipping with a qualifier ("for Prime members", "on orders over $35") is free only
+ * when the qualifier is provably met. Only Prime membership can be proven (by the caller,
+ * through `prime_member`); an order-total threshold depends on the cart and never is.
+ */
+function shippingConditionMet(condition: string | undefined, ctx: StaticFlagContext): boolean {
+  if (condition === undefined || condition.trim() === "") return true;
+  if (/^for prime members$/i.test(condition.trim())) return ctx.prime_member === true;
+  return false;
+}
+
+/**
+ * The delivery options that count for slow_delivery: the primary option (the one shipping
+ * and total were read from) plus any other option whose price is known to be FREE. A faster
+ * option of unknown or non-zero price does not make a slow free offer fast.
+ */
+function countedDeliveryOptions(offer: Offer): DeliveryOption[] {
+  const options = offer.delivery?.options ?? [];
+  const primary = options.find((o) => !o.fastest) ?? options[0];
+  return options.filter((o) => o === primary || o.price === "FREE");
+}
+
 function localDayNumber(instant: number, offsetMinutes: number): number {
   return Math.floor((instant + offsetMinutes * 60_000) / 86_400_000);
 }
@@ -1296,8 +1347,8 @@ function isoDayNumber(iso: string): number | undefined {
 }
 
 /**
- * Calendar days from `now` (page-local) to the offer's fastest promised delivery, or
- * undefined when no option has a usable date.
+ * Calendar days from `now` (page-local) to the offer's soonest counted delivery (see
+ * countedDeliveryOptions), or undefined when no counted option has a usable date.
  */
 export function deliveryDaysFrom(
   offer: Offer,
@@ -1308,7 +1359,7 @@ export function deliveryDaysFrom(
   if (!Number.isFinite(nowMs)) return undefined;
   const today = localDayNumber(nowMs, utcOffsetMinutes);
   let best: number | undefined;
-  for (const o of offer.delivery?.options ?? []) {
+  for (const o of countedDeliveryOptions(offer)) {
     let days: number | undefined;
     if (o.latest_iso !== undefined) {
       const d = isoDayNumber(o.latest_iso);
@@ -1507,7 +1558,12 @@ function parsePurchaseTypes(
       rawText(rq(header, ".a-text-bold"));
     const active = classList(row).includes("a-accordion-active");
     const price = rowPrice(row);
-    const r: BuyboxRow = { name, caption, active };
+    const r: BuyboxRow = {
+      name,
+      caption,
+      active,
+      text: text(header, { exclude: (e) => e.matches(".a-offscreen") }),
+    };
     if (price !== undefined) r.price = price;
     rows.push(r);
     const kind = rowKind(name, caption);
@@ -1721,6 +1777,17 @@ function parseProductPage(
   const dt = text(deliverTo);
   if (dt !== "") info.buybox.deliver_to = dt;
   cons.take(deliverTo);
+  const deliveryLines = qa(scope, "[id^=mir-layout-DELIVERY_BLOCK-slot-]")
+    .map((s) => text(s))
+    .filter((t) => t !== "");
+  if (deliveryLines.length > 0) info.buybox.delivery_lines = deliveryLines;
+  const odfText = (sel: string): string =>
+    rawText(rq(scope, `${sel} .offer-display-feature-text-message`)) ||
+    rawText(rq(scope, `${sel} .offer-display-feature-text`));
+  const soldBy = odfText("#merchantInfoFeature_feature_div");
+  if (soldBy !== "") info.buybox.sold_by = soldBy;
+  const shipsFrom = odfText("#fulfillerInfoFeature_feature_div");
+  if (shipsFrom !== "") info.buybox.ships_from = shipsFrom;
   const qtyMax = Math.max(
     0,
     ...rqa(scope, "select#quantity option, select[name=quantity] option")
@@ -1821,7 +1888,7 @@ function buyboxOffer(
     name: sold || null,
     seller_id: sellerIdFromHref(sellerHref),
     new_seller: false,
-    is_amazon: isAmazonName(sold),
+    is_amazon: isAmazonName(sold) && sellerIdFromHref(sellerHref) === null,
   };
   const olid =
     attr(rq(scope, "input[name='items[0.base][offerListingId]']"), "value") ||
@@ -2075,7 +2142,8 @@ export const parseOffers: Parser<OffersData> = (capture: Capture): ParseResult<O
       total !== undefined
         ? total > loaded
         : q(aodRoot, "#aod-retail-show-more-offers") !== undefined && endText === "";
-    if (pag.has_more) pag.next_page = Math.floor(loaded / AOD_PAGE_SIZE) + 1;
+    // The fragment in hand is page 1 (it may hold fewer than a page of offers).
+    if (pag.has_more) pag.next_page = Math.max(2, Math.ceil(loaded / AOD_PAGE_SIZE) + 1);
     meta.strategies["pagination"] = total !== undefined ? "id" : "label";
   }
 

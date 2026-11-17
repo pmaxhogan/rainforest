@@ -19,7 +19,7 @@ import {
   parseDeliveryDate,
   parseOffers,
 } from "../../src/pages/offers.ts";
-import type { Offer, OfferFlagContext } from "../../src/pages/offers.ts";
+import type { DeliveryOption, Offer, OfferFlagContext } from "../../src/pages/offers.ts";
 
 // ---- synthetic markup builders (structure mirrors the real panel; all content is invented)
 
@@ -442,7 +442,7 @@ describe("parseOffers: pinned offer plus list", () => {
       loaded: 3,
       total: 25,
       has_more: true,
-      next_page: 1,
+      next_page: 2,
       page_size: 10,
       url_template: AOD_NEXT_PAGE_TEMPLATE,
     });
@@ -687,6 +687,12 @@ describe("parseOffers: fulfillment, shipping, Prime, quantity, stock", () => {
     expect(o[2]?.flags).toContain("shipping_fee");
     expect(o[3]?.shipping).toMatchObject({ free: true, condition: "for Prime members" });
     expect(o[3]?.delivery?.options[0]?.condition).toBe("for Prime members");
+    // Conditional free shipping is not provably free at parse time.
+    expect(o[3]?.total?.amount).toBe(21);
+    expect(o[3]?.total_condition).toBe("for Prime members");
+    expect(o[3]?.flags).toContain("shipping_fee");
+    const ctx = offerFlagContext(r.data, o[3] as Offer, { now: CAPTURED_AT, prime_member: true });
+    expect(computeOfferFlags(o[3] as Offer, ctx)).not.toContain("shipping_fee");
   });
 
   it("Prime from the icon, from the program attribute, and non-Prime", () => {
@@ -746,6 +752,23 @@ describe("parseOffers: seller details", () => {
     expect(r.meta.strategies["offer.seller.name"]).toBe("data-attr");
     expect(b.fulfillment).toBeNull();
     expect(b.flags).toContain("merchant_fulfilled");
+  });
+
+  it("an Amazon-looking name with a storefront link is a third party", () => {
+    const html = panel({
+      pinned: null,
+      offers: [
+        thirdParty(1, { soldBy: "Amazon.com", shipsFrom: "Amazon.com", sellerId: "AFAKESELLER77" }),
+      ],
+    });
+    const o = parseOffers(capture(productPage(), html)).data.offers[0] as Offer;
+    expect(o.seller).toMatchObject({
+      name: "Amazon.com",
+      seller_id: "AFAKESELLER77",
+      is_amazon: false,
+    });
+    expect(o.fulfillment).toBe("fba");
+    expect(o.flags).toContain("third_party_seller");
   });
 
   it("isAmazonName", () => {
@@ -810,13 +833,14 @@ describe("parseOffers: hidden templates", () => {
 
   it("normalizeAodVisibility hides class-hidden nodes but reveals collapsed content", () => {
     const doc = parseDocument(
-      `<div id="aod-container"><div id="a" class="aok-hidden">x</div><div id="aod-pinned-offer-additional-content" class="aod-hide" data-rf-hidden="1">y</div><div id="aod-retail-other-offers-content" class="aod-oas-other-offers-hide">z</div><div id="aod-sticky-pinned-container">s</div></div>`,
+      `<div id="aod-container"><div id="a" class="aok-hidden">x</div><div id="aod-pinned-offer-additional-content" class="aod-hide" data-rf-hidden="1">y</div><div id="aod-retail-other-offers-content" class="aod-oas-other-offers-hide">z</div><div id="aod-sticky-pinned-container">s</div><div id="pop" class="a-popover-preload">p</div></div>`,
     );
     normalizeAodVisibility(doc);
     expect(q(doc, "#a")).toBeUndefined();
     expect(q(doc, "#aod-pinned-offer-additional-content")).toBeDefined();
     expect(q(doc, "#aod-retail-other-offers-content")).toBeDefined();
     expect(q(doc, "#aod-sticky-pinned-container")).toBeUndefined();
+    expect(q(doc, "#pop")).toBeUndefined();
   });
 });
 
@@ -943,15 +967,28 @@ describe("parseOffers: product page", () => {
       add_to_cart_present: true,
       deliver_to: "Deliver to Alex - Exampleville 00000",
       max_quantity: 12,
+      delivery_lines: ["FREE delivery Tuesday, March 3"],
+      ships_from: "Amazon.com",
+      sold_by: "Amazon.com",
     });
     expect(typical.data.buybox.rows).toEqual([
       {
         name: "newAccordionRow",
         caption: "One-time purchase:",
         active: true,
+        text: "One-time purchase: $20.00$10.00 per count",
         price: { amount: 20, currency: "USD", raw: "$20.00" },
       },
     ]);
+    // A listed offer far above the product's typical price is flagged too.
+    const pricey = parseOffers(
+      capture(
+        productPage({ basis: "$26.00", title: "Invented Widget" }),
+        panel({ offers: [thirdParty(1, { price: "$40.00" })] }),
+      ),
+    );
+    expect(pricey.data.offers[0]?.flags).toContain("price_above_typical");
+    expect(pricey.data.pinned_offer?.flags).not.toContain("price_above_typical");
     const list = parseOffers(
       capture(productPage({ basis: "$40.00", basisLabel: "List Price:" }), panel({})),
     );
@@ -1363,7 +1400,19 @@ describe("slow_delivery boundary", () => {
         ],
       },
     };
-    expect(computeOfferFlags(two, ctx)).toEqual([]);
+    // The faster option's price is unknown: it does not rescue the slow free primary.
+    expect(computeOfferFlags(two, ctx)).toEqual(["slow_delivery"]);
+    const freeFast: Offer = {
+      ...two,
+      delivery: {
+        lines: ["a", "b"],
+        options: [
+          { ...(two.delivery?.options[0] as DeliveryOption) },
+          { ...(two.delivery?.options[1] as DeliveryOption), price: "FREE" },
+        ],
+      },
+    };
+    expect(computeOfferFlags(freeFast, ctx)).toEqual([]);
     const tomorrow: Offer = {
       ...cleanOffer(),
       delivery: {
