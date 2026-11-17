@@ -233,25 +233,23 @@ export const addToCart: Flow = async (args, ctx) => {
     });
     await new Promise((r) => setTimeout(r, 3000));
     // What the rails refused between the click and now (paths only), for diagnosis.
-    const refusedAfterClick = page.guard
-      .blocked()
-      .slice(-5)
-      .map((b) => {
-        let path = "";
-        try {
-          path = new URL(b.url).pathname.slice(0, 120);
-        } catch {
-          path = "";
-        }
-        return { method: b.method, path, rule: b.verdict.rule, main_frame: b.mainFrameDocument };
-      });
-    const landedPath = (() => {
+    const pathOf = (value: string): string => {
       try {
-        return new URL(page.page.url()).pathname.slice(0, 120);
+        return new URL(value).pathname.slice(0, 120);
       } catch {
         return "";
       }
-    })();
+    };
+    const refusedAfterClick = page.guard
+      .blocked()
+      .slice(-5)
+      .map((b) => ({
+        method: b.method,
+        path: pathOf(b.url),
+        rule: b.verdict.rule,
+        main_frame: b.mainFrameDocument,
+      }));
+    const landedPath = pathOf(page.page.url());
     const declined = await declineUpsells(page);
 
     const after = await loadCart(page);
