@@ -1,0 +1,12 @@
+#!/bin/sh
+# stdin: <local ref> <local sha> <remote ref> <remote sha>
+zero=0000000000000000000000000000000000000000
+while read -r _lref lsha _rref rsha; do
+  [ "$lsha" = "$zero" ] && continue
+  if [ "$rsha" = "$zero" ]; then
+    node scripts/privacy-gate.mjs range "$lsha" || exit 1
+  else
+    node scripts/privacy-gate.mjs range "$rsha..$lsha" || exit 1
+  fi
+done
+exit 0

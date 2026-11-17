@@ -1,0 +1,11 @@
+.claude/
+.wrangler/
+.env*
+.dev.vars*
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+*.har
+*.trace.zip
