@@ -20,8 +20,11 @@ and nothing that was real.
   browser session, read `git status` and stage by path; never `git add -A`.
 - Product titles, review text and search queries in fixtures are invented, never copied from a
   real page.
-- Fixtures live under `fixtures/<kind>/<case>/`. Nothing else in the tree is scanned by the CI gate,
-  so capture-derived files belong there and nowhere else.
+- Fixtures live under `<fixtures root>/<kind>/<case>/`. The parser fixtures are in
+  `packages/parsers/test/fixtures` (a top-level `fixtures/` directory is scanned too if it
+  exists). Nothing else in the tree is scanned by the CI gate, so capture-derived files belong
+  there and nowhere else. The mock storefront (`packages/mock-site`) is not capture-derived: all of
+  its content is invented.
 
 ### Reserved fake ranges
 
@@ -91,7 +94,8 @@ with the same rules the CI gate uses; if anything still looks real, it writes no
    the matched text, only the file and line. On a contributor's machine with no denylist
    configured it skips.
 2. **Public CI allowlist gate.** `scripts/check-fixtures.mjs` runs in CI for every pull request
-   and push (and in `npm run check`). It needs no secrets. It walks `fixtures/` and fails if:
+   and push (and in `npm run check`, as `npm run fixtures:check`). It needs no secrets. It walks
+   `fixtures/` and `packages/parsers/test/fixtures` and fails if:
    - any identifier is outside the fake ranges, or any URL host is not on the three allowed
      placeholder hosts, or an opaque token or long upper-case id is present;
    - a script is not an inert JSON blob, or the page has styles, links, objects, embeds,
@@ -119,7 +123,7 @@ with the same rules the CI gate uses; if anything still looks real, it writes no
 2. Scrub it into the fixture directory:
 
    ```
-   node packages/scrubber/src/cli.ts <raw-capture-dir> fixtures/<kind>/<case> --note "what this case exercises"
+   node packages/scrubber/src/cli.ts <raw-capture-dir> packages/parsers/test/fixtures/<kind>/<case> --note "what this case exercises" [--seed <s>] [--reduce]
    ```
 
    The command prints counts per replacement category (never values). If it reports findings it
@@ -127,7 +131,7 @@ with the same rules the CI gate uses; if anything still looks real, it writes no
 
 3. Write `expected.json` for the case from the parser and review it. Name the case for what it
    exercises (for example "no featured offer"), not for what the page was.
-4. Run `node scripts/check-fixtures.mjs`, then `npm run check`.
+4. Run `npm run fixtures:check`, then `npm run check`.
 5. Read the whole diff yourself, with the third gate in mind. If a value could identify a real
    person, product listing or place, remove it.
 6. Commit with a Conventional Commit message that contains no personal data, and open a pull
@@ -148,8 +152,8 @@ Deleting a leaked file in a later commit does not remove it from history.
 | Durable Object, audit     | per call: time, client name, tool, device, outcome, duration, error code; arguments for write tools (and `select_browser`) up to 4000 characters | 90 days                                                                              |
 | Durable Object, calls     | the in-flight call: tool, client, write arguments, and the result JSON once the computer answers                                                 | until the waiting request collects it; swept 30 seconds after the deadline otherwise |
 | Durable Object, lockout   | timestamps of wrong app-password attempts                                                                                                        | 15 minutes                                                                           |
-| KV namespace              | OAuth clients, grants and token records, managed by the OAuth library                                                                            | token lifetimes (one hour access, one year refresh)                                  |
-| Worker secrets            | the five settings, including the hash of the app password                                                                                        | until you change them                                                                |
+| KV namespace              | OAuth clients, grants and token records, managed by the OAuth library (the admin page lists the grants and can revoke them)                      | token lifetimes (one hour access, one year refresh), or until a grant is revoked     |
+| Worker secrets            | the five required settings (including the hash of the app password) and the optional minimum daemon version                                      | until you change them                                                                |
 
 The hub does not store page content in any lasting way. Results do pass through the Durable
 Object's storage in the `calls` table while a request waits for them, and a hub operator (you)
@@ -168,25 +172,31 @@ All of it lives in the app directory (see docs/ARCHITECTURE.md for paths):
 | `config.json`                        | hub URL, device id and name, aliases, Chrome profile name, extension id, broker mode and port, update repository and interval |
 | `device-key.json`                    | the device's Ed25519 key pair (owner-only)                                                                                    |
 | `secrets.json`                       | the extension token, and the update token if you add one (owner-only)                                                         |
-| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down                                                       |
+| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down (owner-only)                                          |
 | `audit.jsonl`                        | per call: time, tool, outcome, duration, error code; arguments for write tools only                                           |
 | `logs/`                              | operational JSON lines with secrets dropped by key name                                                                       |
 | `state.json`, `versions/`, `current` | installed versions and update bookkeeping                                                                                     |
 
-The daemon holds page content in memory only while handling a call and for the cursor cache (up
-to 40 parsed results for 15 minutes). It does not write captures to disk in normal operation; the
-developer capture tool is a separate, opt-in command.
+The daemon holds page content in memory only while handling a call and for three small caches:
+the cursor cache (up to 40 parsed results for 15 minutes), the recent page captures that several
+product tools share (two minutes, dropped after any write) and the price-history cache (six hours
+per source and ASIN). The key that seals cart offer ids also lives only in memory, so offer ids die
+with the process. It does not write captures to disk in normal operation; the developer capture
+tool is a separate, opt-in program.
 
 The daemon reads a little about the machine and sends it to the hub as presence: seconds since last
 keyboard or mouse input, whether the screen is locked, whether Chrome is running, whether the
 extension is connected, whether an Amazon page was read successfully, any cool-down end time, and
-the daemon version. The hub uses it to choose a computer and to show you `list_browsers`. On macOS
+the daemon version, the names you gave the computer with `setup --alias` and the remaining
+pacing budget per page type. The hub uses it to choose a computer and to show you
+`list_browsers`. On macOS
 this uses `ioreg` and `pgrep`; on Windows it uses `tasklist` and one short internal PowerShell
 helper.
 
 ### What leaves your machine
 
 The tool results go to the Worker and then to the Claude client you connected, which is the point of
-the tool. Update checks go to GitHub's API for the repository you configured. Optional
-price-history lookups go to CamelCamelCamel and Keepa (planned). Nothing is sent to any other
-party by this code.
+the tool. Update checks go to GitHub's API for the repository you configured. A price-history lookup
+loads a CamelCamelCamel page in your browser; for Keepa the daemon only builds a chart URL and
+returns it, and never loads a Keepa page itself. `show_on_screen` opens an amazon.com page in a
+normal tab of your own browser. Nothing is sent to any other party by this code.

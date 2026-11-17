@@ -76,6 +76,10 @@ npx wrangler login
 npx wrangler deploy --domain <your-hostname>
 ```
 
+From the repository root, `npm run deploy:hub` runs the same deploy with the hostname taken from
+the `HUB_DOMAIN` environment variable (`wrangler deploy --config packages/worker/wrangler.jsonc
+--domain "$HUB_DOMAIN"`).
+
 `wrangler.jsonc` deliberately holds no account id, route or hostname. `--domain` attaches the Worker
 as a custom domain on your zone (checked with `wrangler deploy --help`; the zone must be in the same
 account). The `OAUTH_KV` namespace has no id in the config; current Wrangler provisions it on first
@@ -109,13 +113,25 @@ match its format.)
 
 ## 4. Install the daemon on each computer
 
-The daemon (`rainforestd`) has no installer yet. There is no `rainforestd` on your PATH; the
-commands below run it through Node from a checkout of this repository. Substitute the path to your
-checkout. On Windows use backslashes in paths (or run the same commands from Git Bash).
+The daemon (`rainforestd`) is not on your PATH; you run it through Node. There are two ways to get
+the code, and the commands are the same either way:
 
-```
-node packages/daemon/src/main.ts <command>
-```
+- **From a checkout** of this repository (what the steps below use):
+
+  ```
+  node packages/daemon/src/main.ts <command>
+  ```
+
+- **From an unpacked release**, see "Installing a release instead" below:
+
+  ```
+  node rainforestd.mjs <command>
+  ```
+
+`node packages/daemon/src/main.ts --help` lists the commands: `install`, `uninstall`, `setup`,
+`pair`, `status`, `doctor`, `capture`, `update`, `selftest`, `run` and `version`. Substitute the
+path to your checkout. On Windows use backslashes in paths (or run the same commands from Git
+Bash).
 
 Do these in order, on the computer itself.
 
@@ -143,8 +159,9 @@ Flags:
   releases, which is not guaranteed). It is required even if you will turn updates off.
 - `--device-name`: the name shown on `/admin` and in `list_browsers` (default: the host name). The
   hub learns it when you pair, so set it before `pair`.
-- `--alias` (repeatable): stored in `config.json`. The hub never receives aliases, so they do not
-  work as `browser` values yet.
+- `--alias` (repeatable): extra names for this computer, stored in `config.json`. The daemon
+  reports them to the hub with its presence, so they work as `browser` values (and show in
+  `list_browsers`) once it has connected.
 - `--user-data-dir`, `--executable-path`: a non-default Chrome data directory or binary.
 - `--broker-mode` (`embedded` or `external`) and `--broker-port`: see Broker modes below. The
   defaults are `embedded` and 47117.
@@ -212,12 +229,36 @@ you gave with `--repo`, will replace the linked checkout. If you want to stay on
 `"update": { "enabled": false }` in `config.json` (the file keeps unknown keys; unverified) and
 restart.
 
-**Installing a release instead.** There is no command that installs the first release from a
-tarball: `install` without an active version prints a warning and the service exits until one
-exists, and `update` only moves to a strictly newer version than the one running. The layout the
-code expects is `versions/<version>/` (the unpacked release) plus a one-line `current` file naming
-it. Placing a release there by hand matches what the launcher reads, but the procedure is
-**unverified**.
+**Installing a release instead.** A release is the bundled daemon, which needs no checkout and no
+`npm ci` on that computer. Download `rainforestd-<version>.tgz`, `manifest.json` and
+`manifest.sig` from the repository's latest release into one folder (a private repository needs
+you to be signed in; the daemon's own updater uses `update_token` in `secrets.json` for that), and
+check them from a checkout of this repository:
+
+```
+node scripts/verify-release.mjs <folder>
+```
+
+It checks the manifest signature against the public keys committed in
+`packages/daemon/src/updater/release-key.ts` (add `--no-signature` for a fork that has no signing
+key), then the tarball's size and hash and its layout. Then unpack the tarball and use the bundle
+in it for every command in this step:
+
+```
+tar -xzf rainforestd-<version>.tgz
+cd rainforestd-<version>
+node rainforestd.mjs setup ...      # same flags as 4a
+node rainforestd.mjs pair
+node rainforestd.mjs install
+```
+
+Run from an unpacked release, `install` copies that release into `versions/<version>/` of the app
+directory, makes it the current version unless a newer one is already active, drops the stable
+launcher (`launcher.mjs`) and registers autostart, so you can delete the unpacked folder
+afterwards. From then on the daemon updates itself from newer signed releases. That the bundle
+starts on macOS, Windows and Linux is covered by the `daemon-smoke` workflow (it extracts a
+tarball and runs `version` and `selftest`); the rest of this path, including registering autostart
+from a release, follows from reading the code and is **unverified** end to end.
 
 ## 5. Connect Claude
 
@@ -279,8 +320,19 @@ node packages/daemon/src/main.ts selftest        # can this build run here? exit
 node packages/daemon/src/main.ts run             # run in the foreground to watch it
 ```
 
-`rainforestd doctor` is listed in the usage text but is not implemented yet: it prints an error and
-exits 1. Do not rely on it.
+`doctor` is a quick read-only health report, one line per check, exit 0 only if all pass:
+
+```
+node packages/daemon/src/main.ts doctor
+node packages/daemon/src/main.ts doctor --live
+```
+
+It checks that `config.json` exists and is valid, that the computer is paired, that the extension
+token is stored, that `<hub_url>/healthz` answers with `"configured":true`, and that the broker port
+is listening (in `embedded` mode only the running daemon listens there, so a stopped daemon shows
+as FAIL). `--live` adds, in `external` broker mode, whether the extension is connected to that
+broker and has a token. `capture` is a developer placeholder: it prints that it is not implemented
+and exits 1.
 
 Logs are JSON lines in the `logs` folder of the app directory:
 
@@ -319,14 +371,15 @@ older one.
 
 The codes are defined in docs/TOOLS.md; what to do about the common ones:
 
-| Code                | What to do                                                                                                                                     |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `no_browser_online` | No computer is connected: start the daemon, check `status`, check `/admin`                                                                     |
-| `browser_offline`   | The named computer is offline, or its extension cannot be reached: is Chrome running with the profile and the extension installed and enabled? |
-| `needs_human`       | Amazon asked for a captcha, a sign-in or another check: handle it in that Chrome yourself. The computer then cools down for 30 minutes         |
-| `throttled`         | A pacing cap or cool-down; wait `retry_after_s`. `list_browsers` shows `cooling_down_until`                                                    |
-| `busy`              | That computer already has 4 calls queued; retry in about 15 seconds                                                                            |
-| `daemon_outdated`   | The daemon is below `MIN_DAEMON_VERSION` and is updating; retry in a minute                                                                    |
-| `blocked_by_policy` | The URL policy refused a page; this is working as intended                                                                                     |
-| `unsupported`       | This daemon version does not implement that tool yet                                                                                           |
-| `timeout`           | A page did not load in 45 seconds, or the call passed 225 seconds                                                                              |
+| Code                | What to do                                                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no_browser_online` | No computer is connected: start the daemon, check `status`, check `/admin`                                                                                                                  |
+| `browser_offline`   | The named computer is offline, or its extension cannot be reached: is Chrome running with the profile and the extension installed and enabled?                                              |
+| `needs_human`       | Amazon asked for a captcha, a sign-in, a checkpoint or another check: handle it in that Chrome yourself. The computer then cools down for 60 minutes (nothing is retried or solved for you) |
+| `throttled`         | A pacing cap or cool-down; wait `retry_after_s`. `list_browsers` shows `cooling_down_until` and the remaining budget. Limits are per computer                                               |
+| `busy`              | That computer already has 4 calls queued; retry in about 15 seconds                                                                                                                         |
+| `daemon_outdated`   | The daemon is below `MIN_DAEMON_VERSION` and is updating; retry in a minute                                                                                                                 |
+| `blocked_by_policy` | The URL policy refused a page; this is working as intended                                                                                                                                  |
+| `unsupported`       | A planned tool that is not implemented yet, or a page Amazon does not offer (archived orders, search history)                                                                               |
+| `needs_choice`      | `add_to_cart` refused the offer and added nothing (flags, price or seller changed, gone, out of stock); read `details` and ask again                                                        |
+| `timeout`           | A page did not load in 45 seconds, or the call passed 225 seconds                                                                                                                           |
