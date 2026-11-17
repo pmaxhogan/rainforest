@@ -1,0 +1,18 @@
+{
+  "name": "@rainforest/browser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  },
+  "dependencies": {
+    "@rainforest/core": "^0.0.0",
+    "playwright-core": "^1.66.0-alpha-2026-11-09",
+    "ws": "^8.23.0",
+    "zod": "^4.6.7"
+  }
+}
