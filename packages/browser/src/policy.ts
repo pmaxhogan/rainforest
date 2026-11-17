@@ -200,6 +200,9 @@ export const BODY_CHECKED_PATHS: readonly RegExp[] = [
 
 const REF = String.raw`(\/ref=[^/?#]*)?\/?$`;
 
+/** The form target of an offer's own Add to Cart control in the all-offers panel. */
+const AOD_ADD_TO_CART_PATH = /^\/cart\/add-to-cart\/ref=aod_[A-Za-z0-9_]+\/?$/;
+
 interface AllowRule {
   name: string;
   host: string;
@@ -240,6 +243,13 @@ export const MAIN_FRAME_ALLOWLIST: readonly AllowRule[] = [
     name: "cart",
     host: AMAZON_HOST,
     path: new RegExp(String.raw`^\/(gp\/cart\/view\.html|cart)` + REF),
+  },
+  // Where the browser lands after the all-offers panel's Add to Cart form is submitted.
+  { name: "cart-add-result", host: AMAZON_HOST, path: AOD_ADD_TO_CART_PATH },
+  {
+    name: "cart-smart-wagon",
+    host: AMAZON_HOST,
+    path: new RegExp(String.raw`^\/cart\/smart-wagon` + REF),
   },
   { name: "orders", host: AMAZON_HOST, path: new RegExp(String.raw`^\/your-orders\/orders` + REF) },
   {
@@ -304,6 +314,11 @@ export const MAIN_FRAME_ALLOWLIST: readonly AllowRule[] = [
   { name: "keepa-graph", host: "graph.keepa.com", path: /^\/pricehistory\.png$/ },
 ];
 
+/** Page navigations that may be a POST. Everything else must be a GET. */
+export const MAIN_FRAME_POST_ALLOWLIST: readonly AllowRule[] = [
+  { name: "aod-add-to-cart", host: AMAZON_HOST, path: AOD_ADD_TO_CART_PATH },
+];
+
 function deny(reason: DenyReason, rule: string): Verdict {
   return { allow: false, reason, rule };
 }
@@ -361,6 +376,14 @@ export function checkRequest(info: RequestInfo | null | undefined): Verdict {
 
   if (!info.isMainFrameDocument) return { allow: true };
 
+  if (method === "POST") {
+    // The one page navigation that is a form post: adding a specific offer to the cart.
+    // Its body was checked above (readable, no buy marker), or the request is already denied.
+    for (const rule of MAIN_FRAME_POST_ALLOWLIST) {
+      if (rule.host === url.hostname.toLowerCase() && rule.path.test(url.pathname))
+        return { allow: true };
+    }
+  }
   if (method !== "GET") return deny("method", method);
   for (const rule of MAIN_FRAME_ALLOWLIST) {
     // Exact host as written (no trailing-dot or other variant) and the raw path.

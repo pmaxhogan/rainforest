@@ -4,6 +4,7 @@ import {
   FRAGMENT_ALLOWLIST,
   HARD_DENY_RULES,
   MAIN_FRAME_ALLOWLIST,
+  MAIN_FRAME_POST_ALLOWLIST,
   PURCHASE_CONTROL_PATTERNS,
   TELEMETRY_HOSTS,
   checkFragment,
@@ -49,6 +50,8 @@ const EXPECTED_DENY_RULES = [
 ];
 
 const EXPECTED_ALLOW_RULES = [
+  "cart-add-result",
+  "cart-smart-wagon",
   "home",
   "home-ref",
   "search",
@@ -375,5 +378,47 @@ describe("purchase controls", () => {
     }
     expect(isPurchaseControl(undefined)).toBe(true);
     expect(isPurchaseControl({ text: undefined as unknown as string })).toBe(true);
+  });
+});
+
+describe("page navigations by POST", () => {
+  const post = (url: string, postData?: string) =>
+    checkRequest({ url, method: "POST", isMainFrameDocument: true, postData });
+  const add = "https://www.amazon.com/cart/add-to-cart/ref=aod_dpdsk_new_0";
+
+  test("the POST allowlist is exactly one rule", () => {
+    expect(MAIN_FRAME_POST_ALLOWLIST.map((r) => r.name)).toEqual(["aod-add-to-cart"]);
+  });
+
+  test("an offer's add-to-cart form may be posted, with a readable body and no buy marker", () => {
+    expect(post(add, "submit.addToCart=1&items[0.base][asin]=B0FAKE0001").allow).toBe(true);
+    expect(post(add, undefined).allow).toBe(false);
+    expect(post(add, "submit.buy-now=1").allow).toBe(false);
+    expect(post(add, "submit.addToCart=1&proceedToRetailCheckout=1").allow).toBe(false);
+    expect(post(add, "a=1&submit.buy%2Dnow=1&z=%zz").allow).toBe(false);
+  });
+
+  test("no other page navigation may be a POST", () => {
+    for (const url of [
+      "https://www.amazon.com/cart/add-to-cart/ref=dp_start",
+      "https://www.amazon.com/cart/add-to-cart",
+      "https://www.amazon.com/gp/product/handle-buy-box/ref=dp_start-bbf_1_glance",
+      "https://www.amazon.com/cart/add-to-cart/ref=aod_dpdsk_new_0/extra",
+      "https://www.amazon.com./cart/add-to-cart/ref=aod_dpdsk_new_0",
+      "https://www.amazon.com/gp/cart/view.html",
+      "https://www.amazon.com/dp/B0FAKE0001",
+      "https://www.example.com/cart/add-to-cart/ref=aod_dpdsk_new_0",
+    ]) {
+      expect(post(url, "submit.addToCart=1").allow, url).toBe(false);
+    }
+    expect(
+      checkRequest({ url: add, method: "PUT", isMainFrameDocument: true, postData: "a=1" }).allow,
+    ).toBe(false);
+  });
+
+  test("the pages an add lands on are allowed as GET", () => {
+    expect(checkNavigation(add).allow).toBe(true);
+    expect(checkNavigation("https://www.amazon.com/cart/smart-wagon?newItems=x").allow).toBe(true);
+    expect(checkNavigation("https://www.amazon.com/cart/smart-wagon/checkout").allow).toBe(false);
   });
 });
