@@ -71,12 +71,10 @@ jobs:
             exit 1
           fi
 
+      # The bytes that get signed are built here with no install scripts and no test or
+      # lint tooling run beforehand; the checks run in their own job (`check`).
       - if: steps.exists.outputs.exists != 'true'
-        run: npm ci
-
-      - name: Check
-        if: steps.exists.outputs.exists != 'true'
-        run: npm run check
+        run: npm ci --ignore-scripts
 
       - name: Package
         if: steps.exists.outputs.exists != 'true'
@@ -98,8 +96,21 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  # This job holds the signing key: its actions are pinned to commits, and it installs
+  # no dependencies.
   publish:
-    needs: build
+    needs: [build, check]
     if: needs.build.outputs.exists != 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -108,13 +119,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.build.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: .node-version
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-dist
           path: dist/release

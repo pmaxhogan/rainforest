@@ -54,9 +54,52 @@ export const TELEMETRY_HOSTS: readonly string[] = [
   "completion.amazon.com",
 ];
 
+/** Lower-case host without the trailing dot of a fully qualified name. */
+export function normalizeHost(host: string): string {
+  return host.toLowerCase().replace(/\.+$/, "");
+}
+
+/** Percent-decode what can be decoded and leave malformed escapes as they are. */
+export function lenientDecode(value: string): string {
+  let out = value;
+  // Twice, so a doubly encoded marker is seen too.
+  for (let round = 0; round < 2; round++) {
+    out = out.replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run.replace(/%([0-9a-fA-F]{2})/g, (_m, hex: string) =>
+          String.fromCharCode(parseInt(hex, 16)),
+        );
+      }
+    });
+  }
+  return out;
+}
+
+/**
+ * The path as the deny rules should see it: decoded, without `;parameters`, with repeated
+ * and dot segments collapsed, and without the locale prefix (`/-/es/...`).
+ */
+export function normalizePath(pathname: string): string {
+  let path = lenientDecode(pathname).replace(/\\/g, "/");
+  path = path
+    .split("/")
+    .map((segment) => segment.replace(/;.*$/, ""))
+    .filter((segment, index) => index === 0 || (segment !== "" && segment !== "."))
+    .join("/");
+  if (!path.startsWith("/")) path = `/${path}`;
+  for (let i = 0; i < 3; i++) {
+    const stripped = path.replace(/^\/-\/[a-z]{2}(?:[_-][a-z]{2})?(?=\/|$)/i, "");
+    if (stripped === path) break;
+    path = stripped === "" ? "/" : stripped;
+  }
+  return path;
+}
+
 /** Hosts the hard-deny layer applies to: amazon.com and every subdomain but telemetry. */
 export function isAmazonHost(host: string): boolean {
-  const h = host.toLowerCase();
+  const h = normalizeHost(host);
   if (TELEMETRY_HOSTS.includes(h)) return false;
   return h === "amazon.com" || h.endsWith(".amazon.com");
 }
@@ -288,37 +331,29 @@ export function checkRequest(info: RequestInfo | null | undefined): Verdict {
     if (info.isMainFrameDocument && info.url === "about:blank") return { allow: true };
     return deny("scheme", scheme);
   }
-  const host = url.hostname.toLowerCase();
+  const host = normalizeHost(url.hostname);
   const method = info.method.toUpperCase();
 
   if (isAmazonHost(host)) {
-    let path: string;
+    // The rules are anchored at the start of the path, so match them against the path
+    // with every prefix and decoration a server might ignore removed.
     try {
-      path = decodeURIComponent(url.pathname);
+      decodeURIComponent(url.pathname);
     } catch {
       return deny("unparseable", "path-encoding");
     }
+    const path = normalizePath(url.pathname);
     for (const rule of HARD_DENY_RULES) {
       if (rule.path.test(path) || rule.path.test(url.pathname)) return deny(rule.reason, rule.name);
     }
     // A buy marker in the query string is refused whatever the method.
-    let query = url.search;
-    try {
-      query = `${query}\n${decodeURIComponent(query.replace(/\+/g, " "))}`;
-    } catch {
-      // keep the raw query only
-    }
+    const query = `${url.search}\n${lenientDecode(url.search.replace(/\+/g, " "))}`;
     if (BUY_BODY_MARKERS.some((m) => m.test(query))) return deny("one_click", "query-buy-marker");
     if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
       if (BODY_CHECKED_PATHS.some((p) => p.test(path))) {
         if (info.hasUnreadPostData || info.postData === undefined)
           return deny("one_click", "unreadable-body");
-        let body = info.postData;
-        try {
-          body = `${body}\n${decodeURIComponent(body.replace(/\+/g, " "))}`;
-        } catch {
-          // keep the raw body only
-        }
+        const body = `${info.postData}\n${lenientDecode(info.postData.replace(/\+/g, " "))}`;
         if (BUY_BODY_MARKERS.some((m) => m.test(body))) return deny("one_click", "body-buy-marker");
       }
     }
@@ -328,7 +363,9 @@ export function checkRequest(info: RequestInfo | null | undefined): Verdict {
 
   if (method !== "GET") return deny("method", method);
   for (const rule of MAIN_FRAME_ALLOWLIST) {
-    if (rule.host === host && rule.path.test(url.pathname)) return { allow: true };
+    // Exact host as written (no trailing-dot or other variant) and the raw path.
+    if (rule.host === url.hostname.toLowerCase() && rule.path.test(url.pathname))
+      return { allow: true };
   }
   return deny("not_allowlisted", host);
 }
@@ -382,8 +419,9 @@ export const PURCHASE_CONTROL_PATTERNS: readonly RegExp[] = [
   /use\s*this\s*(payment|address)/i,
   /subscribe\s*now/i,
   /set\s*up\s*now/i,
-  /start\s*(your)?\s*(free)?\s*(trial|membership)/i,
-  /join\s*prime|try\s*prime/i,
+  /start\s*(your|my)?\s*([\w-]+\s+){0,3}(trial|membership)/i,
+  /join\s*prime|try\s*prime|sign\s*up\s*for\s*prime|with\s*prime/i,
+  /(deliver|ship)\s*to\s*this\s*address/i,
   /confirm\s*(purchase|order|subscription)/i,
   /cancel\s*(items|order|subscription)/i,
   /return\s*or\s*replace|start\s*a?\s*return/i,

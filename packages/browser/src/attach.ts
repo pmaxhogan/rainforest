@@ -71,7 +71,9 @@ function installSpawnInterceptor(): void {
         .open({
           url,
           token: pending.options.token,
-          name: pending.options.name ?? "rainforest",
+          // No window name: a named window gets an extra title tab that the automation
+          // cannot close, so the window would outlive every detach. Without it the
+          // automation tab is the window's only tab and closing it closes the window.
           minimized: false,
         })
         .then(

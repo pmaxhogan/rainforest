@@ -21,7 +21,7 @@ export const SAMPLE_CONFIG = {
   hub_url: "https://hub.example.com",
   device_id: "device-selftest-0001",
   device_name: "selftest",
-  chrome: { profile_directory: "Default", extension_id: "selftestextensionid" },
+  chrome: { profile_directory: "Default", extension_id: "a".repeat(32) },
   update: { repo: "example/rainforest" },
 };
 

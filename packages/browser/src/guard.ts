@@ -1,6 +1,9 @@
 import type { Page } from "playwright-core";
 import { rawClient, type RawCdpClient } from "./attach.ts";
-import { checkRequest, type Verdict } from "./policy.ts";
+import { checkRequest, isAmazonHost, type Verdict } from "./policy.ts";
+
+/** What a third-party page may load besides its own document. */
+export const PASSIVE_RESOURCE_TYPES: readonly string[] = ["Image", "Stylesheet", "Font"];
 
 /**
  * Network-level enforcement of the URL policy on one automation tab.
@@ -80,6 +83,7 @@ export async function installGuard(
   const topFrame = await mainFrameId(client);
   const blocked: BlockedRequest[] = [];
   let mainDocuments = 0;
+  let thirdPartyPage = false;
   // Without this a service worker can serve navigations the guard never sees.
   await client.send("Network.setBypassServiceWorker", { bypass: true });
 
@@ -88,7 +92,10 @@ export async function installGuard(
     let isMainDocument = false;
     try {
       isMainDocument = event.resourceType === "Document" && event.frameId === topFrame;
-      if (isMainDocument) mainDocuments++;
+      if (isMainDocument) {
+        mainDocuments++;
+        thirdPartyPage = !isAmazonHost(new URL(event.request.url).hostname);
+      }
       const postData = readBody(event.request);
       verdict = checkRequest({
         url: event.request.url,
@@ -97,6 +104,17 @@ export async function installGuard(
         postData,
         hasUnreadPostData: postData === undefined,
       });
+      // A page that is not the store's own (a price-history site) is only read as HTML.
+      // It gets no scripts, frames or background requests, so nothing on it can act in
+      // the signed-in profile.
+      if (
+        verdict.allow &&
+        thirdPartyPage &&
+        !isMainDocument &&
+        !PASSIVE_RESOURCE_TYPES.includes(event.resourceType)
+      ) {
+        verdict = { allow: false, reason: "not_allowlisted", rule: "third-party-page" };
+      }
     } catch {
       verdict = { allow: false, reason: "unparseable", rule: "exception" };
     }

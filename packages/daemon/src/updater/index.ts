@@ -88,10 +88,29 @@ export function createUpdater(
   const download = async (asset: ReleaseAsset, maxBytes: number): Promise<Uint8Array> => {
     if (asset.size > maxBytes)
       throw new UpdateRejected("too_large", `${asset.name} is larger than allowed`);
-    const response = await fetchFn(asset.url, {
+    // The token goes to the API host only. The API answers with a redirect to a storage
+    // host; that hop is followed by hand, once, over https and without the token.
+    let response = await fetchFn(asset.url, {
       headers: headers("application/octet-stream"),
-      redirect: "follow",
+      redirect: "manual",
     });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      const parse = (): URL | null => {
+        try {
+          return location ? new URL(location, asset.url) : null;
+        } catch {
+          return null;
+        }
+      };
+      const next = parse();
+      if (!next || next.protocol !== "https:")
+        throw new UpdateRejected("download_failed", `${asset.name}: bad redirect`);
+      response = await fetchFn(next.toString(), {
+        headers: { accept: "application/octet-stream", "user-agent": "rainforestd-updater" },
+        redirect: "error",
+      });
+    }
     if (!response.ok)
       throw new UpdateRejected("download_failed", `${asset.name}: HTTP ${response.status}`);
     const bytes = new Uint8Array(await response.arrayBuffer());

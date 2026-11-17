@@ -9,7 +9,7 @@ import {
   type OffersData,
 } from "@rainforest/parsers";
 import { cartState, loadCart } from "./cart-writes.ts";
-import { describeControl, assertClickAllowed, guardedClick } from "./click-guard.ts";
+import { guardedClick } from "./click-guard.ts";
 import { AMAZON, clearCaptureCache, requireBudget, type Flow } from "./common.ts";
 import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
 
@@ -149,16 +149,14 @@ async function declineUpsells(page: PageContext): Promise<string[]> {
   for (const candidate of candidates) {
     const locator = page.page.locator(candidate.selector).first();
     if (!(await locator.isVisible().catch(() => false))) continue;
-    const control = await describeControl(locator);
     try {
-      assertClickAllowed(page.page.url(), control, {
+      await guardedClick(page, locator, {
         what: "the upsell's decline control",
         label: candidate.label,
       });
     } catch {
       continue;
     }
-    await locator.click({ timeout: 5000 }).catch(() => {});
     declined.push(candidate.selector.split(" ")[0]!);
   }
   return declined;

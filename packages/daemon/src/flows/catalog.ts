@@ -1,4 +1,5 @@
 import { RfError } from "@rainforest/core";
+import { guardedClick } from "./click-guard.ts";
 import {
   parseMedia,
   parseReviewSummary,
@@ -145,7 +146,7 @@ export const getReviews: Flow = async (args, ctx) => {
             }
             await new Promise((r) => setTimeout(r, plan.waitMs));
             ctx.browser.pacer().record("reviews");
-            await more.click({ timeout: 10_000 });
+            await guardedClick(pc, more, { what: "the show-more-reviews control" });
             clicks++;
             await new Promise((r) => setTimeout(r, 1500));
           }

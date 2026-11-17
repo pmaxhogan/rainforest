@@ -27,7 +27,7 @@ const chromeSchema = z.object({
   /** Chrome profile directory name, e.g. "Default" or "Profile 2". */
   profile_directory: z.string().min(1).max(128),
   /** Id of the installed automation extension. */
-  extension_id: z.string().min(1).max(64),
+  extension_id: z.string().regex(/^[a-p]{32}$/),
   user_data_dir: z.string().min(1).max(1024).optional(),
   executable_path: z.string().min(1).max(1024).optional(),
 });
@@ -59,7 +59,8 @@ export const configSchema = z.looseObject({
   hub_url: httpsUrl,
   device_id: z.string().min(8).max(64),
   device_name: z.string().min(1).max(64),
-  aliases: z.array(z.string().min(1).max(64)).max(16).default([]),
+  // Same limits as the wire protocol: a longer alias would fail every hub handshake.
+  aliases: z.array(z.string().min(1).max(40)).max(8).default([]),
   chrome: chromeSchema,
   broker: brokerSchema.default(() => ({ mode: "external" as const, port: DEFAULT_BROKER_PORT })),
   update: updateSchema,

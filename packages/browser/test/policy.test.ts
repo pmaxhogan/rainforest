@@ -331,7 +331,7 @@ describe("fail closed", () => {
 
 describe("purchase controls", () => {
   test("pattern list is exactly the expected size and catches the known controls", () => {
-    expect(PURCHASE_CONTROL_PATTERNS.length).toBe(17);
+    expect(PURCHASE_CONTROL_PATTERNS.length).toBe(18);
     const mustRefuse = [
       "Buy Now",
       "Place your order",

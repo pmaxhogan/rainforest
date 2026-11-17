@@ -5,9 +5,10 @@ version: 2
 #   - weekly, Monday 06:00 in the owner's timezone: one batch a week, not a daily flood
 #   - one `minor-and-patch` PR per ecosystem; majors stay separate PRs so they get reviewed
 #   - a `security` group so vulnerability fixes land together, any semver type
-#   - cooldown: majors wait 14 days, minors 3, patches 0. GitHub applies a 3-day default to
-#     everything when unconfigured; this overrides it so fresh major releases can settle
-#     (most of our toolchain breakage was fresh-release breakage).
+#   - cooldown: majors wait 14 days, minors and patches 5. This project departs from the
+#     standard's 14/3/0 on purpose: a merged update becomes a signed daemon release that
+#     installs itself, so every version update waits a few days for a bad release to be
+#     noticed and pulled upstream first. Security updates are not delayed.
 updates:
   - package-ecosystem: npm
     directory: "/"
@@ -30,10 +31,10 @@ updates:
         patterns:
           - "*"
     cooldown:
-      default-days: 3
+      default-days: 5
       semver-major-days: 14
-      semver-minor-days: 3
-      semver-patch-days: 0
+      semver-minor-days: 5
+      semver-patch-days: 5
     commit-message:
       prefix: "deps"
       include: scope
@@ -56,9 +57,9 @@ updates:
         patterns:
           - "*"
     cooldown:
-      default-days: 3
+      default-days: 5
       semver-major-days: 14
-      semver-minor-days: 3
-      semver-patch-days: 0
+      semver-minor-days: 5
+      semver-patch-days: 5
     commit-message:
       prefix: "deps(actions)"

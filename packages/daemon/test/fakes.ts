@@ -23,7 +23,7 @@ export const sampleConfig = (overrides: Record<string, unknown> = {}): DaemonCon
     hub_url: "https://hub.example.com",
     device_id: "device-0001",
     device_name: "desk",
-    chrome: { profile_directory: "Default", extension_id: "abcdefghijklmnop" },
+    chrome: { profile_directory: "Default", extension_id: "abcdefghijklmnopabcdefghijklmnop" },
     update: { repo: "example/rainforest" },
     ...overrides,
   });
