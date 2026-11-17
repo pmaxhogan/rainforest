@@ -6,6 +6,7 @@ import { TOOLS, getTool } from "@rainforest/core";
 import { parseConfig } from "../config.ts";
 import { ensureDir } from "../fsutil.ts";
 import type { AppPaths } from "../paths.ts";
+import { IS_BUNDLED } from "../version.ts";
 
 export interface SelftestCheck {
   name: string;
@@ -45,7 +46,7 @@ export function listSourceModules(srcDir: string): string[] {
 export async function runSelftest(
   paths: AppPaths,
   nodeVersion: string = process.versions.node,
-  srcDir: string = fileURLToPath(new URL("../", import.meta.url)),
+  srcDir: string | null = IS_BUNDLED ? null : fileURLToPath(new URL("../", import.meta.url)),
 ): Promise<SelftestCheck[]> {
   const checks: SelftestCheck[] = [];
 
@@ -79,8 +80,10 @@ export async function runSelftest(
     checks.push({ name: "paths writable", ok: false, detail: (error as Error).message });
   }
 
-  for (const file of listSourceModules(srcDir)) {
-    const name = `import ${relative(srcDir, file).replaceAll("\\", "/")}`;
+  // The release bundle is one file with no source tree; loading it already proved it imports.
+  const root = srcDir ?? "";
+  for (const file of srcDir === null ? [] : listSourceModules(srcDir)) {
+    const name = `import ${relative(root, file).replaceAll("\\", "/")}`;
     try {
       await import(pathToFileURL(file).href);
       checks.push({ name, ok: true });

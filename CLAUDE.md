@@ -12,6 +12,7 @@ and the quiet Playwright extension fork.
 - `npm run check` - everything CI runs: typecheck, eslint, prettier, ASCII check, tests with coverage
 - `npm test` - vitest with coverage
 - `npm run format` - prettier --write
+- `node scripts/package-daemon.mjs [--version v] [--out dir]` - build the release tarball + manifest (CI signs and publishes via `.github/workflows/release.yml`; `scripts/verify-release.mjs <dir>` checks one)
 - `node scripts/setup-hooks.mjs` - enable the git hooks in a fresh clone (required before committing)
 
 ## Layout

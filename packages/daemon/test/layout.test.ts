@@ -33,6 +33,27 @@ describe("version names", () => {
   });
 });
 
+describe("release bundle entry", () => {
+  test("a release version directory resolves to rainforestd.mjs before any source entry", () => {
+    const paths = tmpPaths();
+    makeVersion(paths, "0.1.5", "rainforestd.mjs");
+    expect(resolveVersionEntry(paths, "0.1.5")).toBe(
+      join(versionDir(paths, "0.1.5"), "rainforestd.mjs"),
+    );
+    makeVersion(paths, "0.1.6", "src/main.ts");
+    makeVersion(paths, "0.1.6", "rainforestd.mjs");
+    expect(resolveVersionEntry(paths, "0.1.6")).toBe(
+      join(versionDir(paths, "0.1.6"), "rainforestd.mjs"),
+    );
+    writeCurrent(paths, "0.1.5");
+    expect(resolveLaunchTarget(paths.root)).toEqual({
+      ok: true,
+      version: "0.1.5",
+      entry: join(versionDir(paths, "0.1.5"), "rainforestd.mjs"),
+    });
+  });
+});
+
 describe("pointer and versions", () => {
   test("lists installed versions in numeric order and ignores junk", () => {
     const paths = tmpPaths();

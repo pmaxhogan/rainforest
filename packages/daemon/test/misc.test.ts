@@ -154,3 +154,11 @@ describe("misc", () => {
     expect(ctx.nodePath).toBe(process.execPath);
   });
 });
+
+describe("version resolution", () => {
+  test("from source it reads this package, not a bundle sibling", async () => {
+    const { IS_BUNDLED, readDaemonVersion } = await import("../src/version.ts");
+    expect(IS_BUNDLED).toBe(false);
+    expect(readDaemonVersion()).toBe("0.0.0");
+  });
+});
