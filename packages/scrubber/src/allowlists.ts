@@ -371,6 +371,13 @@ export const QUERY_PARAMS: ReadonlyMap<string, "keep" | "scrub"> = new Map([
  */
 export const ID_PREFIXES: readonly string[] = ["CardInstance"];
 
+/**
+ * Class names parsers query that would otherwise match the experiment-token rule (a hex run
+ * with a digit, or 4+ digits). Regenerate by grepping packages/parsers/src for class
+ * selectors when parsers change; today none of them matches the rule.
+ */
+export const PARSER_CLASS_TOKENS: readonly string[] = [];
+
 /** JSON keys whose string values are structural (token pass only, no word synthesis). */
 export const JSON_KEPT_KEYS: readonly string[] = [
   "action",

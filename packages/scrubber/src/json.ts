@@ -30,6 +30,14 @@ export function registerHtmlScrubber(fn: HtmlScrubber): void {
 
 function scrubNumber(n: number, ctx: ScrubContext): number {
   if (!Number.isFinite(n)) return n;
+  const dec = /^-?\d+\.(\d{1,2})$/.exec(String(n));
+  if (dec !== null) {
+    // A decimal with cents is an amount: scaled in magnitude like amounts in text.
+    ctx.count("number");
+    const sign = n < 0 ? -1 : 1;
+    const [whole = "0"] = String(Math.abs(n)).split(".");
+    return sign * Number(ctx.scaleAmount(whole, dec[1]));
+  }
   const sign = n < 0 ? "-" : "";
   const text = String(Math.abs(n));
   if (/e/i.test(text) || /^\d$/.test(text)) return n;

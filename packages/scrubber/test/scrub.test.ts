@@ -2,7 +2,14 @@ import type { Capture } from "@rainforest/core";
 import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
 import { auditScrubbed, scrubCapture, type ScrubResult } from "../src/index.ts";
-import { SYNTHETIC_CAPTURED_AT } from "../src/context.ts";
+import {
+  MAX_SHIFT_DAYS,
+  MIN_SHIFT_DAYS,
+  MIN_YEAR_GAP_DAYS,
+  SYNTHETIC_CAPTURED_AT,
+  createContext,
+  yearGap,
+} from "../src/context.ts";
 import { AOD_HTML, PAGE_HTML, PLANTED, sampleCapture } from "./samples.ts";
 
 const DAY_MS = 86_400_000;
@@ -97,7 +104,8 @@ describe("planted values never survive", () => {
     expect(isAscii(all)).toBe(true);
     const r = body("<p>Caf\u00e9 \u203a\u00a0Zed \u2013 x</p>");
     expect(isAscii(r)).toBe(true);
-    expect(r).toContain("&#x203a;");
+    // Punctuation inside free text goes with the words it separated.
+    expect(r).toMatch(/^<p>[A-Za-z ]+<\/p>$/);
   });
 });
 
@@ -210,8 +218,8 @@ describe("labels survive and values are synthesized", () => {
 
   test("shapes are kept: prices, counts, ratings, dates", () => {
     const h = out.html;
-    expect(h).toMatch(/class="a-offscreen">\$\d{2}\.\d{2}</);
-    expect(h).toMatch(/>\d,\d{3} ratings</);
+    expect(h).toMatch(/class="a-offscreen">\$[\d,]+\.\d{2}</);
+    expect(h).toMatch(/>[\d,]+ ratings</);
     const rating = /aria-label="(\d\.\d) out of 5 stars"/.exec(h);
     expect(rating).not.toBeNull();
     expect(Number(rating?.[1])).toBeGreaterThanOrEqual(1);
@@ -226,14 +234,16 @@ describe("labels survive and values are synthesized", () => {
     const dayOf = (s: string) => Date.parse(`${s} UTC`) / DAY_MS;
     const placed = /Order placed ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(out.html)?.[1] ?? "";
     const reviewed = /United States on ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(out.html)?.[1] ?? "";
-    // Real order and review are the same day; the real delivery promise is 2 days later.
+    // Real order and review are the same day (one date, one jitter); the real delivery
+    // promise is 2 days later, which survives only to within the per-date jitter.
     expect(dayOf(reviewed) - dayOf(placed)).toBe(0);
     const free = /FREE delivery ([A-Z][a-z]+), ([A-Z][a-z]+ \d{1,2})</.exec(out.html);
     expect(free).not.toBeNull();
     const y = new Date(placed).getUTCFullYear();
     const promised = dayOf(`${free?.[2]}, ${y}`);
     const gap = promised - dayOf(placed);
-    expect(gap === 2 || gap === 2 - 365 || gap === 2 - 366).toBe(true);
+    const near = (g: number) => Math.abs(g - 2) <= 2 * 3;
+    expect(near(gap) || near(gap + 365) || near(gap + 366)).toBe(true);
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     expect(free?.[1]).toBe(names[new Date(promised * DAY_MS).getUTCDay()]);
   });
@@ -292,14 +302,14 @@ describe("location leaks", () => {
   test("Deliver-to header widget", () => {
     const after = doc(out.html);
     expect(after.querySelector("#glow-ingress-line1")?.textContent).toMatch(
-      /^Deliver to [A-Z][a-z]+$/,
+      /^Deliver to [A-Z][a-z]+(?: [A-Z][a-z]+)?$/,
     );
     expect(after.querySelector("#glow-ingress-line2")?.textContent).toMatch(
       /^Exampleville 0000[0-3]$/,
     );
     expect(
       body('<span id="glow-ingress-line1">Deliver to Zed - Nowhere Falls 99999</span>'),
-    ).toMatch(/Deliver to [A-Z][a-z]+ - Exampleville 0000[0-3]/);
+    ).toMatch(/Deliver to [A-Z][a-z]+(?: [A-Z][a-z]+)? - Exampleville 0000[0-3]/);
     expect(body('<span id="x">Delivering to Nowhere Falls 99999 - Update location</span>')).toMatch(
       /Delivering to Exampleville 0000[0-3]/,
     );
@@ -307,8 +317,9 @@ describe("location leaks", () => {
 
   test("full address block", () => {
     const after = doc(out.html);
+    // One word or two at random: the real name's word count is not kept.
     expect(after.querySelector(".displayAddressFullName")?.textContent).toMatch(
-      /^[A-Z][a-z]+ [A-Z][a-z]+$/,
+      /^[A-Z][a-z]+(?: [A-Z][a-z]+)?$/,
     );
     expect(after.querySelector(".displayAddressAddressLine1")?.textContent).toBe("100 Example St");
     expect(after.querySelector(".displayAddressCityStateOrRegionPostalCode")?.textContent).toMatch(
@@ -425,7 +436,7 @@ describe("scripts, styles and attributes", () => {
     expect(data.postalCode).toMatch(/^0000[0-3]$/);
     expect(data.email).toMatch(/^user\d+@example\.com$/);
     expect(String(data.when)).toMatch(/Z$/);
-    expect(String(data.price)).toMatch(/^\d{2}\.\d{2}$/);
+    expect(String(data.price)).toMatch(/^\d+(?:\.\d{1,2})?$/);
   });
 
   test("no handlers, styles, comments, pixels, iframe sources, meta or links", () => {
@@ -453,7 +464,7 @@ describe("scripts, styles and attributes", () => {
 
   test("query strings keep only allowlisted parameter names", () => {
     expect(out.html).toMatch(
-      /href="\/[A-Za-z-]+\/dp\/B0FAKE0000\/ref=rf\?keywords=[a-z]+\+[a-z]+&amp;th=1"/,
+      /href="\/[A-Za-z-]+\/dp\/B0FAKE0000\/ref=rf\?keywords=[A-Za-z]+(?:\+[a-z]+)*&amp;th=1"/,
     );
     expect(out.html).not.toContain("qid=");
     expect(out.html).not.toContain("sr=");
@@ -464,7 +475,7 @@ describe("scripts, styles and attributes", () => {
       "<title>a &lt;/title&gt;&lt;script&gt;x&lt;/script&gt;</title><textarea>&lt;/textarea&gt;</textarea>",
     );
     expect(r).not.toMatch(/<script/i);
-    expect(r).toContain("&lt;/");
+    expect(r).toMatch(/^<title>[^<]*<\/title><textarea>[^<]*<\/textarea>$/);
   });
 
   test("kept values still get the token pass", () => {
@@ -674,7 +685,7 @@ describe("leak classes found on real captures (invented values)", () => {
       '<label for="checkbox1f2e3d4c-5b6a-4789-8abc-0123456789ab">u</label>' +
         "<p>wxyzq9f8e7d6c-5555-6666-7777-888899990000 13.1a2b3c4d-1111-2222-3333-444455556666</p>",
     );
-    expect(out).toMatch(/[a-z]{5}00000000-0000-4000-8000-0000000000\d\d /);
+    expect(out).toMatch(/[a-z]+00000000-0000-4000-8000-0000000000\d\d /);
     expect(out).not.toContain("1f2e3d4c");
     expect(out).not.toContain("1a2b3c4d");
     expect(auditScrubbed(out)).toEqual([]);
@@ -686,7 +697,7 @@ describe("leak classes found on real captures (invented values)", () => {
 
   test("caseless and full-width words become lower-case lorem", () => {
     const out = body("<p>123\u30c6\u30b9\u30c8\u30c7\u30fc\u30bf \uff21\uff22\uff23\uff24 x</p>");
-    expect(out).toMatch(/^<p>\d{3}[a-z]+ [a-z]+ [a-z]<\/p>$/);
+    expect(out).toMatch(/^<p>[a-z0-9 ]+<\/p>$/);
   });
 
   test("ISBN-shaped values in asin-named attributes become fake ASINs", () => {
@@ -702,16 +713,18 @@ describe("leak classes found on real captures (invented values)", () => {
 
 describe("structure kept for parsers (invented values)", () => {
   test("unit and frequency words survive, but not in address blocks", () => {
-    expect(body("<p>1 unit every 3 months</p>")).toBe("<p>1 unit every 3 months</p>");
-    expect(body("<p>Purchased 2 times</p>")).toBe("<p>Purchased 2 times</p>");
-    expect(body("<p>the 90-day median</p>")).toMatch(/^<p>[a-z]+ \d\d-day [a-z]+<\/p>$/);
+    expect(body("<p>1 unit every 3 months</p>")).toMatch(/^<p>1 unit every [2-9] months<\/p>$/);
+    expect(body("<p>Purchased 2 times</p>")).toMatch(/^<p>Purchased [2-9] times<\/p>$/);
+    expect(body("<p>the 90-day median</p>")).toMatch(
+      /^<p>[A-Za-z]+(?: [a-z]+)* \d\d-day [a-z]+(?: [a-z]+)*<\/p>$/,
+    );
     const addr = body('<div class="shipping-address"><span>12 Every Day Rd</span></div>');
     expect(addr).not.toContain("Every Day");
   });
 
   test("a trailing label is kept after a leading one", () => {
-    expect(body("<p>Only 3 left in stock - order soon.</p>")).toBe(
-      "<p>Only 3 left in stock - order soon.</p>",
+    expect(body("<p>Only 3 left in stock - order soon.</p>")).toMatch(
+      /^<p>Only [2-9] left in stock - order soon\.<\/p>$/,
     );
     expect(body("<p>Only 37 left in stock - order soon.</p>")).toMatch(
       /^<p>Only \d\d left in stock - order soon\.<\/p>$/,
@@ -729,8 +742,9 @@ describe("structure kept for parsers (invented values)", () => {
 
   test("a card network next to card digits becomes one constant brand", () => {
     expect(body("<p>Mastercard ending in 4321</p>")).toBe("<p>Visa ending in 0000</p>");
-    expect(body("<p>Prime Amex \u2022\u2022\u2022\u2022 4321</p>")).toBe(
-      "<p>Prime Visa &#x2022;&#x2022;&#x2022;&#x2022; 0000</p>",
+    // "Prime" before a free word is not a label lead: the word is free text too.
+    expect(body("<p>Prime Amex \u2022\u2022\u2022\u2022 4321</p>")).toMatch(
+      /^<p>[A-Z][a-z]+ Visa &#x2022;&#x2022;&#x2022;&#x2022; 0000<\/p>$/,
     );
   });
 
@@ -775,7 +789,7 @@ describe("structure kept for parsers (invented values)", () => {
   test("'city' inside a word is not an address hint", () => {
     expect(
       body('<span class="sc-product-scarcity">Only 3 left in stock - order soon.</span>'),
-    ).toContain("Only 3 left in stock - order soon.");
+    ).toMatch(/>Only [2-9] left in stock - order soon\.</);
   });
 
   test("reduce drops chrome and hidden rails, keeps hidden form state, collapses whitespace", () => {
@@ -793,6 +807,148 @@ describe("structure kept for parsers (invented values)", () => {
     expect(small).toContain('name="k"');
     expect(small).toContain("<p>\nSold by\n</p>");
     expect(small.length).toBeLessThan(full.length);
+  });
+});
+
+describe("no shape fingerprint survives (invented values)", () => {
+  const words = (t: string) =>
+    t
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w !== "");
+
+  test("free text gets a random word count, random lengths and generic case", () => {
+    const title = "ZORBLAX Quantum-Fluff Widget, 12-Pack (Teal) - XL 3000mAh";
+    const counts = new Set<number>();
+    for (let i = 0; i < 20; i++) {
+      const out = /^<p>(.*)<\/p>$/.exec(body(`<p>${title}</p>`, `shape-${i}`))?.[1] ?? "";
+      expect(out).not.toMatch(/ZORBLAX|Fluff|Teal|3000/i);
+      expect(out).not.toMatch(/[A-Z]{2}/);
+      // Punctuation inside a run goes; separators next to a bracket may stay.
+      expect(out).not.toMatch(/,|\w-\w/);
+      counts.add(words(out.replace(/[()]/g, " ")).length);
+    }
+    expect(counts.size).toBeGreaterThan(2);
+  });
+
+  test("a one-word label before free words does not survive; label plus value does", () => {
+    const out = body(
+      "<p>Amazon Zorblax Fluff Widget</p><p>Brand: Zorblax</p><p>Only 4 left in stock - order soon.</p>",
+    );
+    expect(out).not.toContain("Amazon");
+    expect(out).not.toContain("Zorblax");
+    expect(out).toContain("<p>Brand: ");
+    expect(out).toMatch(/<p>Only [2-9] left in stock - order soon\.<\/p>/);
+  });
+
+  test("an item count stays, so parsers can check it against the items present", () => {
+    expect(body("<p>Saved for later (7 items)</p>")).toBe("<p>Saved for later (7 items)</p>");
+    expect(body('<div data-saved-item-quantity="7">x</div>')).toContain(
+      'data-saved-item-quantity="7"',
+    );
+  });
+});
+
+describe("dates, counts, amounts and ratings are re-drawn (invented values)", () => {
+  test("the date offset is 3..6 years either way and never close to whole years", () => {
+    for (let i = 0; i < 60; i++) {
+      const ctx = createContext(`dates-${i}`, "2026-03-04T05:06:07Z");
+      expect(Math.abs(ctx.shiftDays)).toBeGreaterThanOrEqual(MIN_SHIFT_DAYS);
+      expect(Math.abs(ctx.shiftDays)).toBeLessThanOrEqual(MAX_SHIFT_DAYS);
+      expect(yearGap(ctx.shiftDays)).toBeGreaterThanOrEqual(MIN_YEAR_GAP_DAYS);
+    }
+  });
+
+  test("each distinct date gets its own jitter; one date maps one way", () => {
+    let changed = 0;
+    for (let i = 0; i < 20; i++) {
+      const out = body("<p>March 3, 2019</p><p>March 10, 2019</p><p>March 3, 2019</p>", `j-${i}`);
+      const ds = [...out.matchAll(/<p>([A-Z][a-z]+ \d{1,2}, \d{4})<\/p>/g)].map((m) =>
+        Date.parse(`${m[1]} UTC`),
+      );
+      expect(ds).toHaveLength(3);
+      expect(ds[0]).toBe(ds[2]);
+      const gap = ((ds[1] ?? 0) - (ds[0] ?? 0)) / DAY_MS;
+      expect(Math.abs(gap - 7)).toBeLessThanOrEqual(6);
+      if (gap !== 7) changed++;
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+
+  test("a year select keeps 3 year options around the selected one", () => {
+    const opts = [2014, 2015, 2016, 2017, 2018, 2019]
+      .map((y) => `<option value="year-${y}"${y === 2017 ? " selected" : ""}>${y}</option>`)
+      .join("");
+    const out = body(
+      `<select name="timeFilter"><option value="last30">last 30 days</option>${opts}</select>`,
+    );
+    expect(out.match(/<option/g)).toHaveLength(4);
+    expect(out).toMatch(/<option value="year-\d{4}" selected="">\d{4}<\/option>/);
+    expect(out).not.toMatch(/201[4-9]/);
+  });
+
+  test("amounts and counts move in magnitude, consistently per value", () => {
+    const ratios: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const out = body("<p>$40.00</p><p>$40.00</p><p>1,500 ratings</p>", `amt-${i}`);
+      const prices = [...out.matchAll(/\$([\d,]+\.\d{2})/g)].map((m) =>
+        Number((m[1] ?? "").replace(/,/g, "")),
+      );
+      expect(prices[0]).toBe(prices[1]);
+      ratios.push((prices[0] ?? 0) / 40);
+      const r = (prices[0] ?? 0) / 40;
+      expect(r <= 0.8 || r >= 1.25).toBe(true);
+      const n = Number(/<p>([\d,]+) ratings<\/p>/.exec(out)?.[1]?.replace(/,/g, ""));
+      expect(n / 1500).toBeGreaterThanOrEqual(0.29);
+      expect(n / 1500).toBeLessThanOrEqual(3.01);
+    }
+    expect(Math.min(...ratios)).toBeGreaterThanOrEqual(0.29);
+    expect(Math.max(...ratios)).toBeLessThanOrEqual(3.01);
+    expect(Math.max(...ratios) / Math.min(...ratios)).toBeGreaterThan(2);
+  });
+
+  test("split price spans agree with the offscreen price", () => {
+    const out = body(
+      '<span class="a-price"><span class="a-offscreen">$1,234.56</span><span aria-hidden="true"><span class="a-price-symbol">$</span><span class="a-price-whole">1,234<span class="a-price-decimal">.</span></span><span class="a-price-fraction">56</span></span></span>',
+    );
+    const off = /a-offscreen">\$([\d,]+)\.(\d{2})</.exec(out);
+    expect(off).not.toBeNull();
+    expect(out).toContain(`a-price-whole">${off?.[1]}<`);
+    expect(out).toContain(`a-price-fraction">${off?.[2]}<`);
+    expect(off?.[1]).not.toBe("1,234");
+  });
+
+  test("star classes follow the synthetic rating", () => {
+    for (let i = 0; i < 10; i++) {
+      const out = body(
+        '<i class="a-icon a-icon-star a-star-4-5"><span class="a-icon-alt">4.5 out of 5 stars</span></i>',
+        `star-${i}`,
+      );
+      const r = Number(/>(\d\.\d) out of 5 stars</.exec(out)?.[1]);
+      const cls = /a-star-(\d)(-5)?/.exec(out);
+      expect(Number(cls?.[1])).toBe(Math.floor(r));
+      expect(cls?.[2] === "-5").toBe(r - Math.floor(r) >= 0.5);
+    }
+  });
+
+  test("lone digits are permuted the same way in text and attributes", () => {
+    const out = body(
+      '<select><option value="3" selected>3</option></select><span data-quantity="3">Qty: 3</span>',
+    );
+    const d = /<option value="(\d)"/.exec(out)?.[1];
+    expect(out).toContain(`>${d}</option>`);
+    expect(out).toContain(`data-quantity="${d}"`);
+    expect(out).toContain(`Qty: ${d}`);
+  });
+
+  test("experiment tokens in class names become a fixed placeholder; fake ids stay", () => {
+    const out = body(
+      '<div class="a-aui_31337-c r-4f1e2d0 a-spacing-mini asin-id-B0ABCD1234">x</div>',
+    );
+    expect(out).toContain("a-aui_0000-c");
+    expect(out).toContain("r-0000");
+    expect(out).toContain("a-spacing-mini");
+    expect(out).toMatch(/asin-id-B0FAKE[0-9A-Z]{4}/);
   });
 });
 

@@ -363,6 +363,8 @@ years | word
 time | word
 times | word
 off | word
+item | word
+items | word
 
 # Return windows (label plus its fixed lead-in word, so the date after it is the value)
 Return items: Eligible through

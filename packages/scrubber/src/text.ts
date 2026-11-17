@@ -76,9 +76,6 @@ const VOCAB = {
   ],
 } as const;
 
-// Letters for shape-preserving replacement inside mixed letter/digit runs. No hex letters
-// (a-f) and no b/x, so a replacement can never become a UUID or an ASIN.
-const LOWER = "ghijklmnopqrstuvwyz";
 const PLACEHOLDER = new RegExp(`^(?:${SYNTHETIC.idPrefix}|${SYNTHETIC.tokenPrefix})[0-9]{4,}$`);
 
 function sticky(src: string, flags = ""): RegExp {
@@ -138,6 +135,7 @@ const R = {
   pctRun:
     /(?<![A-Za-z0-9+/=_%-])(?:[A-Za-z0-9+/=_-]|%[0-9A-Fa-f]{2})*%[0-9A-Fa-f]{2}(?:[A-Za-z0-9+/=_-]|%[0-9A-Fa-f]{2})*/y,
   pctEscape: /%([0-9A-Fa-f]{2})/y,
+  money: /(-?)([$\u00a3\u20ac])(\s?)(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?(?![\d])/y,
   caseRun: /(?<![A-Za-z0-9+])[A-Za-z0-9+]{8,}(?![A-Za-z0-9+])/y,
   mediaId: /(?<![A-Za-z0-9+-])\d{2}[A-Za-z0-9+-]{6,10}L(?![A-Za-z0-9+-])/y,
   word: /[A-Za-z0-9_-]+/y,
@@ -169,41 +167,48 @@ function splice(m: RegExpExecArray, repl: Record<number, string>): string {
   return out;
 }
 
-function caseStyle(orig: string, word: string): string {
-  // Caseless scripts (CJK) are lower case here: upper-casing them minted id-shaped runs.
-  if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase()) {
-    return word.toUpperCase();
-  }
-  if (orig[0] !== undefined && orig[0] !== orig[0].toLowerCase()) {
-    return word[0]?.toUpperCase() + word.slice(1);
-  }
-  return word;
-}
+/** Marks one free word in scrubValue's output; synthFree replaces each run of them. */
+const FREE = "\u0001";
+const NUM_OPEN = "\u0002";
+const NUM_CLOSE = "\u0003";
+const FREE_VOCAB: readonly string[] = [...VOCAB.short, ...VOCAB.mid, ...VOCAB.long];
+// A run starts and ends with a free word; numbers between free words belong to it.
+// Brackets end a run: "Brand (Toy)" keeps its parenthetical slot for parsers.
+const FREE_RUN =
+  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
+  /\u0001(?:(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0001)*/gu;
 
-function loremWord(ctx: ScrubContext, orig: string): string {
-  const n = orig.length;
-  const list =
-    n === 1
-      ? VOCAB.one
-      : n <= 3
-        ? VOCAB.short
-        : n <= 7
-          ? VOCAB.mid
-          : (VOCAB.long as readonly string[]);
-  ctx.count("word");
-  return caseStyle(orig, ctx.pick(list));
-}
-
-function charwise(ctx: ScrubContext, tok: string): string {
-  let out = "";
-  for (const ch of tok) {
-    if (ch >= "0" && ch <= "9") out += String(ctx.int(0, 9));
-    // Letters come out lower case: fragments of one id split across nodes (a real ASIN
-    // in two spans) must not rejoin, in parser output, into an upper-case id shape.
-    else out += LOWER[ctx.int(0, LOWER.length - 1)];
-  }
-  ctx.count("word");
-  return out;
+/**
+ * Free text keeps nothing of its shape: a run of free words (with the spaces and
+ * punctuation between them) becomes 60%-160% as many synthetic words of random length,
+ * sentence case at the start of the value and lower case elsewhere.
+ */
+function synthFree(out: string, ctx: ScrubContext): string {
+  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
+  if (!out.includes(FREE)) return out.replace(/[\u0002\u0003]/g, "");
+  return (
+    out
+      .replace(FREE_RUN, (run: string, offset: number) => {
+        const before = out.slice(Math.max(0, offset - 1), offset);
+        const after = out.slice(offset + run.length, offset + run.length + 1);
+        if (/[\p{L}\p{N}]/u.test(before + after)) {
+          // Glued to a token ("ab<uuid>"): one short word, so no long opaque-looking run forms.
+          ctx.count("word");
+          return ctx.pick(VOCAB.short);
+        }
+        const n = run.split(FREE).length - 1 + (run.split(NUM_OPEN).length - 1);
+        const k = Math.max(1, Math.round(n * (0.6 + ctx.rand())));
+        const words: string[] = [];
+        for (let j = 0; j < k; j++) words.push(ctx.pick(FREE_VOCAB));
+        ctx.count("word", k);
+        const first = words[0] ?? "lorem";
+        if (!/[\p{L}\p{N}]/u.test(out.slice(0, offset)))
+          words[0] = first[0]?.toUpperCase() + first.slice(1);
+        return words.join(" ");
+      })
+      // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
+      .replace(/[\u0002\u0003]/g, "")
+  );
 }
 
 function fakeDate(ctx: ScrubContext, y: number, m: number, d: number) {
@@ -336,7 +341,9 @@ function zipOut(ctx: ScrubContext, zip: string, plus4: string | undefined): stri
 }
 
 function digitsOf(ctx: ScrubContext, numberText: string, standalone: boolean): string {
-  if (standalone && /^\d$/.test(numberText)) return numberText;
+  // A lone digit (a quantity, a step) is permuted within 2..9; 0 and 1 stay, so they agree
+  // with the "0" and "1" literals attributes keep verbatim.
+  if (standalone && /^\d$/.test(numberText)) return ctx.permDigit(numberText);
   ctx.count("number");
   // A lower-case exponent letter: "1E" next to a digit run would read as an upper-case id.
   return numberText.replace(/\d+/g, (run) => ctx.fakeDigits(run)).replace(/E/g, "e");
@@ -385,7 +392,8 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
   const keepWords = opts.words !== false;
   // A UUID glued to a word ("checkbox<uuid>") is still a UUID to the audit, whose hex-only
   // boundary does not see the word, while the scan below would consume it inside the word.
-  const s = input.replace(new RegExp(PATTERNS.uuid, "g"), (u) => {
+  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
+  const s = input.replace(/[\u0001-\u0003]/g, "").replace(new RegExp(PATTERNS.uuid, "g"), (u) => {
     if (isFakeUuid(u)) return u;
     ctx.count("uuid");
     return ctx.fakeUuid(u.toLowerCase());
@@ -500,6 +508,13 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
       const g = m[1] !== undefined ? 1 : m[2] !== undefined ? 2 : 3;
       out += splice(m, { [g]: SYNTHETIC.cardLast4 });
       ctx.count("card");
+      i += m[0].length;
+      continue;
+    }
+    if (!tokensOnly && (m = at(R.money, s, i))) {
+      // An amount moves in MAGNITUDE (x0.3..x3), not just digit by digit, in the same format.
+      out += (m[1] ?? "") + (m[2] ?? "") + (m[3] ?? "") + ctx.scaleAmount(m[4] ?? "", m[5]);
+      ctx.count("number");
       i += m[0].length;
       continue;
     }
@@ -634,7 +649,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
       const hasLetter = /[A-Za-z]/.test(tok);
       const isWord = hasLetter && !hasDigit && keepWords && WORDS.has(tok.toLowerCase());
       if (hasLetter && !isWord && (hasDigit || i <= mixedUntil)) {
-        out += charwise(ctx, tok);
+        out += FREE;
         i += tok.length;
       } else if (isWord) {
         // A closed set of unit and frequency words ("every 3 weeks", "90-day") is kept
@@ -643,7 +658,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
         out += tok;
         i += tok.length;
       } else if (hasLetter) {
-        out += loremWord(ctx, tok);
+        out += FREE;
         i += tok.length;
       } else {
         const num = at(R.number, s, i);
@@ -652,7 +667,11 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
         const prev = i > 0 ? s[i - 1] : "";
         const next = s[i + text.length] ?? "";
         const standalone = prev !== "$" && next !== "%" && next !== "." && next !== ",";
-        out += digitsOf(ctx, text, standalone);
+        // "6 items": an item count is structure parsers cross-check against the items
+        // present, so it stays. Any other number is marked so one standing between free
+        // words is folded into the free run.
+        const itemCount = /^\s+items?\b/i.test(s.slice(i + text.length));
+        out += itemCount ? text : NUM_OPEN + digitsOf(ctx, text, standalone) + NUM_CLOSE;
         i += text.length;
       }
       continue;
@@ -660,7 +679,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
     if ((m = at(R.uniLetters, s, i))) {
       // Lower case: a non-ASCII word ("\uff35\uff33\uff22") turned into upper-case ASCII next
       // to digits reads as an id.
-      out += loremWord(ctx, m[0]).toLowerCase();
+      out += FREE;
       i += m[0].length;
       continue;
     }
@@ -672,7 +691,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
     out += s[i];
     i++;
   }
-  return out;
+  return synthFree(out, ctx);
 
   function tryDate(re: RegExp, fn: (c: ScrubContext, mm: RegExpExecArray) => string | null) {
     const mm = at(re, s, i);
@@ -735,7 +754,8 @@ function synthName(ctx: ScrubContext, value: string): string {
   if (EXACT.has(normLabel(core))) return value;
   const full = ctx.fakeName(core.toLowerCase());
   ctx.count("name");
-  const single = !/\s/.test(core.replace(/[.,]+$/, ""));
+  // One word or two at random: the real name's word count is not kept.
+  const single = ctx.int(0, 1) === 0;
   return lead + (single ? (full.split(" ")[0] ?? full) : full) + trail;
 }
 
@@ -819,6 +839,16 @@ function valueFor(
 }
 
 const SUFFIX_KINDS: readonly (LabelKind | null)[] = ["suffix", "rating"];
+const COUNT_SUFFIXES = new Set([
+  "ratings",
+  "rating",
+  "global ratings",
+  "customer reviews",
+  "orders",
+  "results",
+  "results for",
+  "bought in past month",
+]);
 
 /** Trailing labels ("1,234 ratings", "4.5 out of 5 stars, rating details"). */
 function scrubSuffixes(core: string, ctx: ScrubContext): string | null {
@@ -830,6 +860,14 @@ function scrubSuffixes(core: string, ctx: ScrubContext): string | null {
     const head = core.slice(0, sfx.index);
     if (l.kind === "rating" && /^\s*\d(?:\.\d)?\s*$/.test(head)) {
       return synthRating(ctx, head) + sfx[0];
+    }
+    const count = /^(\s*)(\d{1,3}(?:,\d{3})+|\d+)(\+?\s*)$/.exec(head);
+    if (count !== null && COUNT_SUFFIXES.has(l.norm)) {
+      // "1,234 ratings", "42 orders": a count says how popular a product is or how old an
+      // account is; it moves in magnitude like an amount.
+      return (
+        (count[1] ?? "") + ctx.scaleAmount(count[2] ?? "", undefined) + (count[3] ?? "") + sfx[0]
+      );
     }
     const lead = /^\s*/.exec(head)?.[0] ?? "";
     const trail = /\s*$/.exec(head)?.[0] ?? "";
@@ -883,7 +921,7 @@ function scrubCore(core: string, ctx: ScrubContext, mode: TextMode): string {
     if (l.kind === "whole" || l.kind === "word" || SUFFIX_KINDS.includes(l.kind)) continue;
     if (restricted && l.kind === null) continue;
     const p = l.prefix.exec(core);
-    if (p !== null && p[0].length < core.length) {
+    if (p !== null && p[0].length < core.length && labelLeads(l, p[0], core)) {
       ctx.count("label_kept");
       return p[0] + valueFor(ctx, core.slice(p[0].length), l.kind, mode);
     }
@@ -905,7 +943,23 @@ function leadingLabel(s: string): boolean {
   for (const l of COMPILED) {
     if (l.kind === "whole" || l.kind === "word" || SUFFIX_KINDS.includes(l.kind)) continue;
     const p = l.prefix.exec(s);
-    if (p !== null && p[0].length < s.length) return true;
+    if (p !== null && p[0].length < s.length && labelLeads(l, p[0], s)) return true;
   }
   return false;
+}
+
+const VALUE_START = new RegExp(
+  `^[\\s:,.#-]*(?:[\\d$\u00a3\u20ac(]|(?:${MONTH_RE}|${WEEKDAY_RE})\\b)`,
+  "i",
+);
+
+/**
+ * A one-word label with no kind ("Amazon", "Prime", "New") leads a node only when a value
+ * follows it (a number, an amount, a date) or it ends in ":". Before free words ("Amazon
+ * Basics Lorem Widget") the whole node is free text, so a title keeps no word of its own.
+ */
+function labelLeads(l: CompiledLabel, matched: string, core: string): boolean {
+  if (l.kind !== null || l.norm.includes(" ")) return true;
+  if (/:\s*$/.test(matched)) return true;
+  return VALUE_START.test(core.slice(matched.length));
 }
