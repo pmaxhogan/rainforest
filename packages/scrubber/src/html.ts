@@ -13,6 +13,7 @@ import {
   IDREF_ATTRS,
   ID_PREFIXES,
   IMAGE_URL_ATTRS,
+  PARSER_CLASS_TOKENS,
   KEPT_VALUE_ATTRS,
   NAME_HINT,
   REDUCE_DROP_HIDDEN_SELECTORS,
@@ -130,6 +131,25 @@ function isPixel(el: DomElement): boolean {
   return PIXEL_SRC.test(el.getAttribute("src") ?? "");
 }
 
+const CLASS_KEEP = new Set(PARSER_CLASS_TOKENS);
+const FAKE_IN_CLASS = /FAKE|00000000-0000-4000-8000-/;
+const EXPERIMENT_RUN = /([_-])(?=[0-9a-f]*[0-9])[0-9a-f]{4,}(?![0-9a-z])|[0-9]{4,}/gi;
+
+/**
+ * Experiment, cohort and build tokens in class names ("a-aui_31337-c", "r-4f1e2d0") become a
+ * fixed placeholder, unless a parser queries that exact class (PARSER_CLASS_TOKENS).
+ */
+function placeholderClasses(value: string): string {
+  return value
+    .split(/(\s+)/)
+    .map((c) =>
+      CLASS_KEEP.has(c) || FAKE_IN_CLASS.test(c)
+        ? c
+        : c.replace(EXPERIMENT_RUN, (_m, sep: string | undefined) => `${sep ?? ""}0000`),
+    )
+    .join("");
+}
+
 function scrubAttrValue(
   el: DomElement,
   tag: string,
@@ -152,7 +172,11 @@ function scrubAttrValue(
       .trim()
       .split(/\s+/)
       .every((t) => t === "" || docIds.has(t));
-  if (KEPT.has(name) && idrefOk && !DATA_IN_KEPT.test(value)) return scrubTokens(value, ctx);
+  if (KEPT.has(name) && idrefOk && !DATA_IN_KEPT.test(value)) {
+    // After the identifier pass, so ids inside a class are mapped before any placeholder.
+    const kept = scrubTokens(value, ctx);
+    return name === "class" ? placeholderClasses(kept) : kept;
+  }
   if (URLS.has(name)) {
     if (name === "srcset" || name === "data-srcset") return scrubSrcset(value, ctx);
     const image = IMAGES.has(name) || (name === "href" && tag === "image");
@@ -180,6 +204,9 @@ function scrubAttrValue(
     }
   }
   if (LITERALS.has(t.toLowerCase())) return value;
+  // A count of the items on the page ("data-saved-item-quantity") is structure parsers
+  // cross-check against the items present; the items themselves are synthetic.
+  if (/^\d{1,3}$/.test(t) && /item-?(?:quantity|count)$|numitems$/.test(name)) return value;
   if (/^(?:https?:)?\/\//i.test(t)) return scrubUrl(value, ctx, "auto");
   ctx.count("attr_scrubbed");
   return scrubText(value, ctx);
@@ -329,6 +356,90 @@ function reduceTree(root: DomNode, ctx: ScrubContext): void {
   }
 }
 
+type QEl = DomElement & Queryable & { className?: string };
+
+const YEAR = /(?:^|\D)(?:19|20)\d{2}(?:\D|$)/;
+
+/**
+ * A select that enumerates years (the order-history time filter, a registry date picker)
+ * says how long the account has existed. Keep at most 3 year options: the selected one and
+ * its neighbours; their years then shift like every other date.
+ */
+function trimYearOptions(root: DomNode, ctx: ScrubContext): void {
+  for (const sel of Array.from((root as unknown as Queryable).querySelectorAll("select"))) {
+    const opts = Array.from(
+      (sel as unknown as Queryable).querySelectorAll("option"),
+    ) as unknown as QEl[];
+    const years = opts.filter((o) =>
+      YEAR.test(`${o.getAttribute("value") ?? ""} ${o.textContent ?? ""}`),
+    );
+    if (years.length <= 3) continue;
+    const sel0 = Math.max(
+      0,
+      years.findIndex((o) => o.getAttribute("selected") !== null),
+    );
+    const start = Math.min(Math.max(0, sel0 - 1), years.length - 3);
+    years.forEach((o, k) => {
+      if ((k < start || k >= start + 3) && o.parentNode !== null) {
+        o.parentNode.removeChild(o);
+        ctx.count("element_dropped");
+      }
+    });
+  }
+}
+
+function firstText(el: DomNode | null | undefined): DomNode | undefined {
+  return el
+    ? children(el).find((c) => c.nodeType === TEXT && (c.data ?? "").trim() !== "")
+    : undefined;
+}
+
+/**
+ * Amazon draws a price twice: "$12.99" in .a-offscreen and whole/fraction spans. Amounts
+ * are scaled independently in each text node, so rewrite the spans from the scrubbed
+ * offscreen text and both renderings agree.
+ */
+function alignPrices(root: DomNode): void {
+  for (const p of Array.from((root as unknown as Queryable).querySelectorAll(".a-price"))) {
+    const q = p as unknown as Queryable;
+    const off = q.querySelectorAll(".a-offscreen")[0];
+    const m = /([\d,]+)(?:\.(\d+))?/.exec(off?.textContent ?? "");
+    if (m === null) continue;
+    const whole = firstText(q.querySelectorAll(".a-price-whole")[0]);
+    if (whole !== undefined) whole.data = m[1] ?? "";
+    const frac = firstText(q.querySelectorAll(".a-price-fraction")[0]);
+    if (frac !== undefined && m[2] !== undefined) frac.data = m[2];
+  }
+}
+
+const STAR_CLASS = /^a-star-((?:mini|small|medium|large)-)?\d(?:-5)?$/;
+
+/**
+ * Star classes ("a-star-4-5") carry the rating: rewrite them from the synthetic rating in
+ * the element's own "x.y out of 5" text, or draw one when there is no text.
+ */
+function alignStars(root: DomNode, ctx: ScrubContext): void {
+  for (const el of Array.from(
+    (root as unknown as Queryable).querySelectorAll("[class*='a-star-']"),
+  )) {
+    const e = el as unknown as DomElement;
+    const cls = (e.getAttribute("class") ?? "").split(/\s+/);
+    if (!cls.some((c) => STAR_CLASS.test(c))) continue;
+    const m = /(\d(?:\.\d)?) out of 5/.exec(el.textContent ?? "");
+    const r = m !== null ? Number(m[1]) : ctx.int(10, 50) / 10;
+    const whole = Math.min(5, Math.max(0, Math.floor(r)));
+    const half = r - whole >= 0.5 && whole < 5 ? "-5" : "";
+    e.setAttribute(
+      "class",
+      cls
+        .map((c) =>
+          STAR_CLASS.test(c) ? `a-star-${STAR_CLASS.exec(c)?.[1] ?? ""}${whole}${half}` : c,
+        )
+        .join(" "),
+    );
+  }
+}
+
 export interface HtmlOptions {
   /** Drop chrome and hidden subtrees and collapse whitespace (structure-preserving). */
   reduce?: boolean;
@@ -380,6 +491,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
   const reduce = opts.reduce === true;
   if (reduce) reduceTree(root, ctx);
+  trimYearOptions(root, ctx);
   const outerIds = docIds;
   docIds = new Set(
     Array.from((root as unknown as Queryable).querySelectorAll("[id]"), (e) =>
@@ -391,6 +503,8 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   } finally {
     docIds = outerIds;
   }
+  alignPrices(root);
+  alignStars(root, ctx);
   if (isDoc) return `<!DOCTYPE html>${serialize(root)}`;
   return children(document.body)
     .map((c) => serialize(c))

@@ -1,7 +1,7 @@
 /**
- * Date shifting. Every real date moves by the same `shiftDays`, so intervals inside one
- * fixture stay plausible (an order before its delivery) while the absolute dates do not
- * survive. Weekday names attached to a date are recomputed for the shifted date.
+ * Date shifting. Every real date moves by the same seeded `shiftDays` plus a small per-date
+ * jitter, so intervals inside one fixture stay roughly plausible while neither the absolute
+ * dates nor the exact gaps survive. Weekday names attached to a date are recomputed.
  */
 import { DAY_MS, type ScrubContext } from "./context.ts";
 
@@ -62,7 +62,9 @@ export function styleMonth(orig: string, idx: number): string {
 export function styleWeekday(orig: string, idx: number): string {
   const full = WEEKDAYS[idx] as string;
   const bare = orig.replace(/\.$/, "");
-  const word = bare.length < full.length ? full.slice(0, 3) : full;
+  // Abbreviated only when the original was ("Tue", "Thurs"), not when it was a shorter day name.
+  const word =
+    bare.length <= 5 && bare.toLowerCase() !== full.toLowerCase() ? full.slice(0, 3) : full;
   return caseLike(bare, word);
 }
 
@@ -97,7 +99,8 @@ export function inferYear(ctx: ScrubContext, m: number, d: number): number {
 }
 
 export function shift(ctx: ScrubContext, ymd: Ymd): Ymd & { wd: number } {
-  return ymdOf(dayOf(ymd) + ctx.shiftDays);
+  const day = dayOf(ymd);
+  return ymdOf(day + ctx.shiftDays + ctx.jitterFor(day));
 }
 
 export function shiftYear(ctx: ScrubContext, y: number): number {

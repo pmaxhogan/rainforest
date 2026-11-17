@@ -14,12 +14,25 @@ const DAY_MS = 86_400_000;
 export const EPOCH_DAY = Date.UTC(2020, 6, 1) / DAY_MS;
 export const SYNTHETIC_CAPTURED_AT = new Date(EPOCH_DAY * DAY_MS + 12 * 3_600_000).toISOString();
 /**
- * Page dates move to EPOCH plus a secret jitter in +-JITTER_DAYS (from the input hash).
- * Intervals BETWEEN page dates are kept; the interval to the capture is blurred by the
- * jitter. captured_at is constant on purpose: emitting capture + shift would cancel the
- * jitter, and the real capture day is roughly public (it is near the commit date).
+ * Page dates move by a seeded offset of MIN_SHIFT_DAYS..MAX_SHIFT_DAYS in either direction,
+ * never within MIN_YEAR_GAP_DAYS of a whole number of years (so month and day do not
+ * survive), unrelated to the real capture day. Each distinct date then gets its own extra
+ * jitter of up to +-DATE_JITTER_DAYS, so the gaps between page dates are not exact either.
+ * captured_at is a constant: the real capture day is roughly public (near the commit date).
  */
-export const JITTER_DAYS = 180;
+export const MIN_SHIFT_DAYS = 3 * 365;
+export const MAX_SHIFT_DAYS = 6 * 365;
+export const MIN_YEAR_GAP_DAYS = 30;
+export const DATE_JITTER_DAYS = 3;
+/** Amounts and counts are multiplied by a factor in this range (log-uniform). */
+export const AMOUNT_SCALE = [0.3, 3] as const;
+
+/** Distance in days from `days` to the nearest whole number of (average) years. */
+export function yearGap(days: number): number {
+  const y = 365.2425;
+  const r = Math.abs(days) % y;
+  return Math.min(r, y - r);
+}
 
 export type Category =
   | "asin"
@@ -61,8 +74,10 @@ export interface ScrubContext {
   /** Integer in [lo, hi]. */
   int(lo: number, hi: number): number;
   pick<T>(list: readonly T[]): T;
-  /** Days added to every real date. */
+  /** Days added to every real date (before the per-date jitter). */
   readonly shiftDays: number;
+  /** Extra days for one real date (by day number), drawn once per distinct date. */
+  jitterFor(day: number): number;
   /** Real capture day (days since 1970), for year inference. Never emitted. */
   readonly realDay: number;
   count(cat: Category, n?: number): void;
@@ -78,6 +93,14 @@ export interface ScrubContext {
   fakeUuid(real: string): string;
   /** Same digit count, leading zero kept, consistent within the fixture. */
   fakeDigits(real: string): string;
+  /**
+   * An amount or count ("1,234", "12" + "99" cents) scaled by a random factor in
+   * AMOUNT_SCALE (one factor per distinct value), in the same format: grouping commas only
+   * when the original had them, the same number of decimals. Zero stays zero.
+   */
+  scaleAmount(intPart: string, frac: string | undefined): string;
+  /** A lone digit: 0 and 1 unchanged, 2..9 through one random permutation per fixture. */
+  permDigit(d: string): string;
   /** Memo for whole strings, so a repeated title scrubs the same way everywhere. */
   readonly memo: Map<string, string>;
   /** Account-scoped id values seen in ID_PARAMS anywhere in the capture (see scrub.ts). */
@@ -138,8 +161,13 @@ export function createContext(material: string, capturedAt: string): ScrubContex
   const rand = sfc32(digest);
   for (let i = 0; i < 16; i++) rand();
   const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
-  const jitter = int(-JITTER_DAYS, JITTER_DAYS);
-  const shiftDays = EPOCH_DAY + jitter - realDay;
+  let shiftDays = 0;
+  // Bounded: a draw lands outside the excluded bands with probability above 80%.
+  for (let k = 0; k < 64 && yearGap(shiftDays) < MIN_YEAR_GAP_DAYS; k++) {
+    shiftDays = int(MIN_SHIFT_DAYS, MAX_SHIFT_DAYS) * (int(0, 1) === 0 ? -1 : 1);
+  }
+  if (yearGap(shiftDays) < MIN_YEAR_GAP_DAYS) shiftDays = -(MIN_SHIFT_DAYS + 180);
+  const jitters = new Map<number, number>();
   const counts = new Map<Category, number>();
   const digitMap = new Map<string, string>();
 
@@ -157,11 +185,60 @@ export function createContext(material: string, capturedAt: string): ScrubContex
     return out;
   };
 
+  const amountMap = new Map<string, string>();
+  const scaleAmount = (intPart: string, frac: string | undefined): string => {
+    const key = `${intPart}.${frac ?? ""}`;
+    const hit = amountMap.get(key);
+    if (hit !== undefined) return hit;
+    const value = Number(`${intPart.replace(/,/g, "")}.${frac ?? "0"}`);
+    const [lo, hi] = AMOUNT_SCALE;
+    let out: string;
+    if (!Number.isFinite(value) || value === 0) {
+      out = frac === undefined ? intPart : `${intPart}.${frac}`;
+    } else {
+      // Never within x0.8..x1.25: a factor near 1 would leave the real amount readable.
+      let f = 1;
+      for (let k = 0; k < 16 && f > 0.8 && f < 1.25; k++) f = lo * Math.pow(hi / lo, rand());
+      if (f > 0.8 && f < 1.25) f = hi;
+      let v = value * f;
+      const dec = frac?.length ?? 0;
+      if (dec === 0) v = Math.max(1, Math.round(v));
+      const fixed = v.toFixed(dec);
+      const [whole = "0", cents] = fixed.split(".");
+      const grouped = intPart.includes(",") ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : whole;
+      out = cents === undefined ? grouped : `${grouped}.${cents}`;
+    }
+    amountMap.set(key, out);
+    return out;
+  };
+  let perm: string[] | undefined;
+  const permDigit = (d: string): string => {
+    if (d === "0" || d === "1") return d;
+    if (perm === undefined) {
+      perm = ["2", "3", "4", "5", "6", "7", "8", "9"];
+      for (let k = perm.length - 1; k > 0; k--) {
+        const j = int(0, k);
+        [perm[k], perm[j]] = [perm[j] as string, perm[k] as string];
+      }
+    }
+    return perm[Number(d) - 2] ?? d;
+  };
+
   return {
     rand,
     int,
+    scaleAmount,
+    permDigit,
     pick: <T>(list: readonly T[]): T => list[int(0, list.length - 1)] as T,
     shiftDays,
+    jitterFor(day) {
+      let j = jitters.get(day);
+      if (j === undefined) {
+        j = int(-DATE_JITTER_DAYS, DATE_JITTER_DAYS);
+        jitters.set(day, j);
+      }
+      return j;
+    },
     realDay,
     counts,
     count(cat, n = 1) {

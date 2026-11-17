@@ -467,6 +467,8 @@ describe("label allowlist", () => {
       "time",
       "times",
       "off",
+      "item",
+      "items",
     ]);
   });
 

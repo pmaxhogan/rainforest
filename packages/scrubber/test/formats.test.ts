@@ -62,11 +62,16 @@ describe("date formats keep their style", () => {
   });
 
   test("standalone years, weekdays and months inside text shift too", () => {
-    expect(text("Orders in 2024 only")).toMatch(/^[A-Za-z]+ [a-z]+ (19|20)\d{2} [a-z]+$/);
+    // Free words around a date are re-synthesized (count and lengths random).
+    expect(text("Orders in 2024 only")).toMatch(
+      /^[A-Za-z]+(?: [a-z]+)* (19|20)\d{2} [a-z]+(?: [a-z]+)*$/,
+    );
     expect(text("Orders in 2024 only")).not.toContain("2024");
-    expect(text("arrives Saturday or so")).toMatch(new RegExp(`^[a-z]+ ${WD} [a-z]+ [a-z]+$`));
+    expect(text("arrives Saturday or so")).toMatch(
+      new RegExp(`^[A-Za-z]+(?: [a-z]+)* ${WD} [a-z]+(?: [a-z]+)*$`),
+    );
     expect(text("sale ends March for real")).toMatch(
-      new RegExp(`^[a-z]+ [a-z]+ ${MONTH} [a-z]+ [a-z]+$`),
+      new RegExp(`^[A-Za-z]+(?: [a-z]+)* ${MONTH} [a-z]+(?: [a-z]+)*$`),
     );
   });
 
@@ -89,12 +94,14 @@ describe("date formats keep their style", () => {
 
 describe("tokens and numbers", () => {
   test("ordinals, phones, ASIN keys and mixed tokens", () => {
-    expect(text("the 21st time")).toMatch(/^[a-z]+ \d+(st|nd|rd|th) [a-z]+$/);
+    expect(text("the 21st time")).toMatch(/^[A-Za-z]+(?: [a-z]+)* \d+(st|nd|rd|th) time$/);
     expect(text("+1 999-555-1234")).toBe("+1 555-555-0100");
     expect(text("ASIN: 0123456789")).toBe("ASIN: B0FAKE0000");
     const mixed = text("Model Ab12cD34");
-    // Shape kept, letters lower-cased (split ids must not rejoin into an upper-case id).
-    expect(mixed).toMatch(/^Model [a-z]{2}\d\d[a-z]{2}\d\d$/);
+    // A one-word label before a free token is not a label lead: the node is free text, and
+    // a mixed token keeps neither its length nor its shape.
+    expect(mixed).toMatch(/^[A-Za-z]+(?: [a-z]+)*$/);
+    expect(text("Model: Ab12cD34")).toMatch(/^Model: [A-Za-z]+(?: [a-z]+)*$/);
     expect(mixed).not.toContain("Ab12cD34");
   });
 
@@ -105,20 +112,23 @@ describe("tokens and numbers", () => {
 
   test("URLs in text, protocol-relative and with trailing punctuation", () => {
     expect(text("see https://shop.invalid/dp/B0ABCD1234.")).toMatch(
-      /^[a-z]+ https:\/\/www\.example\.com\/dp\/B0FAKE0000\.$/,
+      /^[A-Za-z]+(?: [a-z]+)* https:\/\/www\.example\.com\/dp\/B0FAKE0000\.$/,
     );
     expect(text("cdn //img.invalid/a/b.jpg here")).toMatch(
-      /^[a-z]+ https:\/\/images\.example\.com\/placeholder\.png [a-z]+$/,
+      /^[A-Za-z]+(?: [a-z]+)* https:\/\/images\.example\.com\/placeholder\.png [a-z]+(?: [a-z]+)*$/,
     );
   });
 
   test("an ISBN-shaped ASIN next to an inline asin key is mapped", () => {
-    expect(text("the asin: 0123456789 here")).toMatch(/^[a-z]+ asin: B0FAKE0000 [a-z]+$/);
+    expect(text("the asin: 0123456789 here")).toMatch(
+      /^[A-Za-z]+(?: [a-z]+)* asin: B0FAKE0000 [a-z]+(?: [a-z]+)*$/,
+    );
   });
 
-  test("single standalone digits are kept, money digits are not", () => {
-    expect(text("Qty 3")).toMatch(/^[A-Z][a-z]+ 3$/);
-    expect(text("$5")).toMatch(/^\$\d$/);
+  test("lone digits are permuted (0 and 1 kept), amounts move in magnitude", () => {
+    expect(text("Qty 3")).toMatch(/^Qty [2-9]$/);
+    expect(text("Qty 1")).toBe("Qty 1");
+    expect(text("$5")).toMatch(/^\$\d+$/);
     expect(text("Save 20%")).toMatch(/^Save \d{2}%$/);
   });
 });
@@ -137,7 +147,7 @@ describe("urls", () => {
       "https://images.example.com/placeholder.png",
     );
     expect(href("vbscript:x")).toBe("#");
-    expect(href("?k=zippy&tag=x")).toMatch(/^\?k=[a-z]+$/);
+    expect(href("?k=zippy&tag=x")).toMatch(/^\?k=[A-Za-z]+(?:\+[a-z]+)*$/);
     expect(href("gp/your-orders")).toBe("gp/your-orders");
     expect(href("#customerReviews")).toBe("#customerReviews");
     expect(href("#a b")).toBe("#");
