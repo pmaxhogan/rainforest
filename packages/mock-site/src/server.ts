@@ -297,7 +297,8 @@ async function route(ctx: Ctx): Promise<void> {
       );
     }
     for (const key of form.keys()) {
-      const m = /^submit\.(delete-active|delete|save-for-later|move-to-cart|delete-saved)\.(.+)$/.exec(key);
+      const m =
+        /^submit\.(delete-active|delete|save-for-later|move-to-cart|delete-saved)\.(.+)$/.exec(key);
       if (m)
         return mutated(ctx, cartAction(session, m[1] as CartAction, m[2]!), "/gp/cart/view.html");
     }
