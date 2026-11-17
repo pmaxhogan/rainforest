@@ -235,6 +235,11 @@ export class Hub extends DurableObject<Env> {
 
   override async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     const state = this.#state(ws);
+    // Before authentication only a small auth frame is accepted, and nothing is parsed.
+    if (state && !state.authed && (typeof raw !== "string" || raw.length > 4096)) {
+      ws.close(1008, "bad frame");
+      return;
+    }
     if (!state || typeof raw !== "string" || raw.length > MAX_RESULT_CHARS + 100_000) {
       if (state?.authed && state.deviceId) {
         this.#failPending(state.deviceId, {
@@ -372,7 +377,10 @@ export class Hub extends DurableObject<Env> {
     const now = Date.now();
     if (presence.aliases) {
       // A paired device may name itself; names never grant anything beyond selection.
-      const aliases = presence.aliases.filter((a) => /^[\w .()'-]+$/.test(a)).slice(0, 8);
+      // Short labels only: an alias is reported by the device, not approved by the owner.
+      const aliases = presence.aliases
+        .filter((a) => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,23}$/.test(a))
+        .slice(0, 8);
       this.#sql.exec(
         "UPDATE devices SET aliases = ? WHERE id = ?",
         JSON.stringify(aliases),

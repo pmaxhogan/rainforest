@@ -47,14 +47,14 @@ async function render(env: Env, csrf: string, notice: string, owner: string): Pr
         .join("")}</table>`
     : '<p class="muted">No clients are connected.</p>';
   const pairings = state.pairings.length
-    ? `<table><tr><th>Code</th><th>Name</th><th>OS</th><th>Key</th><th>Expires</th><th></th></tr>${state.pairings
+    ? `<table><tr><th>Name</th><th>OS</th><th>Key</th><th>Expires</th><th></th></tr>${state.pairings
         .map(
           (p) =>
-            `<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}</td><td>${esc(p.os)}</td><td class="mono">${esc(p.key_fingerprint)}</td><td>${esc(when(p.expires_at))}</td><td>${form(csrf, "approve", { code: p.code }, "Approve")} ${form(csrf, "reject", { code: p.code }, "Reject", "secondary")}</td></tr>`,
+            `<tr><td>${esc(p.name)}</td><td>${esc(p.os)}</td><td class="mono">${esc(p.key_fingerprint)}</td><td>${esc(when(p.expires_at))}</td><td>${form(csrf, "reject", { code: p.code }, "Reject", "secondary")}</td></tr>`,
         )
         .join(
           "",
-        )}</table><p class="muted">Approve only a code that the daemon printed on a computer in front of you.</p>`
+        )}</table><form class="inline" method="post" action="/admin"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="action" value="approve"><input name="code" required autocomplete="off" spellcheck="false" maxlength="16" placeholder="code from the daemon"> <button>Approve</button></form><p class="muted">To approve, type the code that the daemon printed on the computer in front of you. Codes are not shown here on purpose: anyone can request a pairing, and only the person at the computer knows its code.</p>`
     : '<p class="muted">No pending pairings. Run <code>rainforestd pair</code> on a computer to start one.</p>';
   const devices = state.devices.length
     ? `<table><tr><th>Name</th><th>OS</th><th>Online</th><th>Version</th><th>Last seen</th><th>Key</th><th></th></tr>${state.devices
