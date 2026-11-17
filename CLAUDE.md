@@ -81,5 +81,6 @@ imports use explicit `.ts` extensions, no build step for tests.
 - mode: release.target=github-releases
 - mode: stack.type=node-ts
 - mode: test.coverage-ratchet=compare-job
+- exception: deps.dependabot-policy - version updates wait 5 days (minor and patch) instead of 3 and 0, because a merged update becomes a signed daemon release that installs itself. Owner's choice; security updates are not delayed. (2026-11-17)
 
 <!-- stack:end -->
