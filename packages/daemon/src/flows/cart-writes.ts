@@ -216,7 +216,7 @@ export const setCartQuantity: Flow = async (args, ctx) => {
       });
       // The stepper records the applied value on the line; wait for it before the next click.
       const wanted = String(expectedNow + (up ? 1 : -1));
-      await page.page
+      const applied = await page.page
         .waitForFunction(
           ([selector, value]) => {
             const doc = (
@@ -231,7 +231,13 @@ export const setCartQuantity: Flow = async (args, ctx) => {
           [line, wanted] as const,
           { timeout: 8000 },
         )
-        .catch(() => {});
+        .then(
+          () => true,
+          () => false,
+        );
+      // Never click again blind: when a step did not register, stop and report what the
+      // cart shows.
+      if (!applied) break;
       await new Promise((r) => setTimeout(r, 900));
     }
     await new Promise((r) => setTimeout(r, 1500));

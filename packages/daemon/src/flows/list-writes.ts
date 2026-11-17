@@ -48,6 +48,17 @@ export function listState(list: ListPage): ListState {
 export async function loadList(page: PageContext, listId: string): Promise<ListPage> {
   const url = `${AMAZON}/hz/wishlist/ls/${encodeURIComponent(listId)}`;
   const { result } = await readPage(page, url, "list", "list", parseList, { settleMs: 1500 });
+  // The site can answer a list URL with a different list (the default one, for an id it does
+  // not know). Every write flow reads through here, so a page that is not the named list
+  // stops the flow before anything is clicked.
+  const shown = listState(result.data).list_id;
+  if (shown !== listId) {
+    throw new RfError(
+      "not_found",
+      "the page did not show the requested list; nothing was changed",
+      { details: { shown_other_list: shown !== null } },
+    );
+  }
   return result.data;
 }
 
@@ -64,10 +75,12 @@ export async function loadLists(page: PageContext): Promise<ListsIndexPage> {
 }
 
 const ITEM_ID = /^[A-Za-z0-9-]{6,64}$/;
+const LIST_ID = /^[A-Z0-9]{8,16}$/;
 
 export const removeFromList: Flow = async (args, ctx) => {
   const listId = String(args.list_id);
   const itemId = String(args.item_id);
+  if (!LIST_ID.test(listId)) throw new RfError("invalid_arguments", "list_id is not a list id");
   if (!ITEM_ID.test(itemId))
     throw new RfError("invalid_arguments", "item_id is not a list item id from get_list");
   requireBudget(ctx, 2, "list");
@@ -97,7 +110,6 @@ export const removeFromList: Flow = async (args, ctx) => {
   });
 };
 
-const LIST_ID = /^[A-Z0-9]{8,16}$/;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -225,6 +237,12 @@ const DIALOG = ".a-popover, .a-modal-scroller";
 const PRIVACY_VALUE = { private: "PRIVATE", shared: "SHARED", public: "PUBLIC" } as const;
 type Privacy = keyof typeof PRIVACY_VALUE;
 
+function readPrivacy(value: unknown): Privacy | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && Object.hasOwn(PRIVACY_VALUE, value)) return value as Privacy;
+  throw new RfError("invalid_arguments", "privacy must be private, shared or public");
+}
+
 function listsState(index: ListsIndexPage): { list_id: string; name: string; privacy: string }[] {
   return index.lists.map((l) => ({ list_id: l.list_id, name: l.name, privacy: String(l.privacy) }));
 }
@@ -269,7 +287,7 @@ async function applySettings(
 
 export const createList: Flow = async (args, ctx) => {
   const name = String(args.name).trim();
-  const privacy = (args.privacy as Privacy | undefined) ?? "private";
+  const privacy = readPrivacy(args.privacy) ?? "private";
   if (!name) throw new RfError("invalid_arguments", "name must not be empty");
   requireBudget(ctx, privacy === "private" ? 2 : 4, "list");
   const session = await ctx.browser.session();
@@ -319,7 +337,7 @@ export const updateList: Flow = async (args, ctx) => {
   const listId = String(args.list_id);
   if (!LIST_ID.test(listId)) throw new RfError("invalid_arguments", "list_id is not a list id");
   const name = typeof args.name === "string" ? args.name.trim() : undefined;
-  const privacy = args.privacy as Privacy | undefined;
+  const privacy = readPrivacy(args.privacy);
   if (name === undefined && privacy === undefined)
     throw new RfError("invalid_arguments", "give a name, a privacy setting, or both");
   if (name !== undefined && !name) throw new RfError("invalid_arguments", "name must not be empty");
