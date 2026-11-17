@@ -13,7 +13,7 @@ import {
 } from "@rainforest/browser";
 import { classifyInterstitial } from "@rainforest/parsers";
 import { RfError } from "@rainforest/core";
-import type { DaemonConfig } from "./config.ts";
+import { pacingOverrides, type DaemonConfig } from "./config.ts";
 import { atomicWriteJson } from "./fsutil.ts";
 import type { BrowserController, BrowserStatus } from "./interfaces.ts";
 import type { Logger } from "./log.ts";
@@ -151,7 +151,14 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
       state = emptyPacingState();
     }
   }
-  const pacer = new Pacer({ state });
+  const pacer = new Pacer({ state, ...pacingOverrides(config.pacing) });
+  log.info("pacing limits", {
+    burst_loads: pacer.limits.burst.loads,
+    burst_window_s: pacer.limits.burst.windowMs / 1000,
+    per_hour: pacer.limits.global.perHour,
+    per_day: pacer.limits.global.perDay,
+    from_config: config.pacing !== undefined,
+  });
   let broker: Broker | null = null;
   let embedded: EmbeddedBroker | null = null;
   let session: BrowserSession | null = null;
@@ -280,8 +287,10 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
         amazon_signed_in: signedIn,
         cooling_down_until: until > Date.now() ? until : null,
         budget: pacer.budget(),
+        burst: pacer.burst(),
       };
     },
+    pacingSummary: () => pacer.summary(),
     session: getSession,
     pacer: () => pacer,
     setSignedIn(value) {

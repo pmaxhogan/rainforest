@@ -150,6 +150,26 @@ describe("probe", () => {
 });
 
 describe("provider", () => {
+  test("passes the pacing budget and the burst window on when the browser reports them", async () => {
+    const provider = createPresenceProvider({
+      probe: { snapshot: async () => ({ idle_s: 0, locked: false, chrome_running: true }) },
+      browser: {
+        status: () => ({
+          profile_connected: true,
+          amazon_signed_in: true,
+          cooling_down_until: null,
+          budget: { all: { hour_left: 9, day_left: 150 } },
+          burst: { cap: 6, window_s: 600, used_at: [1000, 9000] },
+        }),
+      },
+      version: "0.1.0",
+    });
+    expect(await provider()).toMatchObject({
+      budget: { all: { hour_left: 9, day_left: 150 } },
+      burst: { cap: 6, window_s: 600, used_at: [1000, 9000] },
+    });
+  });
+
   test("composes OS facts with browser state and the version", async () => {
     const provider = createPresenceProvider({
       probe: { snapshot: async () => ({ idle_s: 9, locked: false, chrome_running: true }) },

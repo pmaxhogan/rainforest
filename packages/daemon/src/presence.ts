@@ -182,6 +182,7 @@ export function createPresenceProvider(deps: PresenceProviderDeps): () => Promis
       version: deps.version,
       ...(deps.aliases && deps.aliases.length > 0 ? { aliases: deps.aliases.slice(0, 8) } : {}),
       ...(browser.budget ? { budget: browser.budget } : {}),
+      ...(browser.burst ? { burst: browser.burst } : {}),
     };
   };
 }

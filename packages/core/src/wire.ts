@@ -34,8 +34,30 @@ export const presenceSchema = z.object({
   budget: z
     .record(z.string().max(32), z.object({ hour_left: z.number(), day_left: z.number() }))
     .optional(),
+  /**
+   * The burst window: how many loads it allows, its length, and the times (epoch ms) of
+   * the loads still inside it. The hub turns the times into "left now" when it is asked.
+   * Optional and additive: an older peer ignores it.
+   */
+  burst: z
+    .object({
+      cap: z.number().int().nonnegative().max(1000),
+      window_s: z.number().positive().max(86_400),
+      used_at: z.array(z.number().nonnegative()).max(64),
+    })
+    .optional(),
 });
 export type Presence = z.infer<typeof presenceSchema>;
+
+/**
+ * What a caller can plan with after a call: how many page loads fit right now on that
+ * computer and, when the budget is partly used, how long until one more fits.
+ */
+export const pacingSummarySchema = z.object({
+  loads_left: z.number().int().nonnegative(),
+  next_free_in_s: z.number().nonnegative().optional(),
+});
+export type PacingSummary = z.infer<typeof pacingSummarySchema>;
 
 /** Image returned next to the JSON result (media and price charts only). */
 export const imageBlockSchema = z.object({
@@ -90,6 +112,8 @@ export const daemonResult = z.object({
   images: z.array(imageBlockSchema).max(8).optional(),
   error: errorPayloadSchema.optional(),
   duration_ms: z.number().nonnegative(),
+  /** Pacing budget after the call, for paced tools. Optional and additive. */
+  pacing: pacingSummarySchema.optional(),
 });
 export const daemonMessage = z.discriminatedUnion("type", [
   daemonAuth,

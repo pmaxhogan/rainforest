@@ -7,7 +7,7 @@ import {
   type ParseResult,
   type Parser,
 } from "@rainforest/core";
-import type { PageContext, PageType } from "@rainforest/browser";
+import type { LoadNeeds, PageContext, PageType } from "@rainforest/browser";
 import type { SessionProvider } from "../browser-controller.ts";
 
 export const AMAZON = "https://www.amazon.com";
@@ -39,6 +39,20 @@ function cachedCapture(url: string, now: number): Capture | null {
 /** Forget cached captures (after any write, so reads never show a stale page). */
 export function clearCaptureCache(): void {
   captureCache.clear();
+}
+
+/** Keep a capture of `url` for the tools that share one page load. */
+export function rememberCapture(url: string, capture: Capture): void {
+  captureCache.set(url, { at: Date.now(), capture });
+}
+
+/**
+ * The recent capture of `url`, but only while the tab still shows that very page. A flow
+ * that needs the live page (to fetch a fragment from it) can then skip loading it again.
+ */
+export function openCapture(page: PageContext, url: string): Capture | null {
+  const hit = cachedCapture(url, Date.now());
+  return hit && page.page.url() === hit.final_url ? hit : null;
 }
 
 /** Load one page through the rails and the pacer, capture it and parse it. */
@@ -218,22 +232,61 @@ export function maxCharsOf(args: Record<string, unknown>): number | undefined {
 /**
  * Refuse to start a multi-step flow unless every page load it needs fits the pacing
  * budget right now. A write that could not read the result back would be worse than a
- * write that never started.
+ * write that never started. `retry_after_s` is the real wait, computed from the recorded
+ * load times. `note` may add a sentence that depends on that wait.
  */
 export function requireBudget(
   ctx: FlowContext,
-  loads: number,
-  type: Exclude<PageType, "none">,
+  needs: LoadNeeds,
+  note?: (waitMs: number) => string | undefined,
 ): void {
-  const headroom = ctx.browser.pacer().headroom(type);
-  if (headroom < loads) {
+  const pacer = ctx.browser.pacer();
+  const wait = pacer.waitFor(needs);
+  if (wait === 0) return;
+  const loads = Object.values(needs).reduce((sum, n) => sum + (n ?? 0), 0);
+  const details = { needed: loads, available: pacer.summary().loads_left };
+  if (wait === null) {
     throw new RfError(
       "throttled",
-      `this action needs ${loads} page loads and only ${headroom} fit the pacing budget right now`,
-      {
-        retry_after_s: 300,
-        details: { needed: loads, available: headroom },
-      },
+      `this action needs ${loads} page loads at once, more than this computer's pacing caps allow`,
+      { details },
     );
   }
+  const cooling = pacer.plan("none");
+  if (!cooling.ok) {
+    throw new RfError("throttled", "this browser is cooling down after an account prompt", {
+      retry_after_s: Math.ceil(wait / 1000),
+      details: { ...details, reason: pacer.state.coolDownReason },
+    });
+  }
+  const retry = Math.ceil(wait / 1000);
+  const extra = note?.(wait);
+  throw new RfError(
+    "throttled",
+    `this action needs ${loads} page loads and only ${details.available} fit the pacing budget right now; ` +
+      `all ${loads} fit in ${retry} s` +
+      (extra ? `. ${extra}` : ""),
+    { retry_after_s: retry, details },
+  );
+}
+
+/**
+ * Run a multi-step flow with the browser to itself. The budget is checked twice: once
+ * before the browser is touched (a cheap refusal), and again once this call holds the
+ * browser, because calls queued ahead of it may have spent the budget in the meantime.
+ * Nothing else loads a page while the call holds the browser, so the second check holds
+ * for the whole flow.
+ */
+export async function runWithBudget<T>(
+  ctx: FlowContext,
+  needs: LoadNeeds,
+  work: (page: PageContext) => Promise<T>,
+  note?: (waitMs: number) => string | undefined,
+): Promise<T> {
+  requireBudget(ctx, needs, note);
+  const session = await ctx.browser.session();
+  return await session.run(async (page) => {
+    requireBudget(ctx, needs, note);
+    return await work(page);
+  });
 }

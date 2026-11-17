@@ -5,6 +5,7 @@ import {
   DEFAULT_BROKER_PORT,
   DEFAULT_IDLE_DETACH_S,
   loadConfig,
+  pacingOverrides,
   parseConfig,
   saveConfig,
   summarizeConfig,
@@ -34,7 +35,7 @@ describe("config", () => {
       ...minimal,
       aliases: ["laptop"],
       broker: { mode: "embedded", port: 5000, start_command: ["node", "broker.js"] },
-      pacing: { search: { min_gap_s: 4 } },
+      pacing: { burst: { loads: 12 }, all: { per_hour: 30 }, search: { per_day: 50 } },
     });
     expect(loadConfig(paths)).toEqual(saved);
     expect(readdirSync(paths.root).filter((f) => f.endsWith(".tmp"))).toEqual([]);
@@ -70,6 +71,63 @@ describe("config", () => {
     }
     expect(error).toBeInstanceOf(ConfigError);
     expect((error as ConfigError).issues.join("\n")).toContain(path);
+  });
+
+  test("pacing caps: accepted up to the ceilings and mapped for the pacer", () => {
+    const c = parseConfig({
+      ...minimal,
+      pacing: {
+        burst: { loads: 20 },
+        all: { per_hour: 40, per_day: 400 },
+        product: { per_hour: 20 },
+        price_history: { per_day: 10 },
+      },
+    });
+    expect(pacingOverrides(c.pacing)).toEqual({
+      burst: { loads: 20 },
+      global: { perHour: 40, perDay: 400 },
+      caps: { product: { perHour: 20 }, price_history: { perDay: 10 } },
+    });
+    expect(pacingOverrides(parseConfig(minimal).pacing)).toEqual({});
+    expect(pacingOverrides(parseConfig({ ...minimal, pacing: {} }).pacing)).toEqual({});
+  });
+
+  // Hardcoded on purpose: one above each ceiling, and every shape that could loosen a
+  // limit by accident, must be a config error.
+  test.each([
+    ["burst above the ceiling", { burst: { loads: 21 } }, "pacing.burst.loads"],
+    ["hourly cap above the ceiling", { all: { per_hour: 41 } }, "pacing.all.per_hour"],
+    ["daily cap above the ceiling", { all: { per_day: 401 } }, "pacing.all.per_day"],
+    ["a type's hourly cap above the ceiling", { cart: { per_hour: 41 } }, "pacing.cart.per_hour"],
+    ["a zero cap", { burst: { loads: 0 } }, "pacing.burst.loads"],
+    ["a fractional cap", { all: { per_hour: 12.5 } }, "pacing.all.per_hour"],
+    ["a cap that is not a number", { all: { per_hour: "30" } }, "pacing.all.per_hour"],
+    ["an unknown page type", { checkout: { per_hour: 5 } }, "pacing"],
+    ["an unknown knob", { search: { min_gap_s: 1 } }, "pacing.search"],
+    ["a burst window", { burst: { loads: 6, window_s: 60 } }, "pacing.burst"],
+    ["the page type none", { none: { per_hour: 5 } }, "pacing"],
+  ])("rejects pacing with %s", (_name, pacing, path) => {
+    let error: unknown;
+    try {
+      parseConfig({ ...minimal, pacing });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as ConfigError).issues.join("\n")).toContain(path);
+  });
+
+  test("pacing caps are clamped again when they reach the pacer", () => {
+    const tooHigh = {
+      burst: { loads: 500 },
+      all: { per_hour: 500, per_day: 5000 },
+      cart: { per_hour: 500 },
+    };
+    expect(pacingOverrides(tooHigh)).toEqual({
+      burst: { loads: 20 },
+      global: { perHour: 40, perDay: 400 },
+      caps: { cart: { perHour: 40 } },
+    });
   });
 
   test("validation errors never echo the offending value", () => {

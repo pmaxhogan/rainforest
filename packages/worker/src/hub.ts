@@ -57,7 +57,43 @@ export interface BrowserRow {
   cooling_down_until: number | null;
   daemon_version: string | null;
   pacing_budget: Record<string, { hour_left: number; day_left: number }> | null;
+  /**
+   * The burst cap: `left` of `cap` page loads fit right now in any `window_s` seconds;
+   * `next_free_in_s` is when one more fits and `all_free_in_s` when the whole cap is free
+   * again (both absent when nothing is in use). Null when offline or not reported.
+   */
+  pacing_burst: BurstRow | null;
   selected: boolean;
+}
+
+export interface BurstRow {
+  cap: number;
+  window_s: number;
+  left: number;
+  next_free_in_s?: number;
+  all_free_in_s?: number;
+}
+
+/**
+ * The burst window as of `now`, from the load times a daemon reported. Loads that have
+ * left the window since the report are no longer counted, so the row does not go stale
+ * between presence frames.
+ */
+export function burstRow(
+  burst: { cap: number; window_s: number; used_at: number[] },
+  now: number,
+): BurstRow {
+  const windowMs = burst.window_s * 1000;
+  const inside = burst.used_at.filter((t) => now - t < windowMs).sort((a, b) => a - b);
+  const left = Math.max(0, burst.cap - inside.length);
+  const row: BurstRow = { cap: burst.cap, window_s: burst.window_s, left };
+  if (inside.length === 0) return row;
+  const until = (t: number): number => Math.max(1, Math.ceil((t + windowMs - now) / 1000));
+  // One more load fits when the oldest load that is over the line has left the window.
+  const blocking = inside[Math.max(0, inside.length - burst.cap)]!;
+  row.next_free_in_s = until(blocking);
+  row.all_free_in_s = until(inside[inside.length - 1]!);
+  return row;
 }
 
 export type StartCallResult =
@@ -550,6 +586,7 @@ export class Hub extends DurableObject<Env> {
       cooling_down_until: presence?.cooling_down_until ?? null,
       daemon_version: presence?.version ?? null,
       pacing_budget: online ? (presence?.budget ?? null) : null,
+      pacing_burst: online && presence?.burst ? burstRow(presence.burst, Date.now()) : null,
       selected: selectedId === device.id,
     };
   }

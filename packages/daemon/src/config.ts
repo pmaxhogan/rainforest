@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CAP_CEILINGS, type PacingOverrides } from "@rainforest/browser";
 import { atomicWriteJson, readTextIfExists } from "./fsutil.ts";
 import type { AppPaths } from "./paths.ts";
 
@@ -52,8 +53,30 @@ const updateSchema = z.object({
     .default(DEFAULT_UPDATE_CHECK_INTERVAL_S),
 });
 
-/** Optional per-page-type pacing overrides: { search: { min_gap_s: 4 }, ... }. Owned by the rails. */
-const pacingSchema = z.record(z.string().max(32), z.record(z.string().max(64), z.number()));
+/**
+ * Optional pacing caps for THIS computer only; the shipped defaults do not move. Example:
+ * { "burst": { "loads": 12 }, "all": { "per_hour": 30 }, "product": { "per_hour": 20 } }.
+ * `burst.loads` is the number of page loads allowed in any 10 minutes, `all` the caps
+ * across page types, and a page type name its own caps. Strict on purpose: an unknown key
+ * or a value above the ceiling is a config error, never a silently looser limit. The gap
+ * between loads, the burst window and the cool-downs are not adjustable.
+ */
+const capsOverride = z.strictObject({
+  per_hour: z.number().int().min(1).max(CAP_CEILINGS.perHour).optional(),
+  per_day: z.number().int().min(1).max(CAP_CEILINGS.perDay).optional(),
+});
+const pacingSchema = z.strictObject({
+  burst: z.strictObject({ loads: z.number().int().min(1).max(CAP_CEILINGS.burstLoads) }).optional(),
+  all: capsOverride.optional(),
+  search: capsOverride.optional(),
+  product: capsOverride.optional(),
+  offers: capsOverride.optional(),
+  reviews: capsOverride.optional(),
+  account: capsOverride.optional(),
+  cart: capsOverride.optional(),
+  list: capsOverride.optional(),
+  price_history: capsOverride.optional(),
+});
 
 export const configSchema = z.looseObject({
   hub_url: httpsUrl,
@@ -110,6 +133,34 @@ export function saveConfig(paths: AppPaths, config: DaemonConfigInput): DaemonCo
   return parsed;
 }
 
+/**
+ * The config's pacing caps in the shape the pacer takes. Values are clamped to the
+ * ceilings again here, so a config object that did not come through `parseConfig` still
+ * cannot raise a cap past them.
+ */
+export function pacingOverrides(pacing: DaemonConfig["pacing"]): PacingOverrides {
+  if (!pacing) return {};
+  const caps = (
+    value: { per_hour?: number | undefined; per_day?: number | undefined } | undefined,
+  ): { perHour?: number; perDay?: number } => ({
+    ...(value?.per_hour !== undefined
+      ? { perHour: Math.min(value.per_hour, CAP_CEILINGS.perHour) }
+      : {}),
+    ...(value?.per_day !== undefined
+      ? { perDay: Math.min(value.per_day, CAP_CEILINGS.perDay) }
+      : {}),
+  });
+  const { burst, all, ...types } = pacing;
+  const out: PacingOverrides = {};
+  if (burst) out.burst = { loads: Math.min(burst.loads, CAP_CEILINGS.burstLoads) };
+  if (all) out.global = caps(all);
+  const perType = Object.entries(types).filter(([, value]) => value !== undefined);
+  if (perType.length > 0) {
+    out.caps = Object.fromEntries(perType.map(([type, value]) => [type, caps(value)]));
+  }
+  return out;
+}
+
 /** Config summary safe to print: no secrets live in config.json, but keep the shape explicit. */
 export function summarizeConfig(config: DaemonConfig): Record<string, unknown> {
   return {
@@ -131,5 +182,6 @@ export function summarizeConfig(config: DaemonConfig): Record<string, unknown> {
       check_interval_s: config.update.check_interval_s,
     },
     idle_detach_s: config.idle_detach_s,
+    ...(config.pacing ? { pacing: config.pacing } : {}),
   };
 }

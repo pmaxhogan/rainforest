@@ -1,4 +1,4 @@
-import { RfError } from "@rainforest/core";
+import { RfError, type Capture } from "@rainforest/core";
 import { checkNavigation } from "@rainforest/browser";
 import {
   computeOfferFlags,
@@ -15,8 +15,11 @@ import {
   cursorOrThrow,
   fitToBudget,
   maxCharsOf,
+  openCapture,
   pageBody,
   readPage,
+  rememberCapture,
+  requireBudget,
   type Flow,
 } from "./common.ts";
 import { mintOfferToken } from "./offer-token.ts";
@@ -171,12 +174,25 @@ function present(offer: Offer, data: OffersData, now: number): Record<string, un
 
 export const getBuyingOptions: Flow = async (args, ctx) => {
   const asin = String(args.asin);
+  const url = `${AMAZON}/dp/${encodeURIComponent(asin)}`;
   const session = await ctx.browser.session();
   return await session.run(async (p) => {
-    await p.goto(`${AMAZON}/dp/${encodeURIComponent(asin)}`, "product");
-    await p.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-    await new Promise((r) => setTimeout(r, 1200));
-    const capture = await p.capture("offers");
+    // The product page costs nothing when the tab still shows it (get_product and the
+    // other product reads leave it open and share their capture). Both loads must fit
+    // before either is made: a product page whose panel is then refused is a wasted load.
+    const open = openCapture(p, url);
+    requireBudget(ctx, open ? { offers: 1 } : { product: 1, offers: 1 });
+    let capture: Capture;
+    if (open) {
+      capture = { ...open, kind: "offers" };
+    } else {
+      await p.goto(url, "product");
+      await p.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1200));
+      capture = await p.capture("offers");
+      // The same page serves get_product and the other product reads for two minutes.
+      rememberCapture(url, { ...capture });
+    }
     try {
       capture.fragments = { aod: await p.fetchFragment(AOD_PATH(asin), "offers") };
     } catch (error) {
@@ -198,7 +214,7 @@ export const getBuyingOptions: Flow = async (args, ctx) => {
       data.pinned_offer && keep(data.pinned_offer) ? present(data.pinned_offer, data, now) : null;
     body.offers = data.offers.filter(keep).map((o) => present(o, data, now));
     body.offer_id_note =
-      "offer_id values expire after about 10 minutes and are the only way to add an offer to the cart; flagged offers need those flags listed in add_to_cart's `acknowledge`";
+      "offer_id values expire after about 30 minutes and are the only way to add an offer to the cart; flagged offers need those flags listed in add_to_cart's `acknowledge`";
     return fitToBudget(body, ["other_sections", "offers"], maxCharsOf(args), now);
   });
 };

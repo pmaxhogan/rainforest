@@ -6,7 +6,7 @@ import {
   AMAZON,
   clearCaptureCache,
   readPage,
-  requireBudget,
+  runWithBudget,
   type Flow,
   type FlowContext,
 } from "./common.ts";
@@ -94,9 +94,7 @@ async function lineAction(
   const itemId = String(args.item_id);
   if (!ITEM_ID.test(itemId))
     throw new RfError("invalid_arguments", "item_id is not a cart item id from get_cart");
-  requireBudget(ctx, 2, "cart");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { cart: 2 }, async (page) => {
     const before = await loadCart(page);
     const item = find(before, itemId, spec.list);
     const name = `submit.${spec.control}.${itemId}`;
@@ -180,9 +178,7 @@ export const setCartQuantity: Flow = async (args, ctx) => {
     throw new RfError("invalid_arguments", "item_id is not a cart item id from get_cart");
   if (!Number.isInteger(target) || target < 1)
     throw new RfError("invalid_arguments", "quantity must be a whole number of at least 1");
-  requireBudget(ctx, 2, "cart");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { cart: 2 }, async (page) => {
     const before = await loadCart(page);
     const item = find(before, itemId, "active");
     const current = item.quantity ?? 1;

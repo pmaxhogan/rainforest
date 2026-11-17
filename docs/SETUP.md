@@ -262,6 +262,41 @@ starts on macOS, Windows and Linux is covered by the `daemon-smoke` workflow (it
 tarball and runs `version` and `selftest`); the rest of this path, including registering autostart
 from a release, follows from reading the code and is **unverified** end to end.
 
+### 4d. Pacing caps for one computer (optional)
+
+The daemon paces itself with deliberately low caps (docs/TOOLS.md, "Pacing classes"): by default 6
+page loads in any 10 minutes and 15 per hour, per computer. They are low because Amazon counts the
+account, and an account driven from two computers gets the sum of both. If one computer does all
+the work and the defaults make ordinary tasks wait (one search plus one cart add is already 7
+loads), raise the caps on that computer only by adding a `pacing` object to its `config.json`:
+
+```
+"pacing": {
+  "burst": { "loads": 12 },
+  "all": { "per_hour": 30 }
+}
+```
+
+- `burst.loads`: page loads allowed in any 10 minutes, across all page types (default 6, at most
+  20).
+- `all.per_hour`, `all.per_day`: caps across all page types (defaults 15 and 200, at most 40 and
+  400).
+- A page type name (`search`, `product`, `offers`, `reviews`, `account`, `cart`, `list`,
+  `price_history`) with `per_hour` and `per_day`: that type's own caps (defaults in docs/TOOLS.md,
+  same ceilings).
+
+Anything left out keeps its default. The gap of 5 to 11 seconds between loads, the 10 minute
+window and the cool-downs cannot be changed. The object is validated strictly: an unknown key, a
+value above a ceiling or a value that is not a whole number of at least 1 makes the config
+invalid, and the daemon will not start with it (`status` names the key). Restart the daemon
+to apply a change (`install` again, or restart the service); it logs the limits in force as
+`pacing limits` when it starts, and `list_browsers` shows the burst cap in `pacing_burst.cap`.
+
+The safe level is not known. The defaults sit well below the one observed case of friction (about
+63 loads in 47 minutes, 13 of them in the last 10, drew a "continue shopping" checkpoint). Raising
+a cap trades waiting time for a higher chance of such a checkpoint, which costs a 60 minute
+cool-down and a click by you, and the two-computer sum still applies.
+
 ## 5. Connect Claude
 
 The connector URL is `https://<your-hostname>/mcp`.
@@ -378,7 +413,7 @@ The codes are defined in docs/TOOLS.md; what to do about the common ones:
 | `no_browser_online` | No computer is connected: start the daemon, check `status`, check `/admin`                                                                                                                  |
 | `browser_offline`   | The named computer is offline, or its extension cannot be reached: is Chrome running with the profile and the extension installed and enabled?                                              |
 | `needs_human`       | Amazon asked for a captcha, a sign-in, a checkpoint or another check: handle it in that Chrome yourself. The computer then cools down for 60 minutes (nothing is retried or solved for you) |
-| `throttled`         | A pacing cap or cool-down; wait `retry_after_s`. `list_browsers` shows `cooling_down_until` and the remaining budget. Limits are per computer                                               |
+| `throttled`         | A pacing cap or cool-down; wait exactly `retry_after_s`. `list_browsers` shows `cooling_down_until` and what is left (`pacing_burst`, `pacing_budget`). Limits are per computer; see 4d     |
 | `busy`              | That computer already has 4 calls queued; retry in about 15 seconds                                                                                                                         |
 | `daemon_outdated`   | The daemon is below `MIN_DAEMON_VERSION` and is updating; retry in a minute                                                                                                                 |
 | `blocked_by_policy` | The URL policy refused a page; this is working as intended                                                                                                                                  |

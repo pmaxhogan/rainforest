@@ -10,7 +10,7 @@ import {
 } from "@rainforest/parsers";
 import { cartState, loadCart } from "./cart-writes.ts";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, requireBudget, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, runWithBudget, type Flow } from "./common.ts";
 import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
 
 /**
@@ -173,38 +173,45 @@ export const addToCart: Flow = async (args, ctx) => {
     );
   }
   const acknowledge = Array.isArray(args.acknowledge) ? (args.acknowledge as string[]) : [];
-  requireBudget(ctx, 4, "cart");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
-    const before = await loadCart(page);
+  // Two cart reads (before and after) and two product loads (the page, then its panel).
+  // When the budget is short, say so if the offer id will not outlive the wait.
+  const offerNote = (waitMs: number): string | undefined =>
+    snapshot.exp < ctx.now() + waitMs
+      ? "the offer_id will have expired by then: call get_buying_options again before retrying"
+      : undefined;
+  return await runWithBudget(
+    ctx,
+    { cart: 2, product: 2 },
+    async (page) => {
+      const before = await loadCart(page);
 
-    // Open the product with the all-offers panel and read the offers from the panel as
-    // it is rendered in the page (listing ids change on every load, so the control that
-    // gets clicked must come from this same DOM).
-    // Reach the panel the way a visitor does: the product page first, then a navigation
-    // from inside that page (a direct jump to the panel URL draws a challenge).
-    await page.goto(`${AMAZON}/dp/${snapshot.asin}?th=1`, "product");
-    await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-    await page.follow(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
-    await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-    await page.page
-      .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
-      .catch(() => {
-        throw new RfError(
-          "layout_unrecognized",
-          "the all-offers panel did not open; nothing was added",
-        );
-      });
-    await new Promise((r) => setTimeout(r, 1000));
-    const data = parseOffers(await page.capture("offers")).data;
-    const all = [data.pinned_offer, ...data.offers].filter((o): o is Offer => o !== null);
-    const current = matchOffer(all, snapshot);
-    const { flags } = decideAdd({ snapshot, current, data, acknowledge, quantity, now });
+      // Open the product with the all-offers panel and read the offers from the panel as
+      // it is rendered in the page (listing ids change on every load, so the control that
+      // gets clicked must come from this same DOM).
+      // Reach the panel the way a visitor does: the product page first, then a navigation
+      // from inside that page (a direct jump to the panel URL draws a challenge).
+      await page.goto(`${AMAZON}/dp/${snapshot.asin}?th=1`, "product");
+      await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
+      await page.follow(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
+      await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
+      await page.page
+        .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
+        .catch(() => {
+          throw new RfError(
+            "layout_unrecognized",
+            "the all-offers panel did not open; nothing was added",
+          );
+        });
+      await new Promise((r) => setTimeout(r, 1000));
+      const data = parseOffers(await page.capture("offers")).data;
+      const all = [data.pinned_offer, ...data.offers].filter((o): o is Offer => o !== null);
+      const current = matchOffer(all, snapshot);
+      const { flags } = decideAdd({ snapshot, current, data, acknowledge, quantity, now });
 
-    // Find THIS offer's control in the panel by the listing id just read from it.
-    const wantedListing = current ? (internalOf(current)?.offer_listing_id ?? "") : "";
-    const index = await page.page.evaluate(
-      `((wanted) => {
+      // Find THIS offer's control in the panel by the listing id just read from it.
+      const wantedListing = current ? (internalOf(current)?.offer_listing_id ?? "") : "";
+      const index = await page.page.evaluate(
+        `((wanted) => {
         const spans = [...document.querySelectorAll("span[data-action='aod-atc-action']")];
         const norm = (s) => { try { return decodeURIComponent(s); } catch (e) { return s; } };
         for (let i = 0; i < spans.length; i++) {
@@ -218,74 +225,76 @@ export const addToCart: Flow = async (args, ctx) => {
         }
         return -1;
       })(${JSON.stringify(wantedListing)})`,
-    );
-    if (typeof index !== "number" || index < 0) {
-      throw new RfError(
-        "layout_unrecognized",
-        "could not find that offer's Add to Cart control in the panel; nothing was added",
       );
-    }
-    const button = page.page.locator("span[data-rf-target='1'] input[name='submit.addToCart']");
-    clearCaptureCache();
-    await guardedClick(page, button, {
-      what: "the offer's Add to Cart control",
-      name: /^submit\.addToCart$/,
-    });
-    await new Promise((r) => setTimeout(r, 3000));
-    // What the rails refused between the click and now (paths only), for diagnosis.
-    const pathOf = (value: string): string => {
-      try {
-        return new URL(value).pathname.slice(0, 120);
-      } catch {
-        return "";
+      if (typeof index !== "number" || index < 0) {
+        throw new RfError(
+          "layout_unrecognized",
+          "could not find that offer's Add to Cart control in the panel; nothing was added",
+        );
       }
-    };
-    const refusedAfterClick = page.guard
-      .blocked()
-      .slice(-5)
-      .map((b) => ({
-        method: b.method,
-        path: pathOf(b.url),
-        rule: b.verdict.rule,
-        main_frame: b.mainFrameDocument,
-      }));
-    const landedPath = pathOf(page.page.url());
-    const declined = await declineUpsells(page);
+      const button = page.page.locator("span[data-rf-target='1'] input[name='submit.addToCart']");
+      clearCaptureCache();
+      await guardedClick(page, button, {
+        what: "the offer's Add to Cart control",
+        name: /^submit\.addToCart$/,
+      });
+      await new Promise((r) => setTimeout(r, 3000));
+      // What the rails refused between the click and now (paths only), for diagnosis.
+      const pathOf = (value: string): string => {
+        try {
+          return new URL(value).pathname.slice(0, 120);
+        } catch {
+          return "";
+        }
+      };
+      const refusedAfterClick = page.guard
+        .blocked()
+        .slice(-5)
+        .map((b) => ({
+          method: b.method,
+          path: pathOf(b.url),
+          rule: b.verdict.rule,
+          main_frame: b.mainFrameDocument,
+        }));
+      const landedPath = pathOf(page.page.url());
+      const declined = await declineUpsells(page);
 
-    const after = await loadCart(page);
-    const beforeQty = before.active_items
-      .filter((i) => i.asin === snapshot.asin)
-      .reduce((n, i) => n + (i.quantity ?? 1), 0);
-    const afterQty = after.active_items
-      .filter((i) => i.asin === snapshot.asin)
-      .reduce((n, i) => n + (i.quantity ?? 1), 0);
-    const line = after.active_items.find((i) => i.asin === snapshot.asin) ?? null;
-    const result = {
-      before: cartState(before),
-      after: cartState(after),
-      added: line
-        ? { item_id: line.item_id, asin: line.asin, title: line.title, quantity: line.quantity }
-        : null,
-      acknowledged_flags: flags,
-      declined_upsells: declined,
-      quantity_note:
-        quantity > 1
-          ? "one unit was added; call set_cart_quantity with the returned item_id to change the quantity"
-          : undefined,
-    };
-    if (afterQty !== beforeQty + 1) {
-      throw new RfError(
-        "internal",
-        "the cart did not change as intended after the add; the observed cart state is attached",
-        {
-          details: {
-            ...result,
-            refused_after_click: refusedAfterClick,
-            page_after_click: landedPath,
+      const after = await loadCart(page);
+      const beforeQty = before.active_items
+        .filter((i) => i.asin === snapshot.asin)
+        .reduce((n, i) => n + (i.quantity ?? 1), 0);
+      const afterQty = after.active_items
+        .filter((i) => i.asin === snapshot.asin)
+        .reduce((n, i) => n + (i.quantity ?? 1), 0);
+      const line = after.active_items.find((i) => i.asin === snapshot.asin) ?? null;
+      const result = {
+        before: cartState(before),
+        after: cartState(after),
+        added: line
+          ? { item_id: line.item_id, asin: line.asin, title: line.title, quantity: line.quantity }
+          : null,
+        acknowledged_flags: flags,
+        declined_upsells: declined,
+        quantity_note:
+          quantity > 1
+            ? "one unit was added; call set_cart_quantity with the returned item_id to change the quantity"
+            : undefined,
+      };
+      if (afterQty !== beforeQty + 1) {
+        throw new RfError(
+          "internal",
+          "the cart did not change as intended after the add; the observed cart state is attached",
+          {
+            details: {
+              ...result,
+              refused_after_click: refusedAfterClick,
+              page_after_click: landedPath,
+            },
           },
-        },
-      );
-    }
-    return { changed: true, ...result };
-  });
+        );
+      }
+      return { changed: true, ...result };
+    },
+    offerNote,
+  );
 };

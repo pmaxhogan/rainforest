@@ -178,6 +178,17 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       log.error("audit write failed", { error });
     }
 
+    // Paced tools report the budget that is left, on success and on refusal alike, so
+    // the caller can plan its next calls instead of finding the limit by hitting it.
+    const def = getTool(call.tool);
+    let pacing: DaemonResult["pacing"];
+    if (def && def.kind !== "hub" && def.pacing !== undefined && def.pacing !== "none") {
+      try {
+        pacing = services.browser.pacingSummary?.();
+      } catch (error) {
+        log.warn("pacing summary failed", { error });
+      }
+    }
     const frame: DaemonResult = {
       type: "result",
       id: call.id,
@@ -186,6 +197,7 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
       ...(executed.ok && executed.data !== undefined ? { data: executed.data } : {}),
       ...(executed.ok && executed.images ? { images: executed.images } : {}),
       ...(executed.error ? { error: executed.error } : {}),
+      ...(pacing ? { pacing } : {}),
     };
     let toSend = frame;
     const check = daemonResult.safeParse(frame);
@@ -201,6 +213,9 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
     }
     const sent = hub?.sendResult(toSend) ?? false;
     if (!sent) log.warn("result dropped: hub not connected", { id: call.id, tool: call.tool });
+    // The budget just changed: tell the hub now rather than at the next presence tick, so
+    // get_status and list_browsers do not show a stale one.
+    if (pacing) void sendPresenceNow();
     scheduleIdleDetach();
   }
 

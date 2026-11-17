@@ -334,6 +334,70 @@ describe("tool call relay", () => {
     });
   });
 
+  it("the pacing left travels with a result and with a refusal", async () => {
+    const a = await online("Desk Mac", 1);
+    const { tokens } = await connectClient(key);
+    const pending = callTool(tokens.access_token, "get_cart");
+    const call = await a.socket.next();
+    a.socket.send({
+      type: "result",
+      id: call.id,
+      ok: true,
+      data: { items: [] },
+      duration_ms: 1,
+      pacing: { loads_left: 2, next_free_in_s: 540 },
+    });
+    expect(envelope(await pending)).toEqual({
+      ok: true,
+      browser: { id: a.device.deviceId, name: "Desk Mac" },
+      pacing: { loads_left: 2, next_free_in_s: 540 },
+      data: { items: [] },
+    });
+    const refusedCall = callTool(tokens.access_token, "get_cart");
+    const second = await a.socket.next();
+    a.socket.send({
+      type: "result",
+      id: second.id,
+      ok: false,
+      error: { code: "throttled", message: "wait", retry_after_s: 575 },
+      duration_ms: 1,
+      pacing: { loads_left: 0, next_free_in_s: 546 },
+    });
+    expect(envelope(await refusedCall)).toEqual({
+      ok: false,
+      browser: { id: a.device.deviceId, name: "Desk Mac" },
+      pacing: { loads_left: 0, next_free_in_s: 546 },
+      error: { code: "throttled", message: "wait", retry_after_s: 575 },
+    });
+  });
+
+  it("list_browsers reports the burst window as of now, not as of the last presence", async () => {
+    const device = await pairDevice("Desk Mac");
+    const now = Date.now();
+    // Six loads: two left the 10 minute window before this read, four are still inside it.
+    const used_at = [now - 700_000, now - 650_000, now - 500_000, now - 60_000, now - 50_000, now];
+    await connectDevice(
+      device,
+      presence({
+        budget: { all: { hour_left: 9, day_left: 150 } },
+        burst: { cap: 6, window_s: 600, used_at },
+      }),
+    );
+    const row = (await hubStub().listBrowsers(GRANT_A))[0]!;
+    expect(row.pacing_budget).toEqual({ all: { hour_left: 9, day_left: 150 } });
+    expect(row.pacing_burst).toMatchObject({ cap: 6, window_s: 600, left: 2 });
+    // One more fits when the oldest load still inside (500 s old) leaves: about 100 s.
+    expect(row.pacing_burst!.next_free_in_s).toBeGreaterThan(95);
+    expect(row.pacing_burst!.next_free_in_s).toBeLessThanOrEqual(100);
+    expect(row.pacing_burst!.all_free_in_s).toBeGreaterThan(595);
+    expect(row.pacing_burst!.all_free_in_s).toBeLessThanOrEqual(600);
+  });
+
+  it("a computer that reports no burst window has pacing_burst null", async () => {
+    await online("Desk Mac", 1);
+    expect((await hubStub().listBrowsers(GRANT_A))[0]!.pacing_burst).toBeNull();
+  });
+
   it("a daemon error is returned as an error envelope naming the browser", async () => {
     const a = await online("Desk Mac", 1);
     const { tokens } = await connectClient(key);

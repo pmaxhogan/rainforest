@@ -167,15 +167,15 @@ Cloudflare Access, which you configure, keeps its own record of who signed in to
 
 All of it lives in the app directory (see docs/ARCHITECTURE.md for paths):
 
-| File                                 | What                                                                                                                          |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `config.json`                        | hub URL, device id and name, aliases, Chrome profile name, extension id, broker mode and port, update repository and interval |
-| `device-key.json`                    | the device's Ed25519 key pair (owner-only)                                                                                    |
-| `secrets.json`                       | the extension token, and the update token if you add one (owner-only)                                                         |
-| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down (owner-only)                                          |
-| `audit.jsonl`                        | per call: time, tool, outcome, duration, error code; arguments for write tools only                                           |
-| `logs/`                              | operational JSON lines with secrets dropped by key name                                                                       |
-| `state.json`, `versions/`, `current` | installed versions and update bookkeeping                                                                                     |
+| File                                 | What                                                                                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.json`                        | hub URL, device id and name, aliases, Chrome profile name, extension id, broker mode and port, update repository and interval, optional pacing caps |
+| `device-key.json`                    | the device's Ed25519 key pair (owner-only)                                                                                                          |
+| `secrets.json`                       | the extension token, and the update token if you add one (owner-only)                                                                               |
+| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down (owner-only)                                                                |
+| `audit.jsonl`                        | per call: time, tool, outcome, duration, error code; arguments for write tools only                                                                 |
+| `logs/`                              | operational JSON lines with secrets dropped by key name                                                                                             |
+| `state.json`, `versions/`, `current` | installed versions and update bookkeeping                                                                                                           |
 
 The daemon holds page content in memory only while handling a call and for three small caches:
 the cursor cache (up to 40 parsed results for 15 minutes), the recent page captures that several

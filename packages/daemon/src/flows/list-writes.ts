@@ -8,7 +8,7 @@ import {
   type ListsIndexPage,
 } from "@rainforest/parsers";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, readPage, requireBudget, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, readPage, runWithBudget, type Flow } from "./common.ts";
 
 /** Compact list state for before/after comparison in list writes. */
 export interface ListState {
@@ -83,9 +83,7 @@ export const removeFromList: Flow = async (args, ctx) => {
   if (!LIST_ID.test(listId)) throw new RfError("invalid_arguments", "list_id is not a list id");
   if (!ITEM_ID.test(itemId))
     throw new RfError("invalid_arguments", "item_id is not a list item id from get_list");
-  requireBudget(ctx, 2, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 2 }, async (page) => {
     const before = listState(await loadList(page, listId));
     const item = before.items.find((i) => i.item_id === itemId);
     if (!item)
@@ -289,9 +287,7 @@ export const createList: Flow = async (args, ctx) => {
   const name = String(args.name).trim();
   const privacy = readPrivacy(args.privacy) ?? "private";
   if (!name) throw new RfError("invalid_arguments", "name must not be empty");
-  requireBudget(ctx, privacy === "private" ? 2 : 4, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: privacy === "private" ? 2 : 4 }, async (page) => {
     const before = await loadLists(page);
     clearCaptureCache();
     await guardedClick(page, page.page.locator("#createList:visible"), {
@@ -341,9 +337,7 @@ export const updateList: Flow = async (args, ctx) => {
   if (name === undefined && privacy === undefined)
     throw new RfError("invalid_arguments", "give a name, a privacy setting, or both");
   if (name !== undefined && !name) throw new RfError("invalid_arguments", "name must not be empty");
-  requireBudget(ctx, 2, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 2 }, async (page) => {
     const before = await loadList(page, listId);
     clearCaptureCache();
     await applySettings(page, {
@@ -375,9 +369,7 @@ export const updateList: Flow = async (args, ctx) => {
 export const deleteList: Flow = async (args, ctx) => {
   const listId = String(args.list_id);
   if (!LIST_ID.test(listId)) throw new RfError("invalid_arguments", "list_id is not a list id");
-  requireBudget(ctx, 3, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 3 }, async (page) => {
     const before = await loadLists(page);
     const target = before.lists.find((l) => l.list_id === listId);
     if (!target) {
@@ -436,9 +428,7 @@ export const updateListItem: Flow = async (args, ctx) => {
   const comment = typeof args.comment === "string" ? args.comment : undefined;
   if (quantity === undefined && priority === undefined && comment === undefined)
     throw new RfError("invalid_arguments", "give quantity_wanted, priority, comment, or several");
-  requireBudget(ctx, 2, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 2 }, async (page) => {
     const before = listState(await loadList(page, listId));
     const item = before.items.find((i) => i.item_id === itemId);
     if (!item)
@@ -516,9 +506,7 @@ export const moveListItem: Flow = async (args, ctx) => {
       "the site offers Move only; to copy, add the product to the other list with add_to_list",
     );
   }
-  requireBudget(ctx, 3, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 3 }, async (page) => {
     const before = listState(await loadList(page, listId));
     const item = before.items.find((i) => i.item_id === itemId);
     if (!item)
@@ -563,9 +551,7 @@ export const addToList: Flow = async (args, ctx) => {
   if (!LIST_ID.test(listId)) throw new RfError("invalid_arguments", "list_id is not a list id");
   if (!/^[A-Z0-9]{10}$/.test(asin))
     throw new RfError("invalid_arguments", "asin is not a product id");
-  requireBudget(ctx, 3, "list");
-  const session = await ctx.browser.session();
-  return await session.run(async (page) => {
+  return await runWithBudget(ctx, { list: 2, product: 1 }, async (page) => {
     const before = listState(await loadList(page, listId));
     if (before.items.some((i) => i.asin === asin)) {
       return { changed: false, note: "that product is already on the list", list: before };

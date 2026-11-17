@@ -18,6 +18,7 @@ import {
   BrowserSession,
   EmbeddedBroker,
   Pacer,
+  type LoadNeeds,
   type PacingDecision,
   type PageType,
 } from "@rainforest/browser";
@@ -97,6 +98,11 @@ export class FastPacer extends Pacer {
   override headroom(type: Exclude<PageType, "none">): number {
     if (!this.fast) return super.headroom(type);
     return Date.now() < this.state.coolingDownUntil ? 0 : 1000;
+  }
+
+  override waitFor(needs: LoadNeeds): number | null {
+    if (!this.fast) return super.waitFor(needs);
+    return Math.max(0, this.state.coolingDownUntil - Date.now());
   }
 
   override plan(type: PageType): PacingDecision {

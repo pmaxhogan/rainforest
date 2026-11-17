@@ -211,7 +211,9 @@ being read back:
 
 1. check that every page load the flow needs fits the pacing budget right now, and refuse with
    `throttled` before touching anything if not (a write that cannot read its result back is worse
-   than one that never starts);
+   than one that never starts). The check runs twice: when the call arrives, and again once the
+   call holds the browser, because calls queued ahead of it may have spent the budget meanwhile.
+   The refusal's `retry_after_s` is the computed time until all of the flow's loads fit;
 2. read the cart or list, and find the exact line the caller named (otherwise `not_found` with the
    observed state);
 3. click that line's own control through the click guard, once, never retrying;
@@ -220,7 +222,8 @@ being read back:
 
 `add_to_cart` adds an offer re-check. The caller holds an opaque offer id minted by
 `get_buying_options`: an authenticated encryption (AES-256-GCM) of the offer snapshot under a key
-that lives only in the daemon process, valid for ten minutes, unreadable and unforgeable by the
+that lives only in the daemon process, valid for thirty minutes (longer than the burst window, so
+a wait for the pacing budget does not kill it; the add reads the offer again anyway), unreadable and unforgeable by the
 hub or the model. The flow loads the product page, then navigates from inside that page to the all-offers panel (a
 direct jump to the panel URL draws a challenge; the in-page navigation must stay on the current
 origin), finds the same offer (by
@@ -379,11 +382,21 @@ gets half of what one browser was seen to tolerate).
   page, and of 10 minutes when Amazon throttles. While cooling down, the browser refuses to attach
   or load and returns `throttled` with `retry_after_s`; `list_browsers` shows `cooling_down_until`
   and the remaining budget (`pacing_budget`).
-- Multi-step write flows ask for headroom first (see Write flows).
+- Multi-step flows ask for headroom first (see Write flows). `get_buying_options` does too, and
+  it skips the product page when the tab still shows it from a product read in the last two
+  minutes (the product reads share one capture the same way).
+- Every refusal carries the exact wait: `Pacer.waitFor` works out, from the recorded load times,
+  when the needed loads fit every window at once.
 - The state (timestamps of loads, cool-down) is persisted to `pacing.json` after every change, so a
   restart does not reset the budget.
+- The daemon sends the budget left with every paced result (`pacing` in the result envelope) and
+  reports the burst window in presence after every paced call, so `get_status` is current.
 
-A `pacing` object is accepted in the config file for per-type overrides, but nothing reads it yet.
+The caps above are the shipped defaults. A `pacing` object in one computer's `config.json` changes
+them for that computer only (the burst loads, the caps across types and each type's caps), within
+hard ceilings (20 loads per 10 minutes, 40 per hour, 400 per day) that the config schema enforces
+and the daemon clamps to again. The gap between loads, the burst window and the cool-downs are not
+adjustable. The daemon logs the limits in force when it starts.
 
 ## Idle detach
 
@@ -478,14 +491,14 @@ runs the bundle on Linux, macOS and Windows.
 Under the per-user app directory (`~/Library/Application Support/rainforest` on macOS,
 `%LOCALAPPDATA%\rainforest` on Windows, or `RAINFOREST_HOME`):
 
-| Path                           | Contents                                                             |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `config.json`                  | hub URL, device id and name, Chrome profile, broker, update settings |
-| `device-key.json`              | the device's Ed25519 key pair (owner-only)                           |
-| `secrets.json`                 | extension token and optional update token (owner-only)               |
-| `pacing.json`                  | page-load timestamps and cool-down (mode 0600)                       |
-| `audit.jsonl`                  | local audit log, 90 days                                             |
-| `state.json`                   | bad-version marks, rollback target, pending update                   |
-| `current`, `versions/<v>/`     | the active version pointer and installed versions                    |
-| `launcher.mjs` / `launcher.ts` | the stable launcher the service runs                                 |
-| `logs/`                        | `daemon.log` (rotated, 5 MiB x 3), `launcher.log`, service output    |
+| Path                           | Contents                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| `config.json`                  | hub URL, device id and name, Chrome profile, broker, update settings, optional pacing caps |
+| `device-key.json`              | the device's Ed25519 key pair (owner-only)                                                 |
+| `secrets.json`                 | extension token and optional update token (owner-only)                                     |
+| `pacing.json`                  | page-load timestamps and cool-down (mode 0600)                                             |
+| `audit.jsonl`                  | local audit log, 90 days                                                                   |
+| `state.json`                   | bad-version marks, rollback target, pending update                                         |
+| `current`, `versions/<v>/`     | the active version pointer and installed versions                                          |
+| `launcher.mjs` / `launcher.ts` | the stable launcher the service runs                                                       |
+| `logs/`                        | `daemon.log` (rotated, 5 MiB x 3), `launcher.log`, service output                          |

@@ -3,6 +3,7 @@ import { RfError } from "@rainforest/core";
 import { MIN_GAP_MS, rawClient } from "@rainforest/browser";
 import { guardedClick } from "../../daemon/src/flows/click-guard.ts";
 import { MAX_QUANTITY_STEPS } from "../../daemon/src/flows/cart-writes.ts";
+import { clearCaptureCache } from "../../daemon/src/flows/common.ts";
 import { FastPacer, PlainTab, STOREFRONT, startHarness, type Harness } from "./harness.ts";
 
 /**
@@ -158,6 +159,30 @@ if (!start.ok) {
       };
       expect(none.pinned_offer).toBeNull();
       expect(none.offers.every((o) => o.flags.includes("no_featured_offer"))).toBe(true);
+    });
+
+    it("buying options reuses the product page the tab still shows", async () => {
+      // Earlier reads may have left these pages in the two minute capture cache.
+      clearCaptureCache();
+      const loaded = async (): Promise<number> =>
+        (await h.state()).hits.filter((x) => x.path === "/dp/B0FAKE0002").length;
+      const before = await loaded();
+      await h.call("get_product", { asin: "B0FAKE0002" });
+      expect((await loaded()) - before).toBe(1);
+      const r = (await h.call("get_buying_options", { asin: "B0FAKE0002" })) as {
+        pinned_offer: { offer_id: string | null } | null;
+        offers: unknown[];
+      };
+      // The offers came from the panel fetched inside the page that was already open.
+      expect((r.pinned_offer ? 1 : 0) + r.offers.length).toBeGreaterThan(0);
+      expect((await loaded()) - before).toBe(1);
+      // And the other way round: the page buying options loads serves the product read.
+      const other = async (): Promise<number> =>
+        (await h.state()).hits.filter((x) => x.path === "/dp/B0FAKE0003").length;
+      const start = await other();
+      await h.call("get_buying_options", { asin: "B0FAKE0003" });
+      await h.call("get_product", { asin: "B0FAKE0003" });
+      expect((await other()) - start).toBe(1);
     });
 
     it("variants: the color x size matrix", async () => {

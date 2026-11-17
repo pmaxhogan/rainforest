@@ -122,6 +122,58 @@ describe("supervisor call handling", () => {
     expect(JSON.stringify(row)).not.toContain("invented widget");
   });
 
+  test("a paced tool's result carries the pacing left, and presence follows at once", async () => {
+    const { supervisor, services, hub } = setup();
+    await supervisor.start();
+    services.browser.pacingSummary = () => ({ loads_left: 2, next_free_in_s: 540 });
+    await supervisor.handleCall(call({ tool: "search", args: { query: "invented widget" } }));
+    expect(hub.results[0]).toMatchObject({
+      ok: true,
+      pacing: { loads_left: 2, next_free_in_s: 540 },
+    });
+    await vi.waitFor(() => expect(hub.presences).toHaveLength(1));
+  });
+
+  test("a refusal carries the pacing left too", async () => {
+    const { supervisor, services, hub } = setup();
+    await supervisor.start();
+    services.browser.pacingSummary = () => ({ loads_left: 0, next_free_in_s: 546 });
+    services.router.handler = async () => {
+      throw new RfError("throttled", "wait", { retry_after_s: 575 });
+    };
+    await supervisor.handleCall(call({ tool: "get_cart" }));
+    expect(hub.results[0]).toMatchObject({
+      ok: false,
+      error: { code: "throttled", retry_after_s: 575 },
+      pacing: { loads_left: 0, next_free_in_s: 546 },
+    });
+  });
+
+  test("an unpaced tool, or a browser that reports no summary, sends no pacing", async () => {
+    const { supervisor, services, hub } = setup();
+    await supervisor.start();
+    await supervisor.handleCall(call({ tool: "get_cart" }));
+    expect(hub.results[0]).not.toHaveProperty("pacing");
+    services.browser.pacingSummary = () => ({ loads_left: 6 });
+    await supervisor.handleCall(
+      call({ id: "call-0002", tool: "show_on_screen", args: { target: { type: "cart" } } }),
+    );
+    expect(hub.results[1]).toMatchObject({ ok: true });
+    expect(hub.results[1]).not.toHaveProperty("pacing");
+    expect(hub.presences).toHaveLength(0);
+  });
+
+  test("a failing pacing summary does not fail the call", async () => {
+    const { supervisor, services, hub } = setup();
+    await supervisor.start();
+    services.browser.pacingSummary = () => {
+      throw new Error("boom");
+    };
+    await supervisor.handleCall(call({ tool: "get_cart" }));
+    expect(hub.results[0]).toMatchObject({ ok: true });
+    expect(hub.results[0]).not.toHaveProperty("pacing");
+  });
+
   test("an unexpected error becomes internal without leaking its message", async () => {
     const { supervisor, services, hub } = setup();
     await supervisor.start();

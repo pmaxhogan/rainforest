@@ -54,6 +54,8 @@ export interface BrowserStatus {
   cooling_down_until: number | null;
   /** Remaining pacing budget per page type. */
   budget?: Record<string, { hour_left: number; day_left: number }>;
+  /** The burst window and the loads still inside it (epoch ms). */
+  burst?: { cap: number; window_s: number; used_at: number[] };
 }
 
 export interface BrowserController {
@@ -62,6 +64,8 @@ export interface BrowserController {
   /** Drop the debugging attachment after `idle_detach_s` without calls. Idempotent. */
   detach(): Promise<void>;
   status(): BrowserStatus;
+  /** How many page loads fit right now, and when one more does. Sent with paced results. */
+  pacingSummary?(): { loads_left: number; next_free_in_s?: number };
 }
 
 // ---- tool router (rails + flows + browser, src/rails/*, src/flows/*) ----------------

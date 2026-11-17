@@ -253,6 +253,68 @@ describe("tool descriptions tell the truth", () => {
 });
 
 describe("wire protocol", () => {
+  const presenceFrame = {
+    idle_s: 1,
+    locked: false,
+    chrome_running: true,
+    profile_connected: true,
+    amazon_signed_in: true,
+    cooling_down_until: null,
+    version: "0.1.0",
+  };
+
+  test("presence carries the burst window and results carry the pacing left", () => {
+    const presence = daemonMessage.safeParse({
+      type: "presence",
+      presence: { ...presenceFrame, burst: { cap: 6, window_s: 600, used_at: [1000, 2000] } },
+    });
+    expect(presence.success && presence.data).toMatchObject({
+      presence: { burst: { cap: 6, window_s: 600, used_at: [1000, 2000] } },
+    });
+    const result = daemonMessage.safeParse({
+      type: "result",
+      id: "call-0001",
+      ok: false,
+      error: { code: "throttled", message: "wait", retry_after_s: 575 },
+      duration_ms: 1,
+      pacing: { loads_left: 0, next_free_in_s: 546 },
+    });
+    expect(result.success && result.data).toMatchObject({
+      pacing: { loads_left: 0, next_free_in_s: 546 },
+    });
+    expect(
+      daemonMessage.safeParse({
+        type: "result",
+        id: "call-0001",
+        ok: true,
+        duration_ms: 1,
+        pacing: { loads_left: -1 },
+      }).success,
+    ).toBe(false);
+  });
+
+  // Daemons and the hub update separately. A field one side does not know yet must be
+  // dropped, never a reason to refuse the frame: that would cut a newer daemon off from an
+  // older hub.
+  test("fields a peer does not know are dropped, not refused", () => {
+    const presence = daemonMessage.safeParse({
+      type: "presence",
+      presence: { ...presenceFrame, a_later_field: { anything: true } },
+    });
+    expect(presence.success).toBe(true);
+    expect(JSON.stringify(presence.data)).not.toContain("a_later_field");
+    const result = daemonMessage.safeParse({
+      type: "result",
+      id: "call-0001",
+      ok: true,
+      data: {},
+      duration_ms: 1,
+      a_later_field: 1,
+    });
+    expect(result.success).toBe(true);
+    expect(JSON.stringify(result.data)).not.toContain("a_later_field");
+  });
+
   test("protocol version is a positive integer", () => {
     expect(Number.isInteger(PROTOCOL_VERSION)).toBe(true);
     expect(PROTOCOL_VERSION).toBeGreaterThan(0);

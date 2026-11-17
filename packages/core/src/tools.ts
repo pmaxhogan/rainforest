@@ -126,7 +126,9 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "hub",
     description:
       "List the owner's computers that can drive Amazon: stable id, name, aliases, OS, online, last active, " +
-      "idle/locked, Chrome running, Amazon signed in, daemon version, and whether it is this connection's selection.",
+      "idle/locked, Chrome running, Amazon signed in, daemon version, and whether it is this connection's selection. " +
+      "Also each computer's pacing: pacing_burst ({cap, window_s, left, next_free_in_s, all_free_in_s}: `left` page " +
+      "loads fit right now) and pacing_budget (hour_left and day_left per page type). Costs no page load.",
     input: z.object({}),
   }),
   tool({
@@ -249,7 +251,9 @@ export const TOOLS: readonly ToolDef[] = [
       "The featured offer (if any) plus ALL offers (new, used, renewed). Each offer has a short-lived opaque " +
       "offer_id (required by add_to_cart), price, shipping, total, condition, seller, ships-from, fulfillment, " +
       "Prime, delivery promise, quantity limits and flags. Also purchase types (one-time, Subscribe & Save) and " +
-      "clippable coupons (listed only; clipping is not implemented). An offer_id expires after about 10 minutes." +
+      "clippable coupons (listed only; clipping is not implemented). An offer_id expires after about 30 minutes. " +
+      "Costs 2 page loads (the product page and its offers panel), or 1 when the previous call was a product read " +
+      "of the same ASIN; refused with throttled before loading anything when they do not fit." +
       CUT_RAISE_MAX_CHARS,
     input: z.object({
       browser,
@@ -424,6 +428,8 @@ export const TOOLS: readonly ToolDef[] = [
     pacing: "cart",
     description:
       "Add ONE specific offer to the cart, always in two steps: offer_id must come from get_buying_options. " +
+      "Costs 4 page loads, checked before anything is touched: when they do not fit it adds nothing and fails with " +
+      "throttled, and retry_after_s is the exact wait (the message says so if the offer_id will have expired by then). " +
       "Adds nothing and fails with needs_choice (details.reason) when the offer is gone (offer_gone), its price or " +
       "seller changed (price_changed, seller_changed), it is out of stock (out_of_stock, never addable), or it " +
       "carries flags not all listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). " +
@@ -605,7 +611,8 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "hub",
     description:
       "Hub state ({protocol, min_daemon_version, pending_calls}) plus the same per-computer rows as list_browsers " +
-      "(online, daemon version, cool-down, remaining pacing budget). Takes no arguments; does not report parser health.",
+      "(online, daemon version, cool-down, and the pacing left: pacing_burst.left page loads fit right now). " +
+      "Takes no arguments; costs no page load; does not report parser health.",
     input: z.object({}),
   }),
   tool({

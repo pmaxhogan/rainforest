@@ -13,6 +13,8 @@ export interface ToolEnvelope {
   ok: boolean;
   /** Which browser served the call (id and name), when one was used. */
   browser?: { id: string; name: string; note?: string };
+  /** Pacing budget on that browser after the call (paced tools only). */
+  pacing?: { loads_left: number; next_free_in_s?: number };
   data?: unknown;
   error?: ErrorPayload;
 }

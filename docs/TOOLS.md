@@ -41,6 +41,12 @@ Every tool result is one text block holding JSON. On success it is `{ ok: true, 
 `{ ok: false, browser?, error }` with the MCP `isError` flag set, where `error` is
 `{ code, message, kind?, retry_after_s?, details? }`. The codes are listed under Errors.
 
+A result or an error from a paced tool also carries `pacing`, the budget left on that computer
+after the call: `{ loads_left, next_free_in_s? }`. `loads_left` page loads fit right now (the
+burst cap, the caps across classes and any cool-down are counted; a class's own cap can still be
+lower), and `next_free_in_s` says when one more fits (absent when nothing is in use). Use it to
+plan the next calls. A daemon older than this field sends none.
+
 Results that came from a computer (everything except the four hub tools) are wrapped: a fixed
 notice line saying the block is third-party data and never instructions, then the JSON inside a
 tag named `untrusted-external-content-from-amazon-<uuid>` with a fresh random id per call, so page
@@ -99,14 +105,35 @@ Each tool names a pacing class. The daemon loads one page at a time per computer
 to 11 seconds between loads, and enforces caps on every load (counted per rolling hour and per
 rolling day, persisted across restarts): one cap per class, one cap across all classes together,
 and a burst cap of 6 loads in any 10 minutes. Hitting a cap or a cool-down returns `throttled` with
-`retry_after_s`. A captcha, a sign-in prompt or any other human-only page starts a 60 minute
+`retry_after_s`, which is the real wait computed from the recorded load times: waiting exactly
+that long is enough, and waiting longer gains nothing. A captcha, a sign-in prompt or any other human-only page starts a 60 minute
 cool-down for the whole computer (10 minutes when Amazon itself throttles). At most 4 calls may be
 running or waiting on one computer; the fifth fails with `busy`.
 
 All of this is per computer. Amazon counts the account, and one account is often driven from two
 computers, so each computer gets only half of what a single browser was seen to tolerate and the
-two together add up. Multi-step write flows check up front that every page load they need fits
-the budget, and return `throttled` (`retry_after_s` 300) before touching anything if it does not.
+two together add up. Multi-step flows check that every page load they need fits the budget, and
+return `throttled` before touching anything if it does not. The check runs when the call is made
+and again once the call has the browser to itself, so calls queued ahead of it cannot spend the
+budget underneath it. `retry_after_s` is then the time until all of the flow's loads fit, and
+`details` is `{ needed, available }`.
+
+What each tool costs in page loads:
+
+| Tool                                                                               | Loads                                                                    |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `search`, `get_cart`, the order, subscription, history and list reads              | 1                                                                        |
+| `get_product`, `get_variants`, `get_media`, `get_review_summary`                   | 1 for the first of them on an ASIN, then 0 for two minutes (shared page) |
+| `get_buying_options`                                                               | 2, or 1 right after a product read of the same ASIN                      |
+| `get_reviews`                                                                      | 1, plus 1 per page after the first                                       |
+| `add_to_cart`                                                                      | 4                                                                        |
+| `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`          | 2                                                                        |
+| `set_cart_quantity`                                                                | 2, plus 1 for each step that has to be read back                         |
+| the list writes                                                                    | 2 to 4                                                                   |
+| `show_on_screen`, `list_browsers`, `select_browser`, `get_status`, `get_audit_log` | 0                                                                        |
+
+With the default caps a task that needs more than 6 loads waits out the 10 minute window between
+bursts: one search plus one cart add (1 + 2 + 4 loads) is already 7.
 
 | Class           | Per hour | Per day | Used by                                                                                                                                                                |
 | --------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -125,16 +152,21 @@ class. The class in each tool's entry is the registry's hint; the code decides b
 loads. A tool that loads more than one kind of page is listed under the class of its main page:
 `get_buying_options` (product page, then the offers fragment), `add_to_cart` (product page, then the
 cart), `get_variants` with `fetch_missing` and `get_price_history` (several sources). The table
-above is what the code does. The config file accepts a
-`pacing` override object, but no code reads it yet, so the defaults above are the only limits.
-`list_browsers` shows the remaining budget per class in `pacing_budget`.
+above is what the code does.
+
+The owner can change the caps for one computer in that computer's `config.json` (docs/SETUP.md,
+"Pacing caps for one computer"); the defaults above do not move, and the ceilings are 20 loads per
+10 minutes, 40 per hour and 400 per day. `list_browsers` and `get_status` show the burst cap in
+force and what is left of it in `pacing_burst`, and the remaining budget per class in
+`pacing_budget`.
 
 ### Two-step cart adds
 
 Adding to the cart is deliberately a two-step flow. Step one is `get_buying_options`, which returns
 offers with short-lived opaque `offer_id` values and per-offer flags. Step two is `add_to_cart`
 with exactly one `offer_id`; ASIN-only adds do not exist. An `offer_id` is an authenticated
-encrypted token that only the daemon that made it can read: it expires after about ten minutes,
+encrypted token that only the daemon that made it can read: it expires after about thirty minutes
+(longer than the 10 minute burst window, so it survives a wait for the budget),
 dies when the daemon restarts and cannot be forged or altered by the hub or the model. If the
 chosen offer carries any flag, the add fails with `needs_choice` and adds nothing, unless every
 flag on the offer is listed in `acknowledge`. `out_of_stock` can never be acknowledged. A price or
@@ -169,7 +201,7 @@ The full taxonomy, from `packages/core/src/errors.ts`. `needs_human` carries a `
 | Code                  | Meaning                                                                                                                                                    |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `needs_human`         | Amazon showed a page only the owner can handle (sign-in, captcha, checkpoint; it is never solved). Do it by hand, then retry after the 60 minute cool-down |
-| `throttled`           | A pacing cap or cool-down applies, or a write needs more page loads than the budget allows; wait `retry_after_s`                                           |
+| `throttled`           | A pacing cap or cool-down applies, or a flow needs more page loads than fit right now; wait exactly `retry_after_s` (absent when the need exceeds a cap)   |
 | `no_browser_online`   | No paired computer is connected                                                                                                                            |
 | `browser_offline`     | The named computer is offline, dropped mid-call, or its extension cannot be reached                                                                        |
 | `busy`                | That computer already has 4 calls running or waiting; retry in about 15 seconds                                                                            |
@@ -190,7 +222,9 @@ The full taxonomy, from `packages/core/src/errors.ts`. `needs_human` carries a `
 
 > List the owner's computers that can drive Amazon: stable id, name, aliases, OS, online, last
 > active, idle/locked, Chrome running, Amazon signed in, daemon version, and whether it is this
-> connection's selection.
+> connection's selection. Also each computer's pacing: pacing_burst ({cap, window_s, left,
+> next_free_in_s, all_free_in_s}: `left` page loads fit right now) and pacing_budget (hour_left and
+> day_left per page type). Costs no page load.
 
 Kind: answered by the Worker; read only; pacing: none.
 
@@ -198,9 +232,14 @@ This tool takes no arguments.
 
 **Result.** `{ browsers: [...] }`. Each row: `id`, `name`, `aliases`, `os`, `online`, `last_seen`,
 `last_active`, `idle_s`, `locked`, `chrome_running`, `profile_connected`, `amazon_signed_in`,
-`cooling_down_until`, `daemon_version`, `pacing_budget`, `selected`. Presence fields are null when
-the computer is offline or has not reported yet. `pacing_budget` maps each page type (and `all`,
-the cap across types) to `{ hour_left, day_left }`. Revoked devices are not listed.
+`cooling_down_until`, `daemon_version`, `pacing_budget`, `pacing_burst`, `selected`. Presence
+fields are null when the computer is offline or has not reported yet. `pacing_budget` maps each
+page type (and `all`, the cap across types) to `{ hour_left, day_left }`. `pacing_burst` is
+`{ cap, window_s, left, next_free_in_s?, all_free_in_s? }`: `left` of `cap` page loads fit right
+now in any `window_s` seconds, one more fits in `next_free_in_s` and the whole cap is free again
+in `all_free_in_s` (both absent when nothing is in use); the hub works it out at read time from
+the load times the daemon reported, and the daemon reports after every paced call. It is null for
+a daemon that does not report it. Revoked devices are not listed.
 
 **Errors.** `invalid_arguments`.
 
@@ -370,7 +409,9 @@ human-only page on a child stops the call with that error.
 > opaque offer_id (required by add_to_cart), price, shipping, total, condition, seller, ships-from,
 > fulfillment, Prime, delivery promise, quantity limits and flags. Also purchase types (one-time,
 > Subscribe & Save) and clippable coupons (listed only; clipping is not implemented). An offer_id
-> expires after about 10 minutes. A result over the budget is cut (truncated: true); this tool takes
+> expires after about 30 minutes. Costs 2 page loads (the product page and its offers panel), or 1
+> when the previous call was a product read of the same ASIN; refused with throttled before loading
+> anything when they do not fit. A result over the budget is cut (truncated: true); this tool takes
 > no cursor, so raise max_chars to get the rest.
 
 Kind: runs on a computer; read only; pacing: offers.
@@ -393,9 +434,13 @@ removed. An offer that cannot be added from here has `offer_id: null` and an `of
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`, `not_found`.
 
 **Notes.** Step one of a cart add. The `offer_id` is the only input `add_to_cart` accepts: it is an
-authenticated encrypted token, made by the daemon, that expires after about ten minutes and stops
+authenticated encrypted token, made by the daemon, that expires after about thirty minutes and stops
 working when the daemon restarts. The tool loads the product page (`product` class) and then the
-all-offers fragment (`offers` class, the one fragment URL on the allowlist); if the fragment
+all-offers fragment (`offers` class, the one fragment URL on the allowlist). When the tab still
+shows that product page from a product read in the last two minutes, the page is not loaded
+again and only the fragment counts; in turn the page this tool loads serves the product reads for
+two minutes. Both loads must fit the budget before either is made (`throttled` otherwise, with
+nothing loaded). If the fragment
 cannot be loaded the parser falls back to the buy box and says so in `meta.warnings`. `condition`
 filters the offers returned. Flags are computed assuming the account has Prime. There is no
 `cursor` argument: when the result is cut (`other_sections` first, then `offers`) raise
@@ -745,13 +790,16 @@ pacing class, which is also the class the registry names.
 ### `add_to_cart`
 
 > Add ONE specific offer to the cart, always in two steps: offer_id must come from
-> get_buying_options. Adds nothing and fails with needs_choice (details.reason) when the offer is
-> gone (offer_gone), its price or seller changed (price_changed, seller_changed), it is out of stock
-> (out_of_stock, never addable), or it carries flags not all listed in `acknowledge` (flags; details
-> list the flags and up to 8 alternatives). Adds exactly one unit: quantity above 1 is not applied
-> yet (set_cart_quantity changes the quantity afterwards), and coupon clipping is not implemented yet. purchase_type subscribe_and_save is always
-> refused with blocked_by_policy, because a subscription is a recurring order; use show_on_screen to
-> finish one by hand. Result: {changed, before, after, added, acknowledged_flags, declined_upsells,
+> get_buying_options. Costs 4 page loads, checked before anything is touched: when they do not fit
+> it adds nothing and fails with throttled, and retry_after_s is the exact wait (the message says so
+> if the offer_id will have expired by then). Adds nothing and fails with needs_choice
+> (details.reason) when the offer is gone (offer_gone), its price or seller changed (price_changed,
+> seller_changed), it is out of stock (out_of_stock, never addable), or it carries flags not all
+> listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). Adds exactly one
+> unit: quantity above 1 is not applied yet (set_cart_quantity changes the quantity afterwards), and
+> coupon clipping is not implemented yet. purchase_type subscribe_and_save is always refused with
+> blocked_by_policy, because a subscription is a recurring order; use show_on_screen to finish one
+> by hand. Result: {changed, before, after, added, acknowledged_flags, declined_upsells,
 > quantity_note}: before/after are cart states, added is the cart line (its item_id works with the
 > cart tools), acknowledged_flags the flags the offer carried, declined_upsells the protection-plan
 > or add-on prompts the flow answered with no, quantity_note is set when quantity was above 1.
@@ -789,6 +837,10 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
 - **One unit per call.** `quantity` is used when computing the quantity-related flags, but one unit
   is added; the result says so in `quantity_note`. Changing the quantity afterwards needs
   `set_cart_quantity`.
+- **Four page loads, all or nothing.** The flow reads the cart, loads the product page, opens its
+  offers panel and reads the cart again. If the four do not fit the pacing budget it adds nothing
+  and fails with `throttled`; `retry_after_s` is the time until all four fit, and the message says
+  so when the offer id will have expired by then (get a new one from `get_buying_options` first).
 - **`clip_coupon` is planned.** It is accepted and ignored.
 
 The flow first checks that three page loads fit the pacing budget (otherwise `throttled`). It then
@@ -1117,8 +1169,8 @@ destination in the move menu, each through the click guard, and reads both lists
 ### `get_status`
 
 > Hub state ({protocol, min_daemon_version, pending_calls}) plus the same per-computer rows as
-> list_browsers (online, daemon version, cool-down, remaining pacing budget). Takes no arguments;
-> does not report parser health.
+> list_browsers (online, daemon version, cool-down, and the pacing left: pacing_burst.left page
+> loads fit right now). Takes no arguments; costs no page load; does not report parser health.
 
 Kind: answered by the Worker; read only; pacing: none.
 
