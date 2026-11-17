@@ -340,9 +340,9 @@ function residual(el: DomElement | undefined, use: Consumption): string {
   return el === undefined ? "" : text(el, { exclude: (e) => use.has(e) });
 }
 
-/** Drop separator-only debris ("·", "|") left between consumed fields. */
+/** Drop separator-only debris (middle dot, bullet, "|") left between consumed fields. */
 function tidy(s: string): string {
-  return collapse(s.replace(/(^|\s)[·•|,;:.-]+(?=\s|$)/g, " "));
+  return collapse(s.replace(/(^|\s)[\u00b7\u2022|,;:.-]+(?=\s|$)/g, " "));
 }
 
 /** Remove the first match of `re` from `s`, returning both. */

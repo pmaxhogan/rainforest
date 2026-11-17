@@ -94,10 +94,11 @@ describe("shell stubs fail closed", () => {
     expect(await services.updater.checkNow("manual")).toMatchObject({ status: "failed" });
     const errs: string[] = [];
     const io = { out: () => {}, err: (l: string) => errs.push(l) };
-    expect(await services.commands.setup({ aliases: [], non_interactive: true }, io)).toBe(1);
-    expect(await services.commands.pair({}, io)).toBe(1);
+    // Without a configuration, setup and pair refuse with a usage error and do nothing.
+    expect(await services.commands.setup({ aliases: [], non_interactive: true }, io)).toBe(2);
+    expect(await services.commands.pair({}, io)).toBe(2);
     expect(await services.commands.capture({}, io)).toBe(1);
-    expect(errs.every((l) => l.includes("not implemented in the shell"))).toBe(true);
+    expect(errs.length).toBe(3);
   });
 
   test("the stub hub client never connects", () => {

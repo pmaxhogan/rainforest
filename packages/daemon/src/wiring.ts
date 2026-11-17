@@ -8,6 +8,10 @@ import type {
   ToolRouter,
   Updater,
 } from "./interfaces.ts";
+import { createBrowserController } from "./browser-controller.ts";
+import { pairCommand, setupCommand } from "./commands/operator.ts";
+import { createRouter } from "./flows/index.ts";
+import { hubClientFactory } from "./hub-client.ts";
 
 /**
  * Shell wiring: stub implementations of every seam. The real hub client, browser
@@ -70,10 +74,32 @@ const stubCommands: OperatorCommands = {
   },
 };
 
-export const createServices: CreateServices = () => ({
-  hubClient: stubHubClient,
-  browser: stubBrowser,
-  router: stubRouter,
-  updater: stubUpdater,
-  commands: stubCommands,
-});
+export const createServices: CreateServices = (deps) => {
+  const operator = { paths: deps.paths, exec: deps.exec };
+  const commands: OperatorCommands = {
+    ...stubCommands,
+    setup: (options, io) => setupCommand(operator, options, io),
+    pair: (options, io) => pairCommand(operator, options, io),
+  };
+  if (!deps.config) {
+    return {
+      hubClient: stubHubClient,
+      browser: stubBrowser,
+      router: stubRouter,
+      updater: stubUpdater,
+      commands,
+    };
+  }
+  const browser = createBrowserController({
+    config: deps.config,
+    paths: deps.paths,
+    log: deps.log,
+  });
+  return {
+    hubClient: hubClientFactory,
+    browser,
+    router: createRouter(browser),
+    updater: stubUpdater,
+    commands,
+  };
+};
