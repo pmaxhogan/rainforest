@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   BUY_BODY_MARKERS,
+  FRAGMENT_ALLOWLIST,
   HARD_DENY_RULES,
   MAIN_FRAME_ALLOWLIST,
   PURCHASE_CONTROL_PATTERNS,
   TELEMETRY_HOSTS,
+  checkFragment,
   checkNavigation,
   checkRequest,
   isAmazonHost,
@@ -258,6 +260,28 @@ describe("main-frame allowlist", () => {
         isMainFrameDocument: false,
       }).allow,
     ).toBe(false);
+  });
+});
+
+describe("fragments", () => {
+  test("allowlist is exactly the expected list", () => {
+    expect(FRAGMENT_ALLOWLIST.map((r) => r.name)).toEqual(["all-offers"]);
+  });
+
+  test("only allowlisted same-site fragments pass", () => {
+    expect(
+      checkFragment(`${A}/gp/product/ajax/aodAjaxMain/ref=dp_aod_ALL_mbc?asin=B0FAKE0001&pc=dp`)
+        .allow,
+    ).toBe(true);
+    for (const url of [
+      `${A}/gp/product/ajax/other`,
+      `${A}/gp/buy/spc/handlers/display.html`,
+      `${A}/dp/B0FAKE0001`,
+      "https://www.example.com/gp/product/ajax/aodAjaxMain",
+      "not a url",
+    ]) {
+      expect(checkFragment(url).allow, url).toBe(false);
+    }
   });
 });
 

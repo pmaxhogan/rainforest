@@ -6,7 +6,7 @@
  *   RAINFOREST_TOKEN=... RAINFOREST_EXTENSION_ID=... RAINFOREST_CORPUS=/path \
  *     node packages/browser/src/dev-capture.ts <jobs.tsv>
  *
- * jobs.tsv: one job per line, `kind<TAB>name<TAB>pacing-type<TAB>url`. Existing captures
+ * jobs.tsv: one job per line, `kind<TAB>name<TAB>pacing-type<TAB>url[<TAB>fragments]`. Existing captures
  * are skipped, so the queue is resumable. Raw captures must never be committed.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -49,7 +49,7 @@ const jobs = readFileSync(jobsFile, "utf8")
   .map((l) => l.split("\t"));
 
 let failed = 0;
-for (const [kind, name, type, url] of jobs) {
+for (const [kind, name, type, url, fragmentSpec] of jobs) {
   if (!kind || !name || !type || !url) {
     console.error(`bad job line: ${[kind, name, type, url].join(" | ")}`);
     failed++;
@@ -67,10 +67,23 @@ for (const [kind, name, type, url] of jobs) {
       // Let late content settle a little; pages keep loading after DOMContentLoaded.
       await ctx.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, Number(process.env.RAINFOREST_SETTLE_MS ?? 1500)));
-      return await ctx.capture(kind as PageKind);
+      const captured = await ctx.capture(kind as PageKind);
+      // Optional 5th column: `name=path-and-query` pairs separated by `|`, fetched in-page.
+      for (const pair of (fragmentSpec ?? "").split("|").filter(Boolean)) {
+        const at = pair.indexOf("=");
+        const body = await ctx.fetchFragment(pair.slice(at + 1), type as PageType);
+        (captured.fragments ??= {})[pair.slice(0, at)] = body;
+      }
+      return captured;
     });
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const { html, ...meta } = capture;
+    const { html, fragments, ...meta } = capture;
+    const fragmentFiles: Record<string, string> = {};
+    for (const [fragmentName, body] of Object.entries(fragments ?? {})) {
+      fragmentFiles[fragmentName] = `${fragmentName}.html`;
+      writeFileSync(join(dir, `${fragmentName}.html`), body, { mode: 0o600 });
+    }
+    if (fragments) Object.assign(meta, { fragments: fragmentFiles });
     writeFileSync(join(dir, "page.html"), html, { mode: 0o600 });
     writeFileSync(join(dir, "capture.json"), JSON.stringify(meta, null, 2), { mode: 0o600 });
     console.error(

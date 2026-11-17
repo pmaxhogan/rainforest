@@ -332,6 +332,35 @@ export function checkRequest(info: RequestInfo | null | undefined): Verdict {
   return deny("not_allowlisted", host);
 }
 
+/**
+ * Same-origin documents the flows fetch from inside an already loaded Amazon page (they
+ * are not navigations, so the main-frame allowlist does not cover them). GET only.
+ */
+export const FRAGMENT_ALLOWLIST: readonly AllowRule[] = [
+  {
+    name: "all-offers",
+    host: AMAZON_HOST,
+    path: /^\/gp\/product\/ajax\/aodAjaxMain(\/ref=[^/?#]*)?\/?$/,
+  },
+];
+
+/** May a flow fetch this URL as a fragment from within the page? Fails closed. */
+export function checkFragment(url: string): Verdict {
+  const base = checkRequest({ url, method: "GET", isMainFrameDocument: false });
+  if (!base.allow) return base;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return deny("unparseable", "url");
+  }
+  for (const rule of FRAGMENT_ALLOWLIST) {
+    if (rule.host === parsed.hostname.toLowerCase() && rule.path.test(parsed.pathname))
+      return { allow: true };
+  }
+  return deny("not_allowlisted", "fragment");
+}
+
 /** Convenience for flows: may the automation tab navigate to this URL at all? */
 export function checkNavigation(url: string): Verdict {
   return checkRequest({ url, method: "GET", isMainFrameDocument: true });

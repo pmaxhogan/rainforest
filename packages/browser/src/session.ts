@@ -6,7 +6,7 @@ import { BrokerError } from "./broker.ts";
 import { installGuard, type Guard } from "./guard.ts";
 import { serializeWithHiddenMarks } from "./hidden.ts";
 import { Pacer, type PageType } from "./pacing.ts";
-import { checkNavigation } from "./policy.ts";
+import { checkFragment, checkNavigation } from "./policy.ts";
 
 /** Result of the interstitial classifier (implemented in the parsers package). */
 export interface Interstitial {
@@ -36,6 +36,11 @@ export interface PageContext {
   goto(url: string, type: PageType): Promise<void>;
   /** Serialize the current page (with hidden markers) and classify interstitials. */
   capture(kind: PageKind): Promise<Capture>;
+  /**
+   * Fetch a same-origin fragment from inside the loaded page (paced like a page load).
+   * Only allowlisted fragment URLs are accepted.
+   */
+  fetchFragment(pathAndQuery: string, type: PageType): Promise<string>;
   /** The automation tab, for typed flows. Never use it to navigate around the rails. */
   page: Page;
   guard: Guard;
@@ -195,6 +200,7 @@ export class BrowserSession {
       guard,
       goto: (url, type) => this.#goto(page, guard, url, type),
       capture: (kind) => this.#capture(page, kind),
+      fetchFragment: (pathAndQuery, type) => this.#fetchFragment(page, pathAndQuery, type),
     };
   }
 
@@ -255,6 +261,49 @@ export class BrowserSession {
         },
       );
     }
+  }
+
+  async #fetchFragment(page: Page, pathAndQuery: string, type: PageType): Promise<string> {
+    let url: string;
+    try {
+      url = new URL(pathAndQuery, page.url()).toString();
+    } catch {
+      throw new RfError("blocked_by_policy", "fragment URL is not valid");
+    }
+    const verdict = checkFragment(url);
+    if (!verdict.allow) {
+      throw new RfError("blocked_by_policy", `fragment refused by policy (${verdict.reason})`, {
+        details: { reason: verdict.reason, rule: verdict.rule },
+      });
+    }
+    const plan = this.#options.pacer.plan(type);
+    if (!plan.ok) {
+      throw new RfError("throttled", `pacing limit reached (${plan.reason})`, {
+        retry_after_s: Math.ceil(plan.retryAfterMs / 1000),
+        details: { reason: plan.reason, page_type: type },
+      });
+    }
+    if (plan.waitMs > 0) await this.#sleep(plan.waitMs);
+    this.#options.pacer.record(type);
+    this.#options.onPacingChange?.();
+    const result = (await page.evaluate(async (target: string) => {
+      const response = await fetch(target, {
+        credentials: "include",
+        headers: { accept: "text/html,*/*" },
+      });
+      return { status: response.status, finalUrl: response.url, body: await response.text() };
+    }, url)) as { status: number; finalUrl: string; body: string };
+    const landed = checkFragment(result.finalUrl);
+    if (!landed.allow)
+      throw new RfError("blocked_by_policy", "fragment was redirected to a refused URL");
+    if (result.status === 404) throw new RfError("not_found", "Amazon has no such fragment");
+    if (result.status >= 400) {
+      throw new RfError(
+        "layout_unrecognized",
+        `fragment request failed with status ${result.status}`,
+      );
+    }
+    return result.body;
   }
 
   #needsHuman(kind: HumanKind, message: string): never {
