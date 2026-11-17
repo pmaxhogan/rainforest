@@ -289,7 +289,12 @@ export class BrowserSession {
           "blocked_by_policy",
           `a redirect was refused by policy (${blocked.verdict.reason})`,
           {
-            details: { reason: blocked.verdict.reason, rule: blocked.verdict.rule },
+            details: {
+              reason: blocked.verdict.reason,
+              rule: blocked.verdict.rule,
+              refused_path: pathOnly(blocked.url),
+              from_path: pathOnly(url),
+            },
           },
         );
       }
@@ -418,5 +423,14 @@ export class BrowserSession {
       }
     }
     return capture;
+  }
+}
+
+/** Path of a URL without query or fragment, for diagnostics. */
+function pathOnly(value: string): string {
+  try {
+    return new URL(value).pathname.slice(0, 200);
+  } catch {
+    return "";
   }
 }
