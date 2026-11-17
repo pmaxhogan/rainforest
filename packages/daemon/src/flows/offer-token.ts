@@ -5,7 +5,7 @@ import { RfError } from "@rainforest/core";
  * Opaque offer ids. `get_buying_options` mints one per offer; `add_to_cart` accepts
  * nothing else. The token is an authenticated encryption of the offer snapshot under a
  * key that lives only in this process, so it cannot be forged, read or altered by the
- * hub or the model, and it dies with the process. Tokens expire after a few minutes.
+ * hub or the model, and it dies with the process. Tokens expire after 10 minutes.
  */
 
 export const OFFER_TOKEN_TTL_MS = 10 * 60_000;

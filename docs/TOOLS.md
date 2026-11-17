@@ -16,7 +16,7 @@ is the one place that records which; check `FLOWS` for the current set.
 
 | Where it runs      | Tools                                                                                                                                                                                                                                                                                     | State                                                                                                                            |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented (`get_status` returns less than its description promises, see its entry)                                             |
+| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented                                                                                                                      |
 | Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                                                                      |
 | Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                          | Implemented                                                                                                                      |
 | Daemon, writes     | `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`                                                                                                                                                                              | Implemented                                                                                                                      |
@@ -48,8 +48,8 @@ text cannot close the tag. Daemon error payloads are wrapped too, because they c
 page-derived text. The hub tools return plain JSON.
 
 Image blocks follow the text block as MCP image content, at most 8 per call. The wire format and the
-Worker support them, but no daemon tool produces any yet: `with_images` and `max_images` are
-accepted and ignored, and media and price charts come back as URLs.
+Worker support them, but no daemon tool produces any yet and no tool takes an image argument:
+media and price charts come back as URLs.
 
 ### Browser selection
 
@@ -86,8 +86,12 @@ The Worker refuses any daemon result whose data exceeds the hard cap plus 20000 
 Only tools that have a `cursor` argument can continue a cut result: `get_product`, `get_variants`,
 `get_cart`, `list_subscriptions`, `get_list`, `get_browsing_history` and `list_orders`. Pass
 `next_cursor` as `cursor` to continue the same parsed page without loading Amazon again; a
-continuation returns only the paged lists. The other read tools can still return a `next_cursor`,
-but they have no argument to redeem it, so raise `max_chars` (where the tool has one) instead.
+continuation returns only the paged lists. The other read tools (`search`, `get_buying_options`,
+`get_reviews`, `get_order`, `get_invoice`, `list_lists`, `get_media`, `get_review_summary`) can still
+return a `next_cursor`, but their flows never redeem one, so the registry gives them no `cursor`
+argument. Their descriptions say how to get the rest: raise `max_chars` where the tool has one
+(`search`, `get_buying_options`, `get_reviews`, `get_order`); `get_invoice`, `list_lists`,
+`get_media` and `get_review_summary` have neither argument and the rest cannot be fetched.
 
 ### Pacing classes
 
@@ -118,7 +122,10 @@ the budget, and return `throttled` (`retry_after_s` 300) before touching anythin
 
 `show_on_screen` has class `none`: it does not count against any budget. The hub tools have no
 class. The class in each tool's entry is the registry's hint; the code decides by the page it
-loads, so a few tools differ and the table above is what the code does. The config file accepts a
+loads. A tool that loads more than one kind of page is listed under the class of its main page:
+`get_buying_options` (product page, then the offers fragment), `add_to_cart` (product page, then the
+cart), `get_variants` with `fetch_missing` and `get_price_history` (several sources). The table
+above is what the code does. The config file accepts a
 `pacing` override object, but no code reads it yet, so the defaults above are the only limits.
 `list_browsers` shows the remaining budget per class in `pacing_budget`.
 
@@ -226,8 +233,8 @@ with the computer's presence, so a new alias works once that daemon has connecte
 
 > Open an amazon.com product, cart, list or order page in a NORMAL (non-automation) tab on the
 > chosen computer and bring it to the front, so the owner can finish something (for example
-> checkout) by hand. This is the only way to reach checkout: placing orders is not possible
-> through this server.
+> checkout) by hand. This is the only way to reach checkout: placing orders is not possible through
+> this server.
 
 Kind: runs on a computer; changes state; pacing: none.
 
@@ -254,10 +261,14 @@ the audit log.
 
 ### `search`
 
-> Search amazon.com. Every result is labeled organic or sponsored (kind + is_sponsored). Returns
-> results, widgets (carousels/shelves with their own sponsored flag), all available refinements
-> grouped (each with an opaque token usable in `refinements`), sort options, applied filters,
-> corrections and pagination.
+> Search amazon.com, one results page per call. Every result is labeled organic or sponsored (kind +
+> is_sponsored). Returns results, widgets (carousels/shelves with their own sponsored flag), all
+> available refinements grouped (each option has an opaque token), sort options, applied filters,
+> corrections and pagination. Beyond query, department, sort, min_price, max_price and brand, filter
+> by passing a refinement token from a previous response in `refinements` (Prime, star rating,
+> condition, any left-rail filter). Tokens are cumulative: only the last one is applied, and it
+> replaces query, department and brand. A result over the budget is cut (truncated: true); this tool
+> takes no cursor, so raise max_chars to get the rest.
 
 Kind: runs on a computer; read only; pacing: search.
 
@@ -270,8 +281,6 @@ Kind: runs on a computer; read only; pacing: search.
 | `page`        | integer 1..50                                                                                         | no       |                                                                                 |
 | `min_price`   | number >= 0                                                                                           | no       | Dollars                                                                         |
 | `max_price`   | number >= 0                                                                                           | no       | Dollars                                                                         |
-| `prime_only`  | boolean                                                                                               | no       |                                                                                 |
-| `min_rating`  | integer 1..4                                                                                          | no       | Minimum average stars                                                           |
 | `brand`       | string (max 100 chars)                                                                                | no       |                                                                                 |
 | `condition`   | `new`, `used`, `renewed`                                                                              | no       |                                                                                 |
 | `refinements` | array of string (max 30)                                                                              | no       | Opaque refinement tokens from a previous search response (any left-rail filter) |
@@ -282,16 +291,18 @@ Kind: runs on a computer; read only; pacing: search.
 fields the card showed), `widgets` (carousels and shelves with their own sponsored flag and
 items), `refinements` (grouped options, each with an opaque `token`), `applied_filters`,
 `sort_options`, `pagination`, `corrections` and `hidden_skipped`, then `other_sections`, `meta` and the truncation fields (see Read results). `filter_notes` is added
-when a filter argument could not be applied directly (see Notes).
+when several refinement tokens were given (see Notes).
 
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`, `invalid_arguments`.
 
 **Notes.** `query`, `department`, `sort`, `page`, `min_price`, `max_price` and `brand` are put in
-the search URL. `prime_only`, `min_rating` and `condition` are not applied by the daemon: the
-result says in `filter_notes` to pick the matching option from `refinements` and pass its token.
+the search URL. There are no Prime, star-rating or condition arguments: to filter by any left-rail
+filter, pick the matching option from `refinements` in a previous response and pass its token.
 `refinements` takes the tokens of a previous response (each is that page's own relative search
-URL for the filter); tokens are cumulative, so only the last one given is applied, and one that is
-not a relative `/s` search URL is `invalid_arguments`. When the result is too big the lists are cut
+URL for the filter); tokens are cumulative, so only the last one given is applied (and `filter_notes`
+says so), and one that is not a relative `/s` search URL is `invalid_arguments`. The applied token
+replaces `query`, `department` and `brand`; `sort`, `page`, `min_price` and `max_price` are still
+added to its URL. When the result is too big the lists are cut
 in the order `other_sections`, `widgets`, `refinements`, `results`; this tool has no `cursor`
 argument, so raise `max_chars` instead of paging.
 
@@ -355,9 +366,11 @@ human-only page on a child stops the call with that error.
 ### `get_buying_options`
 
 > The featured offer (if any) plus ALL offers (new, used, renewed). Each offer has a short-lived
-> opaque offer_id (required by add_to_cart), price, shipping, total, condition, seller,
-> ships-from, fulfillment, Prime, delivery promise, quantity limits and flags. Also purchase types
-> (one-time, Subscribe & Save) and clippable coupons.
+> opaque offer_id (required by add_to_cart), price, shipping, total, condition, seller, ships-from,
+> fulfillment, Prime, delivery promise, quantity limits and flags. Also purchase types (one-time,
+> Subscribe & Save) and clippable coupons (listed only; clipping is not implemented). An offer_id
+> expires after about 10 minutes. A result over the budget is cut (truncated: true); this tool takes
+> no cursor, so raise max_chars to get the rest.
 
 Kind: runs on a computer; read only; pacing: offers.
 
@@ -389,29 +402,31 @@ filters the offers returned. Flags are computed assuming the account has Prime. 
 
 ### `get_media`
 
-> Hi-res image URLs per variant and videos (title, duration, URL, thumbnail).
+> Hi-res image URLs per variant and videos (title, duration, URL, thumbnail). URLs only: no image
+> data is returned. A result over the default 40000-character budget is cut (truncated: true); this
+> tool takes neither cursor nor max_chars, so the rest cannot be fetched.
 
 Kind: runs on a computer; read only; pacing: product.
 
-| Argument      | Type                  | Required | Notes                                               |
-| ------------- | --------------------- | -------- | --------------------------------------------------- |
-| `browser`     | string (max 64 chars) | no       | Browser id, name or alias; see Browser selection    |
-| `asin`        | string                | yes      | 10 characters, A-Z and 0-9                          |
-| `with_images` | boolean               | no       | Also return downscaled image blocks (default false) |
-| `max_images`  | integer 1..8          | no       |                                                     |
+| Argument  | Type                  | Required | Notes                                            |
+| --------- | --------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars) | no       | Browser id, name or alias; see Browser selection |
+| `asin`    | string                | yes      | 10 characters, A-Z and 0-9                       |
 
 **Result.** Implemented. `asin`, `images` (hi-res URLs), `images_by_variant`, `variant_labels`,
 `videos` (title, duration, URL, thumbnail) and `counts`, then `other_sections`, `meta` and the truncation fields (see Read results).
 
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`, `not_found`.
 
-**Notes.** URLs only. The `with_images` and `max_images` arguments are accepted but the daemon does
-not read them, so no image blocks are produced. This tool has no `max_chars` or `cursor` argument.
+**Notes.** URLs only: no image blocks are produced. This tool has no `max_chars` or `cursor`
+argument, so a result cut at the default budget cannot be continued.
 
 ### `get_reviews`
 
-> Paged full review text with sort and filters. Each review: rating, title, body, date, verified,
-> variant attributes, helpful votes, media, badges.
+> Full review text, ten reviews per page (`page` N returns the Nth block of ten), with sort and
+> filters. Each review: rating, title, body, date, verified, variant attributes, helpful votes,
+> media, badges. A result over the budget is cut (truncated: true); this tool takes no cursor, so
+> raise max_chars to get the rest.
 
 Kind: runs on a computer; read only; pacing: reviews.
 
@@ -444,8 +459,9 @@ no `cursor` argument.
 
 ### `get_review_summary`
 
-> Rating, count, histogram, the AI 'Customers say' text and aspect chips, top positive and
-> critical review.
+> Rating, count, histogram, the AI 'Customers say' text and aspect chips, top positive and critical
+> review. A result over the default 40000-character budget is cut (truncated: true); this tool takes
+> neither cursor nor max_chars, so the rest cannot be fetched.
 
 Kind: runs on a computer; read only; pacing: product.
 
@@ -461,22 +477,24 @@ Kind: runs on a computer; read only; pacing: product.
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`, `not_found`.
 
 **Notes.** Read from the product page, so it uses the `product` pacing class (not `reviews`) and
-shares the cached page capture with `get_product`.
+shares the cached page capture with `get_product`. No `cursor` or `max_chars` argument.
 
 ### `get_price_history`
 
-> Price history per source (amazon, camelcamelcamel, keepa): stats, series when obtainable, chart
-> image URL, retrieval time and a terms note. Third-party lookups are cached for hours and rate
-> limited.
+> Price history per source (default all three), each entry with a terms note. amazon: the price
+> facts the product page shows (series only if the page embeds one). camelcamelcamel: stats, any
+> series the page shows and a chart image URL. keepa: a chart image URL and link only
+> (series_available: false), no price numbers. Chart URLs are links; no image data is returned. A
+> failed lookup is reported inside its entry (unavailable: true). Third-party lookups are cached for
+> 6 hours and rate limited.
 
 Kind: runs on a computer; read only; pacing: price_history.
 
-| Argument      | Type                                    | Required | Notes                                               |
-| ------------- | --------------------------------------- | -------- | --------------------------------------------------- |
-| `browser`     | string (max 64 chars)                   | no       | Browser id, name or alias; see Browser selection    |
-| `asin`        | string                                  | yes      | 10 characters, A-Z and 0-9                          |
-| `sources`     | array of one of 3 values (min 1, max 3) | no       |                                                     |
-| `with_images` | boolean                                 | no       | Also return downscaled image blocks (default false) |
+| Argument  | Type                                    | Required | Notes                                            |
+| --------- | --------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                   | no       | Browser id, name or alias; see Browser selection |
+| `asin`    | string                                  | yes      | 10 characters, A-Z and 0-9                       |
+| `sources` | array of one of 3 values (min 1, max 3) | no       | Default all three                                |
 
 **Result.** Implemented. `{ asin, amazon?, camelcamelcamel?, keepa? }`, one entry per requested
 source (default all three), each with a `terms_note`.
@@ -499,7 +517,7 @@ instead.
 automated lookups may be against them. The URL policy allowlists only their product, chart and
 graph URLs, and the budget is the smallest of all (6 per hour, 30 per day per computer). Results
 are cached in daemon memory for 6 hours per source and ASIN. The CamelCamelCamel lookup loads the
-site's product page in your browser. `with_images` is accepted but not read: charts are URLs only.
+site's product page in your browser. Charts are URLs only, never image blocks.
 
 ## Account reads
 
@@ -533,7 +551,12 @@ after every change.
 
 ### `list_orders`
 
-> Order history by year or range, including archived and cancelled filters. Paged with a cursor.
+> Order history, one page per call: `year`, or `range` (last30, months-3), or neither for Amazon's
+> default list (`year` wins over `range`). filter: orders (default), not_yet_shipped (open orders),
+> cancelled (keeps only the cancelled orders found on the requested page, so a page can come back
+> empty while more pages exist), archived (answers unsupported; archived orders still appear under
+> their year). When Amazon has a further page the result has next_page_cursor; a result cut for size
+> has next_cursor. Pass either as `cursor`.
 
 Kind: runs on a computer; read only; pacing: account.
 
@@ -565,8 +588,9 @@ fetches the next page of Amazon's list, and `next_cursor` continues a result tha
 
 ### `get_order`
 
-> Full order details: items, prices, totals, shipments and tracking, payment summary (card brand
-> and last 4), return and refund status.
+> Full order details: items, prices, totals, shipments and tracking, payment summary (card brand and
+> last 4), return and refund status. A result over the budget is cut (truncated: true); this tool
+> takes no cursor, so raise max_chars to get the rest.
 
 Kind: runs on a computer; read only; pacing: account.
 
@@ -588,7 +612,9 @@ be reached. There is no `cursor` argument; raise `max_chars` if `shipments` are 
 
 ### `get_invoice`
 
-> Invoice for an order: charge breakdown and payment transactions.
+> Invoice for an order: charge breakdown and payment transactions. A result over the default
+> 40000-character budget is cut (truncated: true); this tool takes neither cursor nor max_chars, so
+> the rest cannot be fetched.
 
 Kind: runs on a computer; read only; pacing: account.
 
@@ -603,7 +629,7 @@ then `other_sections`, `meta` and the truncation fields (see Read results).
 
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`, `not_found`.
 
-**Notes.** Read only; reads Amazon's print view of the invoice.
+**Notes.** Read only; reads Amazon's print view of the invoice. No `cursor` or `max_chars` argument.
 
 ### `list_subscriptions`
 
@@ -627,7 +653,9 @@ frequency, edit path), plus `other_sections`, `meta` and the truncation fields.
 
 ### `list_lists`
 
-> The owner's lists with privacy and item counts.
+> The owner's lists with privacy and item counts. A result over the default 40000-character budget
+> is cut (truncated: true); this tool takes neither cursor nor max_chars, so the rest cannot be
+> fetched.
 
 Kind: runs on a computer; read only; pacing: list.
 
@@ -642,7 +670,8 @@ belong to `get_list`.
 
 **Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`.
 
-**Notes.** The list ids it returns are the `list_id` values the other list tools take.
+**Notes.** The list ids it returns are the `list_id` values the other list tools take. No `cursor` or
+`max_chars` argument.
 
 ### `get_list`
 
@@ -694,7 +723,7 @@ before capturing. The per-card remove control appears as a label only.
 
 > Recent searches (best effort; returns `unsupported` with an explanation if Amazon hides it).
 
-Kind: runs on a computer; read only; pacing: account.
+Kind: runs on a computer; read only; pacing: search.
 
 | Argument  | Type                  | Required | Notes                                            |
 | --------- | --------------------- | -------- | ------------------------------------------------ |
@@ -707,18 +736,24 @@ read errors.
 
 **Notes.** Amazon shows recent searches only in the dropdown of the empty search box. The flow
 loads the home page (an allowlisted page), clicks the search box through the click guard and reads
-the dropdown, so the list is short and may be empty. The code counts this page load against the
-`search` pacing class, not `account` as the registry says.
+the dropdown, so the list is short and may be empty. The page load counts against the `search`
+pacing class, which is also the class the registry names.
 
 ## Writes: cart
 
 ### `add_to_cart`
 
-> Add ONE specific offer to the cart. Always two-step: offer_id must come from get_buying_options.
-> If the offer carries flags (used, no featured offer, price well above typical, slow or
-> non-Prime, quantity quirks, unusual purchase type) the add returns needs_choice with the flags
-> and alternatives and adds nothing, unless every flag is listed in `acknowledge`. Out of stock is
-> never addable. Never subscribes unless purchase_type says so. Returns {changed, before, after}.
+> Add ONE specific offer to the cart, always in two steps: offer_id must come from
+> get_buying_options. Adds nothing and fails with needs_choice (details.reason) when the offer is
+> gone (offer_gone), its price or seller changed (price_changed, seller_changed), it is out of stock
+> (out_of_stock, never addable), or it carries flags not all listed in `acknowledge` (flags; details
+> list the flags and up to 8 alternatives). Adds exactly one unit: quantity above 1 is not applied
+> yet, and coupon clipping is not implemented yet. purchase_type subscribe_and_save is always
+> refused with blocked_by_policy, because a subscription is a recurring order; use show_on_screen to
+> finish one by hand. Result: {changed, before, after, added, acknowledged_flags, declined_upsells,
+> quantity_note}: before/after are cart states, added is the cart line (its item_id works with the
+> cart tools), acknowledged_flags the flags the offer carried, declined_upsells the protection-plan
+> or add-on prompts the flow answered with no, quantity_note is set when quantity was above 1.
 
 Kind: runs on a computer; changes state; pacing: cart.
 
@@ -726,17 +761,21 @@ Kind: runs on a computer; changes state; pacing: cart.
 | --------------- | -------------------------------- | -------- | ------------------------------------------------ |
 | `browser`       | string (max 64 chars)            | no       | Browser id, name or alias; see Browser selection |
 | `offer_id`      | string (min 16, max 4096 chars)  | yes      | From get_buying_options                          |
-| `quantity`      | integer 1..999                   | no       | Only one unit is added; see Notes                |
+| `quantity`      | integer 1..999                   | no       | Default 1; only one unit is added; see Notes     |
 | `purchase_type` | `one_time`, `subscribe_and_save` | no       | Default one_time; subscribe_and_save is refused  |
-| `clip_coupon`   | boolean                          | no       | Planned; accepted and ignored                    |
+| `clip_coupon`   | boolean                          | no       | Not implemented yet; ignored                     |
 | `acknowledge`   | array of flags                   | no       | Flags to accept; see Two-step cart adds          |
 
 **Result.** Implemented. On success `{ changed: true, before, after, added, acknowledged_flags,
 declined_upsells, quantity_note? }`: `before` and `after` are compact cart states (active lines with
 `item_id`, `asin`, `title`, `quantity` and `price`; saved lines; subtotal), `added` is the cart line
 for that ASIN, `acknowledged_flags` the flags the offer carried and the caller accepted, and
-`declined_upsells` the protection-plan or add-on prompts the flow answered with "no thanks". When
-the offer cannot be added as asked the call fails with `needs_choice` and nothing is added.
+`declined_upsells` the protection-plan or add-on prompts the flow answered with "no thanks".
+`acknowledged_flags` lists every flag the offer carried (all of them were in `acknowledge`, or the
+call would have failed) and `quantity_note` is present only when `quantity` was above 1. When the
+offer cannot be added as asked the call fails with `needs_choice` and nothing is added; its
+`details.reason` is `offer_gone`, `price_changed` (with `was_cents`, `now_cents`), `seller_changed`,
+`out_of_stock` or `flags` (with `flags` and `all_flags`), each with up to 8 `alternatives`.
 
 **Errors.** `needs_choice`, `invalid_arguments` (the offer id is invalid or expired),
 `blocked_by_policy`, `needs_human`, `throttled`, `layout_unrecognized`, `internal`, `timeout`.
@@ -763,15 +802,16 @@ retried, answers any upsell with its decline control, reads the cart again and f
 
 ### `set_cart_quantity`
 
-> Set the quantity of a cart item (item_id from get_cart). Returns {changed, before, after}.
+> Set the quantity of a cart item (item_id from get_cart). Not implemented yet in this version;
+> answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: cart.
 
-| Argument   | Type                          | Required | Notes                                            |
-| ---------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser`  | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `item_id`  | string (min 4, max 256 chars) | yes      |                                                  |
-| `quantity` | integer 1..999                | yes      |                                                  |
+| Argument   | Type                                  | Required | Notes                                            |
+| ---------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser`  | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `item_id`  | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
+| `quantity` | integer 1..999                        | yes      |                                                  |
 
 **Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
 
@@ -781,14 +821,14 @@ Kind: runs on a computer; changes state; pacing: cart.
 
 ### `remove_from_cart`
 
-> Remove an item from the cart. Returns {changed, before, after}.
+> Remove an item from the cart. Returns {changed, before, after, item}.
 
 Kind: runs on a computer; destructive; pacing: cart.
 
-| Argument  | Type                          | Required | Notes                                            |
-| --------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `item_id` | string (min 4, max 256 chars) | yes      |                                                  |
+| Argument  | Type                                  | Required | Notes                                            |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `item_id` | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
 
 **Result.** Implemented. `{ changed: true, before, after, item }`: `before` and `after` are compact
 cart states (active lines with `item_id`, `asin`, `title`, `quantity` and `price`; saved lines;
@@ -805,14 +845,14 @@ checked against `^[A-Za-z0-9-]{8,64}$`.
 
 ### `save_for_later`
 
-> Move a cart item to Saved for later. Returns {changed, before, after}.
+> Move a cart item to Saved for later. Returns {changed, before, after, item}.
 
 Kind: runs on a computer; changes state; pacing: cart.
 
-| Argument  | Type                          | Required | Notes                                            |
-| --------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `item_id` | string (min 4, max 256 chars) | yes      |                                                  |
+| Argument  | Type                                  | Required | Notes                                            |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `item_id` | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
 
 **Result.** Implemented. `{ changed: true, before, after, item }`: `before` and `after` are compact
 cart states (active lines with `item_id`, `asin`, `title`, `quantity` and `price`; saved lines;
@@ -829,14 +869,14 @@ checked against `^[A-Za-z0-9-]{8,64}$`.
 
 ### `move_to_cart`
 
-> Move a Saved for later item back to the cart. Returns {changed, before, after}.
+> Move a Saved for later item back to the cart. Returns {changed, before, after, item}.
 
 Kind: runs on a computer; changes state; pacing: cart.
 
-| Argument  | Type                          | Required | Notes                                            |
-| --------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `item_id` | string (min 4, max 256 chars) | yes      |                                                  |
+| Argument  | Type                                  | Required | Notes                                            |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `item_id` | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
 
 **Result.** Implemented. `{ changed: true, before, after, item }`: `before` and `after` are compact
 cart states (active lines with `item_id`, `asin`, `title`, `quantity` and `price`; saved lines;
@@ -853,14 +893,14 @@ checked against `^[A-Za-z0-9-]{8,64}$`.
 
 ### `delete_saved_item`
 
-> Delete a Saved for later item. Returns {changed, before, after}.
+> Delete a Saved for later item. Returns {changed, before, after, item}.
 
 Kind: runs on a computer; destructive; pacing: cart.
 
-| Argument  | Type                          | Required | Notes                                            |
-| --------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `item_id` | string (min 4, max 256 chars) | yes      |                                                  |
+| Argument  | Type                                  | Required | Notes                                            |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `item_id` | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
 
 **Result.** Implemented. `{ changed: true, before, after, item }`: `before` and `after` are compact
 cart states (active lines with `item_id`, `asin`, `title`, `quantity` and `price`; saved lines;
@@ -879,7 +919,7 @@ checked against `^[A-Za-z0-9-]{8,64}$`.
 
 ### `create_list`
 
-> Create a list. Returns {changed, before, after}.
+> Create a list. Not implemented yet in this version; answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -897,7 +937,7 @@ Kind: runs on a computer; changes state; pacing: list.
 
 ### `update_list`
 
-> Rename a list and/or change its privacy. Returns {changed, before, after}.
+> Rename a list and/or change its privacy. Not implemented yet in this version; answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -917,7 +957,7 @@ does not ask for confirmation, the model should.
 
 ### `delete_list`
 
-> Delete a list. Returns {changed, before, after}.
+> Delete a list. Not implemented yet in this version; answers unsupported.
 
 Kind: runs on a computer; destructive; pacing: list.
 
@@ -934,7 +974,7 @@ Kind: runs on a computer; destructive; pacing: list.
 
 ### `add_to_list`
 
-> Add a product to a list. Returns {changed, before, after}.
+> Add a product to a list. Not implemented yet in this version; answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -950,15 +990,15 @@ Kind: runs on a computer; changes state; pacing: list.
 
 ### `remove_from_list`
 
-> Remove an item from a list (item_id from get_list). Returns {changed, before, after}.
+> Remove an item from a list (item_id from get_list). Returns {changed, before, after, item}.
 
 Kind: runs on a computer; destructive; pacing: list.
 
-| Argument  | Type                          | Required | Notes                                            |
-| --------- | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `list_id` | string                        | yes      | 8 to 16 characters from list_lists               |
-| `item_id` | string (min 4, max 256 chars) | yes      |                                                  |
+| Argument  | Type                                  | Required | Notes                                            |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser` | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `list_id` | string                                | yes      | 8 to 16 characters from list_lists               |
+| `item_id` | string (6 to 64 chars, A-Z a-z 0-9 -) | yes      | List item id from get_list                       |
 
 **Result.** Implemented. `{ changed: true, before, after, item }`: `before` and `after` are compact
 list states (`list_id`, `name`, `privacy` and the items with `item_id`, `asin`, `title`,
@@ -974,7 +1014,8 @@ still there. Marked destructive in the MCP annotations.
 
 ### `update_list_item`
 
-> Set quantity wanted, priority and/or comment on a list item. Returns {changed, before, after}.
+> Set quantity wanted, priority and/or comment on a list item. Not implemented yet in this version;
+> answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -982,7 +1023,7 @@ Kind: runs on a computer; changes state; pacing: list.
 | ----------------- | -------------------------------------------- | -------- | ------------------------------------------------ |
 | `browser`         | string (max 64 chars)                        | no       | Browser id, name or alias; see Browser selection |
 | `list_id`         | string                                       | yes      | 8 to 16 characters from list_lists               |
-| `item_id`         | string (min 4, max 256 chars)                | yes      |                                                  |
+| `item_id`         | string (6 to 64 chars, A-Z a-z 0-9 -)        | yes      | List item id from get_list                       |
 | `quantity_wanted` | integer 1..999                               | no       |                                                  |
 | `priority`        | `lowest`, `low`, `medium`, `high`, `highest` | no       |                                                  |
 | `comment`         | string (max 500 chars)                       | no       |                                                  |
@@ -995,17 +1036,18 @@ Kind: runs on a computer; changes state; pacing: list.
 
 ### `move_list_item`
 
-> Move (or with copy: true, copy) an item to another list. Returns {changed, before, after}.
+> Move (or with copy: true, copy) an item to another list. Not implemented yet in this version;
+> answers unsupported.
 
 Kind: runs on a computer; changes state; pacing: list.
 
-| Argument     | Type                          | Required | Notes                                            |
-| ------------ | ----------------------------- | -------- | ------------------------------------------------ |
-| `browser`    | string (max 64 chars)         | no       | Browser id, name or alias; see Browser selection |
-| `list_id`    | string                        | yes      | 8 to 16 characters from list_lists               |
-| `item_id`    | string (min 4, max 256 chars) | yes      |                                                  |
-| `to_list_id` | string                        | yes      | 8 to 16 characters from list_lists               |
-| `copy`       | boolean                       | no       |                                                  |
+| Argument     | Type                                  | Required | Notes                                            |
+| ------------ | ------------------------------------- | -------- | ------------------------------------------------ |
+| `browser`    | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
+| `list_id`    | string                                | yes      | 8 to 16 characters from list_lists               |
+| `item_id`    | string (6 to 64 chars, A-Z a-z 0-9 -) | yes      | List item id from get_list                       |
+| `to_list_id` | string                                | yes      | 8 to 16 characters from list_lists               |
+| `copy`       | boolean                               | no       |                                                  |
 
 **Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
 
@@ -1017,13 +1059,13 @@ Kind: runs on a computer; changes state; pacing: list.
 
 ### `get_status`
 
-> Hub and per-device state: versions, online, pacing budget left, cool-downs, parser health.
+> Hub state ({protocol, min_daemon_version, pending_calls}) plus the same per-computer rows as
+> list_browsers (online, daemon version, cool-down, remaining pacing budget). Takes no arguments;
+> does not report parser health.
 
 Kind: answered by the Worker; read only; pacing: none.
 
-| Argument  | Type                  | Required | Notes                                            |
-| --------- | --------------------- | -------- | ------------------------------------------------ |
-| `browser` | string (max 64 chars) | no       | Browser id, name or alias; see Browser selection |
+This tool takes no arguments.
 
 **Result.** `{ hub: { protocol, min_daemon_version, pending_calls }, browsers: [...] }` with the
 same browser rows as `list_browsers`, so per computer: `daemon_version`, `online`,
@@ -1031,13 +1073,13 @@ same browser rows as `list_browsers`, so per computer: `daemon_version`, `online
 
 **Errors.** `invalid_arguments`.
 
-**Notes.** The registry description also promises parser health. It is not returned, and the tool
-ignores its `browser` argument (it always lists every computer).
+**Notes.** It always lists every computer and does not report parser health. An old client that
+still sends a `browser` argument is not rejected: unknown arguments are dropped by the schema.
 
 ### `get_audit_log`
 
-> Recent tool calls: time, client, tool, browser, outcome, duration, error code; arguments for
-> write tools only. Never page content. 90-day retention.
+> Recent tool calls: time, client, tool, browser, outcome, duration, error code; arguments for write
+> tools only. Never page content. 90-day retention.
 
 Kind: answered by the Worker; read only; pacing: none.
 
