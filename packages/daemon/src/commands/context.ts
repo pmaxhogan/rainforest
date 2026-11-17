@@ -2,10 +2,16 @@ import { fileURLToPath } from "node:url";
 import { defaultExec, type Exec } from "../exec.ts";
 import type { CliIo, CreateServices } from "../interfaces.ts";
 import type { Logger } from "../log.ts";
-import { currentPathEnv, resolvePaths, type AppPaths, type Platform } from "../paths.ts";
+import {
+  currentPathEnv,
+  pathFlavor,
+  resolvePaths,
+  type AppPaths,
+  type Platform,
+} from "../paths.ts";
 import { createServiceManager } from "../service/index.ts";
 import type { ServiceManager } from "../service/types.ts";
-import { DAEMON_VERSION } from "../version.ts";
+import { DAEMON_VERSION, IS_BUNDLED } from "../version.ts";
 import { createServices } from "../wiring.ts";
 
 /** Everything a command needs, injected so tests never touch the real home, launchd or schtasks. */
@@ -42,9 +48,16 @@ export function defaultContext(
   io: CliIo = consoleIo(),
 ): CliContext {
   const pe = currentPathEnv();
-  const paths = resolvePaths(pe);
+  const resolved = resolvePaths(pe);
+  // The release bundle ships `launcher.mjs` beside `rainforestd.mjs` (plain JS, runs on any
+  // Node 22); a source checkout copies `src/launcher.ts`. The installed copy keeps the extension.
+  const paths: AppPaths = IS_BUNDLED
+    ? { ...resolved, launcherFile: pathFlavor(pe.platform).join(resolved.root, "launcher.mjs") }
+    : resolved;
   const exec = defaultExec;
-  const launcherSource = fileURLToPath(new URL("../launcher.ts", import.meta.url));
+  const launcherSource = fileURLToPath(
+    new URL(IS_BUNDLED ? "./launcher.mjs" : "../launcher.ts", import.meta.url),
+  );
   const ctx: CliContext = {
     paths,
     platform: pe.platform,
@@ -53,7 +66,7 @@ export function defaultContext(
     io,
     version: DAEMON_VERSION,
     nodePath: process.execPath,
-    mainEntry: fileURLToPath(new URL("../main.ts", import.meta.url)),
+    mainEntry: fileURLToPath(new URL(IS_BUNDLED ? import.meta.url : "../main.ts", import.meta.url)),
     launcherSource,
     createServices,
     makeServiceManager: () =>

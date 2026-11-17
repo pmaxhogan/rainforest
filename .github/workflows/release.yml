@@ -1,0 +1,187 @@
+name: release
+
+# Build, sign and publish a GitHub Release of rainforestd for every push to main.
+#   - version is "<VERSION file>.<commit count>", so a re-run of the same commit is a no-op:
+#     the build job finds the release for that tag and skips everything else, exit 0
+#   - two jobs for least privilege: `build` runs third-party install scripts with a read-only
+#     token and no secrets; `publish` holds the write token and the signing key but installs
+#     nothing (sign and verify use Node built-ins only)
+#   - the daily schedule exists because a merge made with GITHUB_TOKEN (a bot merge) does not
+#     trigger push workflows; the next scheduled run releases whatever landed
+#   - concurrency queues runs instead of cancelling them. GitHub keeps only the newest pending
+#     run, so a burst of pushes may skip the middle commits; the newest commit still releases
+#   - without the RELEASE_SIGNING_KEY secret (forks) it packages and verifies the hash, and
+#     never publishes
+#   - release notes and logs carry only the version and the commit sha
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      exists: ${{ steps.exists.outputs.exists }}
+    steps:
+      # Full history: the version is the commit count on HEAD.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Compute version
+        id: version
+        run: |
+          version=$(node --input-type=module -e "import { computeVersion } from './scripts/lib/release-common.mjs'; console.log(computeVersion());")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version ${version} commit ${GITHUB_SHA}"
+
+      - name: Skip when the release already exists
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if out=$(gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" --json tagName 2>&1); then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "release v${VERSION} already exists: nothing to do"
+          elif printf '%s' "$out" | grep -qi "release not found"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "could not look up release v${VERSION}" >&2
+            exit 1
+          fi
+
+      - if: steps.exists.outputs.exists != 'true'
+        run: npm ci
+
+      - name: Check
+        if: steps.exists.outputs.exists != 'true'
+        run: npm run check
+
+      - name: Package
+        if: steps.exists.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/package-daemon.mjs --version "${VERSION}" --out dist/release
+
+      # Hash and layout only: the signature is added and checked in the publish job.
+      - name: Verify package
+        if: steps.exists.outputs.exists != 'true'
+        run: node scripts/verify-release.mjs dist/release --no-signature
+
+      - name: Upload package
+        if: steps.exists.outputs.exists != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-dist
+          path: dist/release/
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: needs.build.outputs.exists != 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-dist
+          path: dist/release
+
+      - name: Check for the signing key
+        id: key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -n "${RELEASE_SIGNING_KEY}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "no signing key available: packaged and hash-verified, not publishing"
+          fi
+
+      - name: Sign
+        if: steps.key.outputs.present == 'true'
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: node scripts/sign-manifest.mjs dist/release
+
+      - name: Verify signed release
+        if: steps.key.outputs.present == 'true'
+        run: node scripts/verify-release.mjs dist/release
+
+      # Created as a draft and published once every asset is attached, so a daemon polling
+      # the latest release never sees a release with missing files.
+      - name: Publish
+        if: steps.key.outputs.present == 'true'
+        run: |
+          # A draft left by an interrupted run is not found by tag, so delete it by id.
+          stale=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.draft and .tag_name == \"v${VERSION}\") | .id")
+          for id in ${stale}; do
+            echo "removing a stale draft for v${VERSION}"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${id}"
+          done
+          gh release create "v${VERSION}" \
+            "dist/release/rainforestd-${VERSION}.tgz" \
+            dist/release/manifest.json \
+            dist/release/manifest.sig \
+            --repo "${GITHUB_REPOSITORY}" \
+            --draft \
+            --target "${GITHUB_SHA}" \
+            --title "v${VERSION}" \
+            --notes "Version ${VERSION}, commit ${GITHUB_SHA}"
+          gh release edit "v${VERSION}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest
+
+      # What clients download is what must verify. A bad release is removed, not left latest.
+      - name: Verify published assets
+        if: steps.key.outputs.present == 'true'
+        run: |
+          mkdir -p dist/published
+          gh release download "v${VERSION}" --repo "${GITHUB_REPOSITORY}" --dir dist/published
+          if ! node scripts/verify-release.mjs dist/published; then
+            gh release delete "v${VERSION}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+            exit 1
+          fi
+
+      - name: Keep the 20 newest releases
+        if: steps.key.outputs.present == 'true'
+        run: |
+          old=$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 1000 --json tagName --jq '.[].tagName' \
+            | { grep -E '^v[0-9]+(\.[0-9]+)*$' || true; } | sort -V | head -n -20)
+          for tag in ${old}; do
+            if [ "${tag}" = "v${VERSION}" ]; then continue; fi
+            echo "deleting ${tag}"
+            gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          done

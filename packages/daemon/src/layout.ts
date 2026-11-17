@@ -13,7 +13,11 @@ import { pathFlavor, versionDir, type AppPaths } from "./paths.ts";
  */
 
 /** Entry point inside a version directory, tried in order. */
-export const VERSION_ENTRY_CANDIDATES: readonly string[] = ["src/main.ts", "dist/main.mjs"];
+export const VERSION_ENTRY_CANDIDATES: readonly string[] = [
+  "rainforestd.mjs",
+  "src/main.ts",
+  "dist/main.mjs",
+];
 
 /** A version name is a single safe path segment: no separators, no leading dot, bounded. */
 export function isValidVersionName(name: string): boolean {

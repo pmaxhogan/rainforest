@@ -7,7 +7,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } fro
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ENTRY_CANDIDATES = ["src/main.ts", "dist/main.mjs"];
+const ENTRY_CANDIDATES = ["rainforestd.mjs", "src/main.ts", "dist/main.mjs"];
 const VERSION_NAME = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
 
 export type LaunchTarget =
