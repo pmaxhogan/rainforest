@@ -91,7 +91,12 @@ async function runCommand(ctx: CliContext): Promise<number> {
     log,
     audit,
     services: services as DaemonServices,
-    getPresence: createPresenceProvider({ probe, browser: services.browser, version: ctx.version }),
+    getPresence: createPresenceProvider({
+      probe,
+      browser: services.browser,
+      version: ctx.version,
+      aliases: config.aliases,
+    }),
     version: ctx.version,
     now: ctx.now,
   });

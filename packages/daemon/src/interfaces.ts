@@ -52,6 +52,8 @@ export interface BrowserStatus {
   amazon_signed_in: boolean | null;
   /** Epoch ms until which the rails refuse new Amazon page loads; null = not cooling down. */
   cooling_down_until: number | null;
+  /** Remaining pacing budget per page type. */
+  budget?: Record<string, { hour_left: number; day_left: number }>;
 }
 
 export interface BrowserController {

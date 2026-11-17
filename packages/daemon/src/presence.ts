@@ -164,6 +164,7 @@ export interface PresenceProviderDeps {
   probe: PresenceProbe;
   browser: Pick<BrowserController, "status">;
   version: string;
+  aliases?: string[];
 }
 
 /** Compose OS facts and browser state into the wire `Presence`. */
@@ -179,6 +180,8 @@ export function createPresenceProvider(deps: PresenceProviderDeps): () => Promis
       amazon_signed_in: browser.amazon_signed_in,
       cooling_down_until: browser.cooling_down_until,
       version: deps.version,
+      ...(deps.aliases && deps.aliases.length > 0 ? { aliases: deps.aliases.slice(0, 8) } : {}),
+      ...(browser.budget ? { budget: browser.budget } : {}),
     };
   };
 }

@@ -56,6 +56,7 @@ export interface BrowserRow {
   amazon_signed_in: boolean | null;
   cooling_down_until: number | null;
   daemon_version: string | null;
+  pacing_budget: Record<string, { hour_left: number; day_left: number }> | null;
   selected: boolean;
 }
 
@@ -369,6 +370,15 @@ export class Hub extends DurableObject<Env> {
 
   #recordPresence(deviceId: string, presence: Presence): void {
     const now = Date.now();
+    if (presence.aliases) {
+      // A paired device may name itself; names never grant anything beyond selection.
+      const aliases = presence.aliases.filter((a) => /^[\w .()'-]+$/.test(a)).slice(0, 8);
+      this.#sql.exec(
+        "UPDATE devices SET aliases = ? WHERE id = ?",
+        JSON.stringify(aliases),
+        deviceId,
+      );
+    }
     this.#sql.exec(
       "UPDATE devices SET presence = ?, presence_at = ?, last_seen = ? WHERE id = ?",
       JSON.stringify(presence),
@@ -531,6 +541,7 @@ export class Hub extends DurableObject<Env> {
       amazon_signed_in: presence?.amazon_signed_in ?? null,
       cooling_down_until: presence?.cooling_down_until ?? null,
       daemon_version: presence?.version ?? null,
+      pacing_budget: online ? (presence?.budget ?? null) : null,
       selected: selectedId === device.id,
     };
   }

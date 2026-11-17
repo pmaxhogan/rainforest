@@ -28,6 +28,12 @@ export const presenceSchema = z.object({
   amazon_signed_in: z.boolean().nullable(),
   cooling_down_until: z.number().nullable(),
   version: z.string().max(64),
+  /** Extra names the owner gave this computer in its local config. */
+  aliases: z.array(z.string().min(1).max(40)).max(8).optional(),
+  /** Remaining pacing budget per page type ("all" is the cap across types). */
+  budget: z
+    .record(z.string().max(32), z.object({ hour_left: z.number(), day_left: z.number() }))
+    .optional(),
 });
 export type Presence = z.infer<typeof presenceSchema>;
 

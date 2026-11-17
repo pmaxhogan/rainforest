@@ -241,6 +241,7 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
         profile_connected: profileConnected,
         amazon_signed_in: signedIn,
         cooling_down_until: until > Date.now() ? until : null,
+        budget: pacer.budget(),
       };
     },
     session: getSession,
