@@ -39,7 +39,7 @@ export const GLOBAL_CAPS: Caps = { perHour: 20, perDay: 150 };
  * Burst cap across all page types. Measured: about 63 loads in 47 minutes, 13 of them in
  * the last 10, drew a "continue shopping" checkpoint. These limits stay far below that.
  */
-export const BURST_CAP = { loads: 5, windowMs: 10 * 60_000 } as const;
+export const BURST_CAP = { loads: 8, windowMs: 10 * 60_000 } as const;
 export const DEFAULT_COOLDOWN_MS = 30 * 60_000;
 
 export interface PacingState {

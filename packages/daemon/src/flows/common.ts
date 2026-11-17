@@ -76,7 +76,8 @@ function size(value: unknown): number {
 
 /**
  * Fit a result into the character budget. `listKeys` name the top-level arrays that may
- * be paged, in the order they should be cut (last first). Truncation is never silent:
+ * be paged, in the order they should be cut: the first one named is cut first, so name
+ * the least important list first and the primary list last. Truncation is never silent:
  * the result says `truncated: true` and carries a `next_cursor` that continues the same
  * parsed page without loading it again.
  */
@@ -101,7 +102,7 @@ export function fitToBudget(
     for (const key of Object.keys(out))
       if (!listKeys.includes(key) && key !== "meta") delete out[key];
   }
-  for (const key of [...listKeys].reverse()) {
+  for (const key of listKeys) {
     const list = out[key] as unknown[] | undefined;
     if (!Array.isArray(list)) continue;
     const start = offsets[key] ?? 0;

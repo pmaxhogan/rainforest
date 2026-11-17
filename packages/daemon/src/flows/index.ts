@@ -2,8 +2,10 @@ import { RfError, type ToolDef } from "@rainforest/core";
 import type { SessionProvider } from "../browser-controller.ts";
 import type { ToolContext, ToolOutput, ToolRouter } from "../interfaces.ts";
 import { getBrowsingHistory, getCart, listSubscriptions } from "./account.ts";
+import { deleteSavedItem, moveToCart, removeFromCart, saveForLater } from "./cart-writes.ts";
 import { getMedia, getReviewSummary, getReviews, getVariants } from "./catalog.ts";
 import type { Flow } from "./common.ts";
+import { showOnScreen } from "./handoff.ts";
 import { getList, listLists } from "./lists.ts";
 import { getInvoice, getOrder, listOrders } from "./orders.ts";
 import { getPriceHistory } from "./price.ts";
@@ -23,6 +25,11 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   list_lists: listLists,
   get_list: getList,
   get_price_history: getPriceHistory,
+  show_on_screen: showOnScreen,
+  remove_from_cart: removeFromCart,
+  save_for_later: saveForLater,
+  move_to_cart: moveToCart,
+  delete_saved_item: deleteSavedItem,
   search,
   get_product: getProduct,
   get_buying_options: getBuyingOptions,

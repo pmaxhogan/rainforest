@@ -32,6 +32,8 @@ export interface SessionProvider {
   session(): Promise<BrowserSession>;
   pacer(): Pacer;
   setSignedIn(value: boolean | null): void;
+  /** Hand a page to the human: a normal, non-automation tab brought to the front. */
+  showOnScreen(url: string): void;
 }
 
 export interface ControllerDeps {
@@ -80,6 +82,29 @@ export function chromeLaunchCommand(
     file: chrome.executable_path ?? "google-chrome",
     args: [profile, ...extra, "--no-first-run"],
   };
+}
+
+/** Open a URL in a NORMAL tab of the configured profile and bring the browser forward. */
+export function chromeOpenUrlCommand(
+  platform: NodeJS.Platform,
+  chrome: DaemonConfig["chrome"],
+  url: string,
+): { file: string; args: string[] } {
+  const profile = `--profile-directory=${chrome.profile_directory}`;
+  const extra = chrome.user_data_dir ? [`--user-data-dir=${chrome.user_data_dir}`] : [];
+  if (platform === "darwin") {
+    const binary =
+      chrome.executable_path ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    return { file: binary, args: [profile, ...extra, url] };
+  }
+  if (platform === "win32") {
+    const exe = chrome.executable_path ?? "chrome.exe";
+    return {
+      file: "cmd.exe",
+      args: ["/d", "/s", "/c", "start", '""', exe, profile, ...extra, url],
+    };
+  }
+  return { file: chrome.executable_path ?? "google-chrome", args: [profile, ...extra, url] };
 }
 
 export function createBrowserController(deps: ControllerDeps): BrowserController & SessionProvider {
@@ -222,6 +247,14 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
     pacer: () => pacer,
     setSignedIn(value) {
       signedIn = value;
+    },
+    showOnScreen(url) {
+      const command = chromeOpenUrlCommand(paths.platform, config.chrome, url);
+      spawn(command.file, command.args, {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      }).unref();
     },
   };
 }
