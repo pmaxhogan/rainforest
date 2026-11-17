@@ -3,7 +3,13 @@ import type { SessionProvider } from "../browser-controller.ts";
 import type { ToolContext, ToolOutput, ToolRouter } from "../interfaces.ts";
 import { addToCart } from "./add-to-cart.ts";
 import { getBrowsingHistory, getCart, getSearchHistory, listSubscriptions } from "./account.ts";
-import { deleteSavedItem, moveToCart, removeFromCart, saveForLater } from "./cart-writes.ts";
+import {
+  deleteSavedItem,
+  moveToCart,
+  removeFromCart,
+  saveForLater,
+  setCartQuantity,
+} from "./cart-writes.ts";
 import { getMedia, getReviewSummary, getReviews, getVariants } from "./catalog.ts";
 import type { Flow } from "./common.ts";
 import { showOnScreen } from "./handoff.ts";
@@ -34,6 +40,7 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   save_for_later: saveForLater,
   move_to_cart: moveToCart,
   delete_saved_item: deleteSavedItem,
+  set_cart_quantity: setCartQuantity,
   remove_from_list: removeFromList,
   search,
   get_product: getProduct,

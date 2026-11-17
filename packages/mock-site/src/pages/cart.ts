@@ -32,7 +32,7 @@ function lineHtml(session: Session, line: CartLine, list: "active" | "saved"): s
   const prefix = list === "saved" ? "sc-saved" : "sc-item";
   const controls =
     list === "active"
-      ? `${quantitySelect(line)}<span data-action="delete" class="sc-action-delete"><span class="a-declarative" data-action="sc-item-action" data-sc-item-action='{"action":"delete","itemID":"${esc(id)}","itemType":"active"}'><input name="submit.delete.${esc(id)}" value="Delete" data-action="delete" type="submit"></span></span>` +
+      ? `${quantitySelect(line)}<span data-action="delete" class="sc-action-delete"><span class="a-declarative" data-action="sc-item-action" data-sc-item-action='{"action":"delete","itemID":"${esc(id)}","itemType":"active"}'><input name="submit.delete-active.${esc(id)}" value="Delete" data-action="delete" type="submit"></span></span>` +
         `<span data-action="save-for-later" class="sc-action-save-for-later"><input name="submit.save-for-later.${esc(id)}" value="Save for later" data-action="save-for-later" type="submit"></span>`
       : `<span data-action="delete-saved"><input name="submit.delete-saved.${esc(id)}" data-action="delete-saved" value="Delete" type="submit"></span>` +
         `<div data-action="move-to-cart"><input name="submit.move-to-cart.${esc(id)}" data-action="move-to-cart" value="Move to cart" type="submit"></div>`;

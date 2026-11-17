@@ -133,7 +133,7 @@ const hasAsin = (list: CartItem[], item: CartItem): boolean =>
 export const removeFromCart: Flow = (args, ctx) =>
   lineAction(ctx, args, {
     list: "active",
-    control: "delete",
+    control: "delete-active",
     what: "the cart line's Delete control",
     verify: (_b, after, item) =>
       gone(after.active_items, item) && !hasAsin(after.active_items, item),
@@ -164,3 +164,87 @@ export const deleteSavedItem: Flow = (args, ctx) =>
     what: "the saved item's Delete control",
     verify: (_b, after, item) => gone(after.saved_items, item) && !hasAsin(after.saved_items, item),
   });
+
+/** The most quantity steps one call will click. */
+export const MAX_QUANTITY_STEPS = 20;
+
+/**
+ * Change a cart line's quantity with the line's own stepper, one click per unit, then
+ * re-read the cart. Never goes below 1 (the stepper's last decrement deletes the line;
+ * use remove_from_cart for that).
+ */
+export const setCartQuantity: Flow = async (args, ctx) => {
+  const itemId = String(args.item_id);
+  const target = Number(args.quantity);
+  if (!ITEM_ID.test(itemId))
+    throw new RfError("invalid_arguments", "item_id is not a cart item id from get_cart");
+  if (!Number.isInteger(target) || target < 1)
+    throw new RfError("invalid_arguments", "quantity must be a whole number of at least 1");
+  requireBudget(ctx, 2, "cart");
+  const session = await ctx.browser.session();
+  return await session.run(async (page) => {
+    const before = await loadCart(page);
+    const item = find(before, itemId, "active");
+    const current = item.quantity ?? 1;
+    const steps = target - current;
+    const describe = { item_id: item.item_id, asin: item.asin, title: item.title };
+    if (steps === 0) {
+      return {
+        changed: false,
+        before: cartState(before),
+        after: cartState(before),
+        item: describe,
+      };
+    }
+    if (Math.abs(steps) > MAX_QUANTITY_STEPS) {
+      throw new RfError(
+        "invalid_arguments",
+        `the quantity can change by at most ${MAX_QUANTITY_STEPS} per call (it is ${current} now)`,
+      );
+    }
+    const up = steps > 0;
+    const line = `#sc-active-cart span.sc-action-quantity[data-itemid="${itemId}"]`;
+    const button = page.page.locator(
+      `${line} button[data-action="${up ? "a-stepper-increment" : "a-stepper-decrement"}"]:visible`,
+    );
+    clearCaptureCache();
+    for (let i = 0; i < Math.abs(steps); i++) {
+      const expectedNow = current + (up ? i : -i);
+      await guardedClick(page, button, {
+        what: up ? "the line's increase-quantity control" : "the line's decrease-quantity control",
+        label: up ? /^Increase quantity by one\b/i : /^Decrease quantity by one\b/i,
+      });
+      // The stepper records the applied value on the line; wait for it before the next click.
+      const wanted = String(expectedNow + (up ? 1 : -1));
+      await page.page
+        .waitForFunction(
+          ([selector, value]) => {
+            const doc = (
+              globalThis as unknown as {
+                document: {
+                  querySelector(s: string): { getAttribute(n: string): string | null } | null;
+                };
+              }
+            ).document;
+            return doc.querySelector(selector as string)?.getAttribute("data-old-value") === value;
+          },
+          [line, wanted] as const,
+          { timeout: 8000 },
+        )
+        .catch(() => {});
+      await new Promise((r) => setTimeout(r, 900));
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+    const after = await loadCart(page);
+    const now = after.active_items.find((i) => i.item_id === itemId)?.quantity ?? null;
+    const result = { before: cartState(before), after: cartState(after), item: describe };
+    if (now !== target) {
+      throw new RfError(
+        "internal",
+        `the quantity is ${now ?? "unknown"} after the change, not ${target}; the observed cart state is attached`,
+        { details: result },
+      );
+    }
+    return { changed: true, ...result };
+  });
+};
