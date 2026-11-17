@@ -9,7 +9,7 @@ import type {
   Updater,
 } from "./interfaces.ts";
 import { createBrowserController } from "./browser-controller.ts";
-import { pairCommand, setupCommand } from "./commands/operator.ts";
+import { doctorCommand, pairCommand, setupCommand } from "./commands/operator.ts";
 import { createRouter } from "./flows/index.ts";
 import { hubClientFactory } from "./hub-client.ts";
 import { createUpdater } from "./updater/index.ts";
@@ -81,6 +81,7 @@ export const createServices: CreateServices = (deps) => {
     ...stubCommands,
     setup: (options, io) => setupCommand(operator, options, io),
     pair: (options, io) => pairCommand(operator, options, io),
+    doctor: (options, io) => doctorCommand(operator, options, io),
   };
   if (!deps.config) {
     return {

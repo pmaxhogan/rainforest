@@ -198,3 +198,67 @@ export async function pairCommand(
   io.out("paired. Start the daemon with `rainforestd install`.");
   return 0;
 }
+
+/**
+ * `rainforestd doctor`: quick health report. Read-only; `--live` additionally asks the
+ * browser extension to connect (no page is loaded).
+ */
+export async function doctorCommand(
+  deps: OperatorDeps,
+  options: { live: boolean },
+  io: CliIo,
+): Promise<number> {
+  let failures = 0;
+  const line = (ok: boolean | null, what: string, detail = ""): void => {
+    if (ok === false) failures++;
+    io.out(`${ok === null ? "info" : ok ? "ok  " : "FAIL"} ${what}${detail ? ` - ${detail}` : ""}`);
+  };
+  const config = tryConfig(deps.paths);
+  line(config !== null, "config", config ? "" : "run `rainforestd setup`");
+  if (!config) return 1;
+  line(
+    !config.device_id.startsWith(UNPAIRED_PREFIX),
+    "paired",
+    config.device_id.startsWith(UNPAIRED_PREFIX) ? "run `rainforestd pair`" : "",
+  );
+  line(loadSecrets(deps.paths) !== null, "extension token stored");
+  try {
+    const response = await fetch(`${config.hub_url.replace(/\/+$/, "")}/healthz`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = (await response.json()) as { ok?: boolean; configured?: boolean };
+    line(
+      response.ok && body.ok === true && body.configured === true,
+      "hub reachable and configured",
+    );
+  } catch {
+    line(false, "hub reachable and configured", "no answer from the hub");
+  }
+  const listening = await portInUse(config.broker.port);
+  line(
+    listening,
+    `broker port ${config.broker.port} is listening`,
+    config.broker.mode === "embedded" ? "the running daemon owns it" : "external broker",
+  );
+  if (options.live && config.broker.mode === "external" && listening) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${config.broker.port}/status`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      const body = (await response.json()) as {
+        extensions?: { extensionId?: string; token?: string }[];
+      };
+      const mine = (body.extensions ?? []).filter(
+        (e) => e.extensionId === config.chrome.extension_id,
+      );
+      line(mine.length > 0, "extension connected to the broker");
+      line(
+        mine.some((e) => Boolean(e.token)),
+        "extension has a token",
+      );
+    } catch {
+      line(false, "broker status");
+    }
+  }
+  return failures === 0 ? 0 : 1;
+}
