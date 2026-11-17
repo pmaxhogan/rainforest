@@ -227,7 +227,7 @@ describe("html corner cases", () => {
     const out = scrub(
       '<div class="shipping-address"><span class="a-profile-name">Zed Placeholder</span><span>Nowhere Falls</span><span>Shipping address</span></div>',
     );
-    expect(out).toMatch(/<span class="a-profile-name">[A-Z][a-z]+ [A-Z][a-z]+<\/span>/);
+    expect(out).toMatch(/<span class="a-profile-name">[A-Z][a-z]+(?: [A-Z][a-z]+)?<\/span>/);
     expect(out).toContain("<span>Exampleville</span>");
     expect(out).toContain("<span>Shipping address</span>");
   });

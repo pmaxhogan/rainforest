@@ -80,7 +80,52 @@ function scrubString(v: string, key: string | null, ctx: ScrubContext): string {
   return scrubText(v, ctx);
 }
 
+/** Card last digits under any of these keys are always "0000" (or 0). */
+const CARD_DIGITS_KEY = /^(?:last(?:4|four|digits|fourdigits)|tail|cardtail|panlast4)$/i;
+/** Card expiry under these keys is always one fixed fake date. */
+const EXPIRY_KEY = /expir|^exp(?:month|year|date)?$/i;
+const FAKE_EXPIRY = { year: 2030, month: 1 } as const;
+/** A long number under an id-like key is an account id: an obvious placeholder instead. */
+const ID_KEY = /(?:id|Id|ID)$/;
+
+function placeholderNumber(digits: number, ctx: ScrubContext): number {
+  ctx.count("id");
+  return Number(`9${"0".repeat(Math.max(0, digits - 2))}1`);
+}
+
 export function scrubJson(value: unknown, ctx: ScrubContext, key: string | null = null): unknown {
+  if (
+    key !== null &&
+    CARD_DIGITS_KEY.test(key) &&
+    (typeof value === "string" || typeof value === "number")
+  ) {
+    ctx.count("card");
+    return typeof value === "number" ? 0 : "0000";
+  }
+  if (key !== null && EXPIRY_KEY.test(key)) {
+    ctx.count("card");
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(value as object)) {
+        out[scrubKey(k, ctx)] = /year/i.test(k)
+          ? FAKE_EXPIRY.year
+          : /month/i.test(k)
+            ? FAKE_EXPIRY.month
+            : null;
+      }
+      return out;
+    }
+    if (typeof value === "number") return /month/i.test(key) ? FAKE_EXPIRY.month : FAKE_EXPIRY.year;
+    if (typeof value === "string") return "01/30";
+  }
+  if (key !== null && ID_KEY.test(key)) {
+    if (typeof value === "number" && Number.isInteger(value) && Math.abs(value) >= 1_000_000) {
+      return placeholderNumber(String(Math.abs(value)).length, ctx);
+    }
+    if (typeof value === "string" && /^\d{7,}$/.test(value)) {
+      return String(placeholderNumber(value.length, ctx));
+    }
+  }
   if (typeof value === "string") return scrubString(value, key, ctx);
   if (typeof value === "number") {
     if (key !== null && ZIP_KEY.test(key)) {

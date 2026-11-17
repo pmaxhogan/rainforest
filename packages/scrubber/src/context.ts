@@ -101,6 +101,12 @@ export interface ScrubContext {
   scaleAmount(intPart: string, frac: string | undefined): string;
   /** A lone digit: 0 and 1 unchanged, 2..9 through one random permutation per fixture. */
   permDigit(d: string): string;
+  /**
+   * A year used as a FILTER value (order-history "year-NNNN"): moved by its own seeded
+   * offset of 3..9 years either way, independent of the date shift, before the normal year
+   * shift applies, so the filter year has no fixed relation to the page dates or real years.
+   */
+  filterYear(y: number): number;
   /** Memo for whole strings, so a repeated title scrubs the same way everywhere. */
   readonly memo: Map<string, string>;
   /** Account-scoped id values seen in ID_PARAMS anywhere in the capture (see scrub.ts). */
@@ -224,9 +230,19 @@ export function createContext(material: string, capturedAt: string): ScrubContex
     return perm[Number(d) - 2] ?? d;
   };
 
+  // Drawn so that, combined with the date shift's whole years, a filter year never lands
+  // within 3 years of the real one.
+  const shiftYears = Math.round(shiftDays / 365.2425);
+  let filterOffset = 0;
+  for (let k = 0; k < 64 && Math.abs(filterOffset + shiftYears) < 3; k++) {
+    filterOffset = int(3, 9) * (int(0, 1) === 0 ? -1 : 1);
+  }
+  if (Math.abs(filterOffset + shiftYears) < 3) filterOffset = shiftYears >= 0 ? 3 : -3;
+
   return {
     rand,
     int,
+    filterYear: (y: number) => y + filterOffset,
     scaleAmount,
     permDigit,
     pick: <T>(list: readonly T[]): T => list[int(0, list.length - 1)] as T,

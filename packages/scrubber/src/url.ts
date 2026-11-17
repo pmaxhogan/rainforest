@@ -41,6 +41,11 @@ function scrubSegment(seg: string, prev: string, ctx: ScrubContext): string {
     return ctx.fakeOrderId(dec);
   }
   if (SEGMENTS.has(lower)) return seg;
+  if (/^\d{4,}$/.test(dec)) {
+    // A numeric id in a path (a browse node, a category) says what was browsed.
+    ctx.count("path_segment");
+    return "1" + "0".repeat(dec.length - 1);
+  }
   if (/^ref=/i.test(dec)) return "ref=rf";
   ctx.count("path_segment");
   // Product slugs are titles: synthesize word by word, keeping the separators.
@@ -71,6 +76,11 @@ function scrubQuery(params: URLSearchParams, ctx: ScrubContext): string {
       ctx.count("asin");
     } else if (policy === "keep") {
       v = scrubTokens(value, ctx);
+    } else if (name === "timeFilter") {
+      v = scrubText(
+        value.replace(/(?:19|20)\d{2}/g, (y) => String(ctx.filterYear(Number(y)))),
+        ctx,
+      );
     } else {
       v = scrubText(value, ctx);
     }
