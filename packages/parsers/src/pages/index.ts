@@ -10,6 +10,15 @@ export {
   type ListsIndexPage,
 } from "./lists.ts";
 export { MEDIA_HOST_SUFFIXES, parseMedia, safeMediaUrl, type MediaData } from "./media.ts";
+export {
+  computeOfferFlags,
+  isOfferOutOfStock,
+  offerFlagContext,
+  parseOffers,
+  type Offer,
+  type OfferInternal,
+  type OffersData,
+} from "./offers.ts";
 export { parseOrderDetails, type OrderDetails } from "./order-details.ts";
 export { parseOrderList, type OrderCard, type OrderListPage } from "./order-list.ts";
 export {
@@ -30,5 +39,7 @@ export {
   type ReviewSummary,
   type ReviewsPage,
 } from "./reviews.ts";
+export { parseProduct, type ProductPage } from "./product.ts";
+export { parseSearch, type SearchPage } from "./search.ts";
 export { parseSubscriptions, type SubscriptionsPage } from "./subscriptions.ts";
 export { parseVariants, type VariantsData } from "./variants.ts";

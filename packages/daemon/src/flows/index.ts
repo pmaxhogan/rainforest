@@ -7,6 +7,7 @@ import type { Flow } from "./common.ts";
 import { getList, listLists } from "./lists.ts";
 import { getInvoice, getOrder, listOrders } from "./orders.ts";
 import { getPriceHistory } from "./price.ts";
+import { getBuyingOptions, getProduct, search } from "./shopping.ts";
 
 /**
  * Typed flows only: each tool name maps to one function. There is no generic
@@ -22,6 +23,9 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   list_lists: listLists,
   get_list: getList,
   get_price_history: getPriceHistory,
+  search,
+  get_product: getProduct,
+  get_buying_options: getBuyingOptions,
   get_variants: getVariants,
   get_media: getMedia,
   get_reviews: getReviews,
