@@ -14,9 +14,9 @@ edits to your cart and lists:
 
 - Search, product pages, variants, buying options, media, reviews and price history.
 - Your cart, orders, invoices, Subscribe & Save, lists, browsing history and recent searches.
-- Cart edits (add, remove, save for later, move back, delete a saved item) and removing an item
-  from a list, with cart adds always done in two steps. Other list edits and changing a cart
-  quantity are planned.
+- Cart edits (add, change a line's quantity, remove, save for later, move back, delete a saved
+  item) and removing an item from a list, with cart adds always done in two steps. Other list
+  edits are planned.
 
 It deliberately cannot:
 
@@ -44,20 +44,20 @@ Early (version 0.1), but most of the registry is built. This section is the one 
 repository documentation that tracks it, together with the Status table in docs/TOOLS.md; check
 `FLOWS` in `packages/daemon/src/flows/index.ts` for the tools the daemon implements today.
 
-| Area                                                                                                                                                 | State                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker: OAuth, consent, MCP endpoint, pairing                                                                                                        | Implemented                                                                                                                                                                        |
-| Worker: Hub Durable Object, admin page (pairings, devices, clients), audit                                                                           | Implemented                                                                                                                                                                        |
-| Daemon: hub client, supervisor, presence, audit                                                                                                      | Implemented                                                                                                                                                                        |
-| Daemon: autostart (LaunchAgent / Scheduled Task)                                                                                                     | Implemented; the Windows hidden launch is unverified                                                                                                                               |
-| Daemon: signed self-update with rollback, install from an unpacked release                                                                           | Implemented                                                                                                                                                                        |
-| Rails: URL policy, network guard, navigation guard, click guard, pacing                                                                              | Implemented                                                                                                                                                                        |
-| Read tools (17), including search, orders, lists, reviews and price history                                                                          | Implemented                                                                                                                                                                        |
-| Write tools: `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`; hand-off `show_on_screen` | Implemented                                                                                                                                                                        |
-| Planned tools and options                                                                                                                            | Planned: `set_cart_quantity`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, coupon clipping (the daemon answers `unsupported`) |
-| `rainforestd doctor`                                                                                                                                 | Implemented                                                                                                                                                                        |
-| `rainforestd capture`                                                                                                                                | Placeholder: the command exists but exits 1                                                                                                                                        |
-| Mock storefront and end-to-end suite                                                                                                                 | Implemented (`npm run test:e2e`); informational in CI                                                                                                                              |
+| Area                                                                                                                                                 | State                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker: OAuth, consent, MCP endpoint, pairing                                                                                                        | Implemented                                                                                                                                                   |
+| Worker: Hub Durable Object, admin page (pairings, devices, clients), audit                                                                           | Implemented                                                                                                                                                   |
+| Daemon: hub client, supervisor, presence, audit                                                                                                      | Implemented                                                                                                                                                   |
+| Daemon: autostart (LaunchAgent / Scheduled Task)                                                                                                     | Implemented; the Windows hidden launch is unverified                                                                                                          |
+| Daemon: signed self-update with rollback, install from an unpacked release                                                                           | Implemented                                                                                                                                                   |
+| Rails: URL policy, network guard, navigation guard, click guard, pacing                                                                              | Implemented                                                                                                                                                   |
+| Read tools (17), including search, orders, lists, reviews and price history                                                                          | Implemented                                                                                                                                                   |
+| Write tools: `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`; hand-off `show_on_screen` | Implemented                                                                                                                                                   |
+| Planned tools and options                                                                                                                            | Planned: `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, coupon clipping (the daemon answers `unsupported`) |
+| `rainforestd doctor`                                                                                                                                 | Implemented                                                                                                                                                   |
+| `rainforestd capture`                                                                                                                                | Placeholder: the command exists but exits 1                                                                                                                   |
+| Mock storefront and end-to-end suite                                                                                                                 | Implemented (`npm run test:e2e`); informational in CI                                                                                                         |
 
 Nothing here has been security audited. Read docs/SECURITY.md before connecting an account you
 care about.
@@ -147,8 +147,8 @@ arguments, results and errors are in docs/TOOLS.md.
 
 **Writes**
 
-- `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item` - cart
-  edits (implemented). `set_cart_quantity` is planned.
+- `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`,
+  `delete_saved_item` - cart edits (implemented).
 - `remove_from_list` - list edits (implemented). `create_list`, `update_list`, `delete_list`,
   `add_to_list`, `update_list_item`, `move_list_item` are planned.
 

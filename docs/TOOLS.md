@@ -10,8 +10,8 @@ heading form for tools only.
 
 ## Status
 
-The registry describes 35 tools. Four are answered by the hub, 24 are implemented in the daemon
-(exactly the keys of `FLOWS` in `packages/daemon/src/flows/index.ts`) and 7 are planned. This table
+The registry describes 35 tools. Four are answered by the hub, 25 are implemented in the daemon
+(exactly the keys of `FLOWS` in `packages/daemon/src/flows/index.ts`) and 6 are planned. This table
 is the one place that records which; check `FLOWS` for the current set.
 
 | Where it runs      | Tools                                                                                                                                                                                                                                                                                     | State                                                                                                                            |
@@ -19,8 +19,8 @@ is the one place that records which; check `FLOWS` for the current set.
 | Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented                                                                                                                      |
 | Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                                                                      |
 | Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                          | Implemented                                                                                                                      |
-| Daemon, writes     | `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`                                                                                                                                                                              | Implemented                                                                                                                      |
-| Planned            | `set_cart_quantity`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`; coupon clipping (the `clip_coupon` option of `add_to_cart`)                                                                                                        | Planned: the daemon answers `unsupported` ("is not available in this daemon version yet"); `clip_coupon` is accepted and ignored |
+| Daemon, writes     | `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`                                                                                                                                                         | Implemented                                                                                                                      |
+| Planned            | `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`; coupon clipping (the `clip_coupon` option of `add_to_cart`)                                                                                                                             | Planned: the daemon answers `unsupported` ("is not available in this daemon version yet"); `clip_coupon` is accepted and ignored |
 
 The sections of planned tools below restate the registry's intent, not behavior you can rely on,
 and their error lists are labeled "Expected errors". Every other section describes what the code
@@ -748,7 +748,7 @@ pacing class, which is also the class the registry names.
 > gone (offer_gone), its price or seller changed (price_changed, seller_changed), it is out of stock
 > (out_of_stock, never addable), or it carries flags not all listed in `acknowledge` (flags; details
 > list the flags and up to 8 alternatives). Adds exactly one unit: quantity above 1 is not applied
-> yet, and coupon clipping is not implemented yet. purchase_type subscribe_and_save is always
+> yet (set_cart_quantity changes the quantity afterwards), and coupon clipping is not implemented yet. purchase_type subscribe_and_save is always
 > refused with blocked_by_policy, because a subscription is a recurring order; use show_on_screen to
 > finish one by hand. Result: {changed, before, after, added, acknowledged_flags, declined_upsells,
 > quantity_note}: before/after are cart states, added is the cart line (its item_id works with the
@@ -787,7 +787,7 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
   points to `show_on_screen`. `one_time` is the only type that works.
 - **One unit per call.** `quantity` is used when computing the quantity-related flags, but one unit
   is added; the result says so in `quantity_note`. Changing the quantity afterwards needs
-  `set_cart_quantity`, which is planned.
+  `set_cart_quantity`.
 - **`clip_coupon` is planned.** It is accepted and ignored.
 
 The flow first checks that three page loads fit the pacing budget (otherwise `throttled`). It then
@@ -802,8 +802,7 @@ retried, answers any upsell with its decline control, reads the cart again and f
 
 ### `set_cart_quantity`
 
-> Set the quantity of a cart item (item_id from get_cart). Not implemented yet in this version;
-> answers unsupported.
+> Set the quantity of a cart item (item_id from get_cart) with the line's own quantity stepper, one click per unit, then re-read the cart. At most 20 units of change per call (a larger jump fails with invalid_arguments), and never below 1: use remove_from_cart to remove the item. Returns {changed, before, after, item}: changed is false when the quantity already matches (nothing is clicked), before/after are cart states, item is the cart line.
 
 Kind: runs on a computer; changes state; pacing: cart.
 
@@ -811,13 +810,25 @@ Kind: runs on a computer; changes state; pacing: cart.
 | ---------- | ------------------------------------- | -------- | ------------------------------------------------ |
 | `browser`  | string (max 64 chars)                 | no       | Browser id, name or alias; see Browser selection |
 | `item_id`  | string (8 to 64 chars, A-Z a-z 0-9 -) | yes      | Cart line id from get_cart                       |
-| `quantity` | integer 1..999                        | yes      |                                                  |
+| `quantity` | integer 1..999                        | yes      | The wanted quantity                              |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** `{ changed, before, after, item }`: `before` and `after` are cart states (active lines
+with `item_id`, `asin`, `title`, `quantity`, `price`, the saved lines and the subtotal) and `item`
+is `{ item_id, asin, title }`. When the quantity already equals the wanted one, `changed` is false,
+`before` and `after` are the same and nothing is clicked.
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments` (the wanted quantity differs from the current one by more than 20,
+or `item_id` is malformed), `not_found` (no such item in the active cart; the message says when it
+is in Saved for later), `needs_human`, `throttled`, `layout_unrecognized`, `internal` (the cart did
+not end at the wanted quantity; observed state attached), `timeout`.
 
-**Notes.** `item_id` comes from `get_cart`.
+**Notes.** `item_id` comes from `get_cart`. The flow reads the cart, then clicks the line's
+increase or decrease control (its description must say "Increase quantity by one" or "Decrease
+quantity by one") through the click guard once per unit, waiting for the line to record each
+applied step, and reads the cart again. The quantity never goes below 1, because the last
+decrement on the real page would delete the line; use `remove_from_cart` for that. A line whose
+quantity is capped by the retailer (a per-customer limit) ends below the wanted value and fails
+with `internal`.
 
 ### `remove_from_cart`
 

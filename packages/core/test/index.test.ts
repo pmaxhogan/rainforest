@@ -115,7 +115,6 @@ describe("tool registry", () => {
 
 // Hardcoded on purpose: a tool leaves this list only when its daemon flow ships.
 const UNIMPLEMENTED = [
-  "set_cart_quantity",
   "create_list",
   "update_list",
   "delete_list",

@@ -433,7 +433,7 @@ export const TOOLS: readonly ToolDef[] = [
       "Adds nothing and fails with needs_choice (details.reason) when the offer is gone (offer_gone), its price or " +
       "seller changed (price_changed, seller_changed), it is out of stock (out_of_stock, never addable), or it " +
       "carries flags not all listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). " +
-      "Adds exactly one unit: quantity above 1 is not applied yet, and coupon clipping is not implemented yet. " +
+      "Adds exactly one unit: quantity above 1 is not applied yet (set_cart_quantity changes the quantity afterwards), and coupon clipping is not implemented yet. " +
       "purchase_type subscribe_and_save is always refused with blocked_by_policy, because a subscription is a " +
       "recurring order; use show_on_screen to finish one by hand. Result: {changed, before, after, added, " +
       "acknowledged_flags, declined_upsells, quantity_note}: before/after are cart states, added is the cart line " +
@@ -466,7 +466,11 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "cart",
     description:
-      "Set the quantity of a cart item (item_id from get_cart)." + NOT_IMPLEMENTED_SUFFIX,
+      "Set the quantity of a cart item (item_id from get_cart) with the line's own quantity stepper, one click " +
+      "per unit, then re-read the cart. At most 20 units of change per call (a larger jump fails with " +
+      "invalid_arguments), and never below 1: use remove_from_cart to remove the item. Returns {changed, " +
+      "before, after, item}: changed is false when the quantity already matches (nothing is clicked), " +
+      "before/after are cart states, item is the cart line.",
     input: z.object({
       browser,
       item_id: cartItemId,
