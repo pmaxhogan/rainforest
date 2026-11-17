@@ -68,7 +68,7 @@ export function guardPendingUpdate(root: string, now: number = Date.now()): stri
   const pending = state.pending;
   if (!pending || typeof pending.version !== "string" || typeof pending.previous !== "string")
     return null;
-  let current = "";
+  let current: string;
   try {
     current = readFileSync(join(root, "current"), "utf8").trim();
   } catch {
