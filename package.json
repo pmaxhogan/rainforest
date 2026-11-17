@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/worker",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

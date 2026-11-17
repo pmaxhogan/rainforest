@@ -1,0 +1,22 @@
+{
+  // Identity-free on purpose: no account id, no route, no hostname. The account comes
+  // from the deploy environment, the hostname from the deploy command (--domain), and
+  // everything owner-specific from Worker secrets. See docs/SETUP.md.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "rainforest-hub",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "ratelimits": [
+    { "name": "RL_STRICT", "namespace_id": "4711", "simple": { "limit": 10, "period": 60 } },
+    { "name": "RL_PUBLIC", "namespace_id": "4712", "simple": { "limit": 60, "period": 60 } },
+  ],
+  "observability": { "enabled": true },
+}

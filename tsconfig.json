@@ -12,5 +12,6 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "*.ts"],
+  "exclude": ["packages/worker"]
 }
