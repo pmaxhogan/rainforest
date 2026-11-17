@@ -161,6 +161,30 @@ describe("pages parse", () => {
     for (const i of r.data.active_items) expect(i.item_id).toMatch(/^[A-Za-z0-9-]{8,64}$/);
   });
 
+  it("cart markup matches the real controls: stepper, hidden quantity box, hidden duplicate", async () => {
+    const html = await c.html("/gp/cart/view.html");
+    const r = parseCart(await c.capture("cart", "/gp/cart/view.html"));
+    for (const i of r.data.active_items) {
+      const box = new RegExp(
+        `<span[^>]*sc-action-quantity[^>]*data-itemid="${i.item_id}"[^>]*data-old-value="${i.quantity}"`,
+      );
+      expect(html).toMatch(box);
+      expect(html).toContain(`name="submit.delete-active.${i.item_id}"`);
+    }
+    expect(html).not.toContain('<select name="quantity"');
+    expect(html).toMatch(
+      /data-action="a-stepper-decrement" data-a-selector="decrement" aria-label="Decrease quantity by one, Quantity is 1, /,
+    );
+    expect(html).toMatch(
+      /data-action="a-stepper-increment" data-a-selector="increment" aria-label="Increase quantity by one, Quantity is 2, /,
+    );
+    expect(html).toMatch(/<input name="quantityBox" type="number" value="2"/);
+    const saved = r.data.saved_items[0]!;
+    const moves = html.split(`name="submit.move-to-cart.${saved.item_id}"`).length - 1;
+    expect(moves).toBe(2);
+    expect(html).toMatch(/class="sc-hidden" style="display:none"><div data-action="move-to-cart">/);
+  });
+
   it("lists index and list", async () => {
     const index = parseListsIndex(await c.capture("lists_index", "/hz/wishlist/ls"));
     expect(index.meta.unparsed_text_chars).toBe(0);

@@ -299,8 +299,11 @@ async function route(ctx: Ctx): Promise<void> {
     for (const key of form.keys()) {
       const m =
         /^submit\.(delete-active|delete|save-for-later|move-to-cart|delete-saved)\.(.+)$/.exec(key);
-      if (m)
-        return mutated(ctx, cartAction(session, m[1] as CartAction, m[2]!), "/gp/cart/view.html");
+      if (m) {
+        // The real site names the active line's control delete-active; the state calls it delete.
+        const action = (m[1] === "delete-active" ? "delete" : m[1]) as CartAction;
+        return mutated(ctx, cartAction(session, action, m[2]!), "/gp/cart/view.html");
+      }
     }
     return mutated(ctx, { ok: false, message: "Unknown cart action." }, "/gp/cart/view.html");
   }

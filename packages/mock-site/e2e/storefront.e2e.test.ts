@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, test 
 import { RfError } from "@rainforest/core";
 import { MIN_GAP_MS, rawClient } from "@rainforest/browser";
 import { guardedClick } from "../../daemon/src/flows/click-guard.ts";
+import { MAX_QUANTITY_STEPS } from "../../daemon/src/flows/cart-writes.ts";
 import { FastPacer, PlainTab, STOREFRONT, startHarness, type Harness } from "./harness.ts";
 
 /**
@@ -356,9 +357,84 @@ if (!start.ok) {
       expect(await quantityOf("B0FAKE00P1")).toBe(0);
     });
 
-    test.todo(
-      "set_cart_quantity (flow not built yet): select[data-mock-quantity] -> /cart/ref=ox_sc_update_quantity",
-    );
+    describe("set_cart_quantity", () => {
+      type QtyResult = {
+        changed: boolean;
+        before: { active: { item_id: string; quantity: number | null }[] };
+        after: { active: { item_id: string; quantity: number | null }[] };
+      };
+      // The seeded cart holds B0FAKE0003 with quantity 2 (no per-customer limit).
+      const line = async (): Promise<{ item_id: string; quantity: number }> => {
+        await ids(); // seeds the session
+        return (await h.state()).session!.cart.active.find((x) => x.asin === "B0FAKE0003")!;
+      };
+      const stored = async (itemId: string): Promise<number | undefined> =>
+        (await h.state()).session!.cart.active.find((x) => x.item_id === itemId)?.quantity;
+
+      it("increases by two with one stepper click per unit", async () => {
+        const l = await line();
+        expect(l.quantity).toBe(2);
+        const posts = (await h.state()).hits.filter((x) => x.method === "POST").length;
+        const r = (await h.call("set_cart_quantity", {
+          item_id: l.item_id,
+          quantity: 4,
+        })) as QtyResult;
+        expect(r.changed).toBe(true);
+        expect(r.before.active.find((i) => i.item_id === l.item_id)?.quantity).toBe(2);
+        expect(r.after.active.find((i) => i.item_id === l.item_id)?.quantity).toBe(4);
+        expect(await stored(l.item_id)).toBe(4);
+        expect((await h.state()).hits.filter((x) => x.method === "POST").length - posts).toBe(2);
+      });
+
+      it("decreases by one", async () => {
+        const l = await line();
+        const r = (await h.call("set_cart_quantity", {
+          item_id: l.item_id,
+          quantity: 1,
+        })) as QtyResult;
+        expect(r.changed).toBe(true);
+        expect(r.after.active.find((i) => i.item_id === l.item_id)?.quantity).toBe(1);
+        expect(await stored(l.item_id)).toBe(1);
+      });
+
+      it("the same value is changed:false and clicks nothing", async () => {
+        const l = await line();
+        const posts = (await h.state()).hits.filter((x) => x.method === "POST").length;
+        const r = (await h.call("set_cart_quantity", {
+          item_id: l.item_id,
+          quantity: 2,
+        })) as QtyResult;
+        expect(r.changed).toBe(false);
+        expect(await stored(l.item_id)).toBe(2);
+        expect((await h.state()).hits.filter((x) => x.method === "POST").length).toBe(posts);
+      });
+
+      it("a jump larger than MAX_QUANTITY_STEPS is invalid_arguments and changes nothing", async () => {
+        const l = await line();
+        await expectRefusal(
+          () =>
+            h.call("set_cart_quantity", {
+              item_id: l.item_id,
+              quantity: 2 + MAX_QUANTITY_STEPS + 1,
+            }),
+          "invalid_arguments",
+        );
+        expect(await stored(l.item_id)).toBe(2);
+      });
+
+      it("an unknown item is not_found", async () => {
+        await line();
+        await expectRefusal(
+          () =>
+            h.call("set_cart_quantity", {
+              item_id: "00000000-0000-0000-0000-000000000000",
+              quantity: 3,
+            }),
+          "not_found",
+        );
+      });
+    });
+
     test.todo("create_list (flow not built yet): #createList popover -> POST /hz/wishlist/create");
     test.todo(
       "update_list (flow not built yet): #editYourList settings popover -> POST /hz/wishlist/settings/<ID>",

@@ -15,13 +15,18 @@ function sellerLines(line: CartLine): string {
   return `<li data-csa-c-content-id="seller" role="presentation"><span class="a-list-item"><span class="a-size-small a-color-secondary sc-seller">Sold by: ${esc(offer.seller)}</span></span></li>`;
 }
 
-function quantitySelect(line: CartLine): string {
+/**
+ * The real site's quantity stepper: the container carries the item id and the applied
+ * quantity (`data-old-value`); each click on a button applies one unit (the page script
+ * posts the change, then the content is re-rendered, which updates `data-old-value` and the
+ * labels). A hidden number input holds the value, as on the real page.
+ */
+function quantityStepper(line: CartLine): string {
   const p = product(line.asin);
-  const max = p?.limit ?? 10;
-  let options = "";
-  for (let n = 1; n <= max; n++)
-    options += `<option value="${n}"${n === line.quantity ? " selected" : ""}>${n}</option>`;
-  return `<span class="sc-action-quantity"><select name="quantity" data-mock-quantity="${esc(line.itemId)}" aria-label="Quantity">${options}</select></span>`;
+  const title = esc(p?.title ?? line.asin);
+  const id = esc(line.itemId);
+  const n = line.quantity;
+  return `<span class="a-declarative sc-action-quantity" data-itemid="${id}" data-old-value="${n}"><input name="quantityBox" type="number" value="${n}" min="0" ${HIDDEN}><span class="a-button a-button-small"><span class="a-button-inner"><button type="button" data-action="a-stepper-decrement" data-a-selector="decrement" aria-label="Decrease quantity by one, Quantity is ${n}, ${title}">-</button></span></span><span class="a-button-text" data-a-selector="value">${n}</span><span class="a-button a-button-small"><span class="a-button-inner"><button type="button" data-action="a-stepper-increment" data-a-selector="increment" aria-label="Increase quantity by one, Quantity is ${n}, ${title}">+</button></span></span></span>`;
 }
 
 function lineHtml(session: Session, line: CartLine, list: "active" | "saved"): string {
@@ -32,10 +37,12 @@ function lineHtml(session: Session, line: CartLine, list: "active" | "saved"): s
   const prefix = list === "saved" ? "sc-saved" : "sc-item";
   const controls =
     list === "active"
-      ? `${quantitySelect(line)}<span data-action="delete" class="sc-action-delete"><span class="a-declarative" data-action="sc-item-action" data-sc-item-action='{"action":"delete","itemID":"${esc(id)}","itemType":"active"}'><input name="submit.delete-active.${esc(id)}" value="Delete" data-action="delete" type="submit"></span></span>` +
+      ? `${quantityStepper(line)}<span data-action="delete" class="sc-action-delete"><span class="a-declarative" data-action="sc-item-action" data-sc-item-action='{"action":"delete","itemID":"${esc(id)}","itemType":"active"}'><input name="submit.delete-active.${esc(id)}" value="Delete" data-action="delete" type="submit"></span></span>` +
         `<span data-action="save-for-later" class="sc-action-save-for-later"><input name="submit.save-for-later.${esc(id)}" value="Save for later" data-action="save-for-later" type="submit"></span>`
       : `<span data-action="delete-saved"><input name="submit.delete-saved.${esc(id)}" data-action="delete-saved" value="Delete" type="submit"></span>` +
-        `<div data-action="move-to-cart"><input name="submit.move-to-cart.${esc(id)}" data-action="move-to-cart" value="Move to cart" type="submit"></div>`;
+        `<div data-action="move-to-cart"><input name="submit.move-to-cart.${esc(id)}" data-action="move-to-cart" value="Move to cart" type="submit"></div>` +
+        // A repeated copy inside a hidden layout, like the real page: only the visible one counts.
+        `<div class="sc-hidden" style="display:none"><div data-action="move-to-cart"><input name="submit.move-to-cart.${esc(id)}" data-action="move-to-cart" value="Move to cart" type="submit"></div></div>`;
   const tail = [
     `<li role="presentation"><span class="a-list-item"><span data-csa-c-content-id="availability" class="a-size-small a-color-success sc-product-availability">In Stock</span></span></li>`,
     sellerLines(line),

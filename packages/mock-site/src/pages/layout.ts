@@ -63,13 +63,17 @@ const CLIENT_JS = `(function () {
     var body = new URLSearchParams(submitter ? new FormData(form, submitter) : new FormData(form));
     post(form.getAttribute("action"), body).then(after);
   });
-  document.addEventListener("change", function (e) {
-    var s = e.target;
-    if (!s.matches || !s.matches("select[data-mock-quantity]")) return;
-    var body = new URLSearchParams({ action: "update-quantity", itemID: s.getAttribute("data-mock-quantity"), quantity: s.value });
-    post("/cart/ref=ox_sc_update_quantity", body).then(after);
-  });
   document.addEventListener("click", function (e) {
+    var step = e.target.closest && e.target.closest("button[data-action^='a-stepper-']");
+    if (step) {
+      e.preventDefault();
+      var box = step.closest(".sc-action-quantity");
+      var up = step.getAttribute("data-action") === "a-stepper-increment";
+      var next = Number(box.getAttribute("data-old-value")) + (up ? 1 : -1);
+      var body = new URLSearchParams({ action: "update-quantity", itemID: box.getAttribute("data-itemid"), quantity: String(next) });
+      post("/cart/ref=ox_sc_update_quantity", body).then(after);
+      return;
+    }
     var t = e.target.closest && e.target.closest("[data-mock-popover]");
     if (t) {
       e.preventDefault();
