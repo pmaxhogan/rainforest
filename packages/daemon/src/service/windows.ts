@@ -187,7 +187,11 @@ export function createWindowsService(deps: WindowsServiceDeps): ServiceManager {
       } finally {
         rmSync(xmlPath, { force: true });
       }
-      if (options.start !== false) await run();
+      if (options.start !== false) {
+        // Re-installing over a running task must restart it, or the old version keeps running.
+        await schtasks(["/End", "/TN", taskName]);
+        await run();
+      }
     },
 
     async uninstall() {

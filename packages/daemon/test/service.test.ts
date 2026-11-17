@@ -279,7 +279,9 @@ describe("Windows scheduled task", () => {
     expect(create.args).toContain("/F");
     expect(create.args[create.args.indexOf("/TN") + 1]).toBe(WINDOWS_TASK_NAME);
     expect([...create.xml.subarray(0, 2)]).toEqual([0xff, 0xfe]);
-    expect(seen[1]?.args).toEqual(["/Run", "/TN", WINDOWS_TASK_NAME]);
+    // A running task is ended first so a re-install restarts it on the new version.
+    expect(seen[1]?.args).toEqual(["/End", "/TN", WINDOWS_TASK_NAME]);
+    expect(seen[2]?.args).toEqual(["/Run", "/TN", WINDOWS_TASK_NAME]);
     expect(existsSync(join(paths.root, "service-task.xml"))).toBe(false);
 
     seen.length = 0;
