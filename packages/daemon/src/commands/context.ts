@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defaultExec, type Exec } from "../exec.ts";
 import type { CliIo, CreateServices } from "../interfaces.ts";
@@ -15,6 +16,18 @@ import { DAEMON_VERSION, IS_BUNDLED } from "../version.ts";
 import { createServices } from "../wiring.ts";
 
 /** Everything a command needs, injected so tests never touch the real home, launchd or schtasks. */
+/**
+ * The Node binary the autostart service should run. Version managers hand each shell a
+ * temporary alias directory that disappears with the shell, so resolve the real file.
+ */
+export function stableNodePath(execPath: string = process.execPath): string {
+  try {
+    return realpathSync(execPath);
+  } catch {
+    return execPath;
+  }
+}
+
 export interface CliContext {
   paths: AppPaths;
   platform: Platform;
@@ -65,7 +78,7 @@ export function defaultContext(
     exec,
     io,
     version: DAEMON_VERSION,
-    nodePath: process.execPath,
+    nodePath: stableNodePath(),
     mainEntry: fileURLToPath(new URL(IS_BUNDLED ? import.meta.url : "../main.ts", import.meta.url)),
     launcherSource,
     createServices,
@@ -74,7 +87,7 @@ export function defaultContext(
         platform: pe.platform,
         paths,
         exec,
-        nodePath: process.execPath,
+        nodePath: stableNodePath(),
         launcherPath: paths.launcherFile,
         ...(pe.env.RAINFOREST_HOME ? { homeOverride: paths.root } : {}),
       }),
