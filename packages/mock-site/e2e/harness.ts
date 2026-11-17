@@ -165,6 +165,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Fail with a message naming the stage instead of hanging forever. */
+export async function withTimeout<T>(
+  label: string,
+  ms: number,
+  work: Promise<T>,
+  detail: () => string = () => "",
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(new Error(`E2E harness: "${label}" did not finish within ${ms} ms. ${detail()}`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Open one URL in the freshly started test browser through its DevTools endpoint, then
  * disconnect. Only the harness's own browser is ever addressed (found through the
@@ -433,7 +455,11 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
     // builds call it manage.html, older ones status.html.
     const tokenPage = ["manage.html", "status.html"].find((p) => existsSync(join(extensionDir, p)));
     if (!tokenPage) throw new Error("the extension build has neither manage.html nor status.html");
-    await openOnce(userDataDir, `chrome-extension://${extensionId}/${tokenPage}`);
+    await withTimeout(
+      "open the extension token page",
+      30_000,
+      openOnce(userDataDir, `chrome-extension://${extensionId}/${tokenPage}`),
+    );
     let token: string | undefined;
     for (let i = 0; i < 150 && !token; i++) {
       token = broker.tokensForSetup().find((t) => t.extensionId === extensionId)?.token;
@@ -443,6 +469,16 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
       throw new Error(
         `the extension never reported a token to the broker (instances: ${JSON.stringify(await broker.instances())})`,
       );
+    // Whole-run watchdog: a wedged browser or flow must fail loudly, never hang the suite.
+    const maxMs = Number(process.env.RAINFOREST_E2E_MAX_MS ?? 900_000);
+    const watchdog = setTimeout(() => {
+      console.error(
+        `[e2e] watchdog: the run exceeded ${maxMs} ms; exiting. harness log tail: ${JSON.stringify(log.slice(-10))}`,
+      );
+      void cleanup().finally(() => process.exit(1));
+    }, maxMs);
+    watchdog.unref();
+    cleanups.push(() => clearTimeout(watchdog));
     const pacer = options.pacer ?? new FastPacer();
     const session = new BrowserSession({
       broker,
@@ -514,9 +550,14 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
       close: cleanup,
     };
     // Canary: the storefront hostname must resolve to the mock through the real rails.
-    await session.run(async (ctx) => {
-      await ctx.goto(`${STOREFRONT}/`, "none");
-    });
+    await withTimeout(
+      "canary navigation through the session",
+      60_000,
+      session.run(async (ctx) => {
+        await ctx.goto(`${STOREFRONT}/`, "none");
+      }),
+      () => `harness log tail: ${JSON.stringify(log.slice(-10))}`,
+    );
     const st = await harness.state();
     if (!st.hits.some((h) => h.path === "/"))
       throw new Error("the browser did not reach the mock storefront (host mapping failed)");
