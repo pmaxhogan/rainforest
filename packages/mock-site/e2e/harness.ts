@@ -411,7 +411,10 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
     });
     cleanups.push(() => site.close());
     const userDataDir = mkdtempSync(join(tmpdir(), "rf-e2e-profile-"));
-    cleanups.push(() => rmSync(userDataDir, { recursive: true, force: true }));
+    // Chromium can still be writing its profile for a moment after it exits: retry.
+    cleanups.push(() =>
+      rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }),
+    );
     const headed = process.env.RAINFOREST_E2E_HEADED === "1";
     const args = [
       `--user-data-dir=${userDataDir}`,
