@@ -12,6 +12,7 @@ import {
   getTool,
   hubMessage,
   inputJsonSchema,
+  NOT_IMPLEMENTED_SUFFIX,
   toErrorPayload,
   wrapUntrusted,
 } from "../src/index.ts";
@@ -109,6 +110,150 @@ describe("tool registry", () => {
     expect(add.input.safeParse({ offer_id: "x".repeat(20), acknowledge: ["bogus"] }).success).toBe(
       false,
     );
+  });
+});
+
+// Hardcoded on purpose: a tool leaves this list only when its daemon flow ships.
+const UNIMPLEMENTED = [
+  "set_cart_quantity",
+  "create_list",
+  "update_list",
+  "delete_list",
+  "add_to_list",
+  "update_list_item",
+  "move_list_item",
+];
+
+describe("tool descriptions tell the truth", () => {
+  test("unimplemented tools carry the shared suffix and implemented ones do not", () => {
+    expect(NOT_IMPLEMENTED_SUFFIX).toContain("unsupported");
+    for (const t of TOOLS) {
+      const marked = t.description.endsWith(NOT_IMPLEMENTED_SUFFIX);
+      expect(marked, t.name).toBe(UNIMPLEMENTED.includes(t.name));
+      if (marked) expect(t.description.split(NOT_IMPLEMENTED_SUFFIX).length, t.name).toBe(2);
+    }
+  });
+
+  test("unimplemented descriptions promise no result shape", () => {
+    for (const name of UNIMPLEMENTED) {
+      expect(getTool(name)!.description, name).not.toMatch(/returns/i);
+    }
+  });
+
+  test("inputs nothing reads are not advertised", () => {
+    const keys = (name: string) => Object.keys(getTool(name)!.input.shape);
+    expect(keys("search")).not.toContain("prime_only");
+    expect(keys("search")).not.toContain("min_rating");
+    expect(keys("search")).not.toContain("condition");
+    for (const name of ["get_media", "get_price_history"]) {
+      expect(keys(name), name).not.toContain("with_images");
+      expect(keys(name), name).not.toContain("max_images");
+    }
+    expect(keys("get_status")).toEqual([]);
+  });
+
+  test("add_to_cart says what it refuses and what it returns", () => {
+    const d = getTool("add_to_cart")!.description;
+    expect(d).toContain("subscribe_and_save is always refused");
+    expect(d).toContain("show_on_screen");
+    expect(d).toContain("not applied yet");
+    expect(d).not.toContain("Never subscribes unless");
+    for (const field of [
+      "changed",
+      "before",
+      "after",
+      "added",
+      "acknowledged_flags",
+      "declined_upsells",
+      "quantity_note",
+      "offer_gone",
+      "price_changed",
+      "seller_changed",
+      "out_of_stock",
+    ]) {
+      expect(d, field).toContain(field);
+    }
+  });
+
+  test("get_price_history says keepa is a chart URL only", () => {
+    const d = getTool("get_price_history")!.description;
+    expect(d).toContain("series_available: false");
+  });
+
+  test("list_orders describes archived, cancelled and its two cursors", () => {
+    const d = getTool("list_orders")!.description;
+    expect(d).toContain("archived (answers unsupported");
+    expect(d).toContain("next_page_cursor");
+    expect(d).toContain("next_cursor");
+    expect(getTool("list_orders")!.input.safeParse({ filter: "archived" }).success).toBe(true);
+  });
+
+  // Hardcoded: only these flows redeem a cursor (cursorOrThrow). Every other read tool can
+  // return a next_cursor it cannot redeem, so its description must say how to get the rest.
+  const WITH_CURSOR = [
+    "get_product",
+    "get_variants",
+    "get_cart",
+    "list_subscriptions",
+    "get_list",
+    "get_browsing_history",
+    "list_orders",
+  ];
+  const CAN_CUT_WITHOUT_CURSOR = [
+    "search",
+    "get_buying_options",
+    "get_reviews",
+    "get_order",
+    "get_invoice",
+    "list_lists",
+    "get_media",
+    "get_review_summary",
+  ];
+
+  test("exactly the redeemable tools take a cursor", () => {
+    const withCursor = TOOLS.filter((t) => "cursor" in t.input.shape).map((t) => t.name);
+    expect(withCursor.sort()).toEqual([...WITH_CURSOR].sort());
+  });
+
+  test("tools that can be cut but take no cursor say how to get the rest", () => {
+    for (const name of CAN_CUT_WITHOUT_CURSOR) {
+      const t = getTool(name)!;
+      expect("cursor" in t.input.shape, name).toBe(false);
+      expect(t.description, name).toContain("truncated: true");
+      expect(t.description, name).toMatch(
+        "max_chars" in t.input.shape ? /raise max_chars/ : /neither cursor nor max_chars/,
+      );
+    }
+  });
+
+  test("get_search_history is paced under the class its flow loads", () => {
+    expect(getTool("get_search_history")!.pacing).toBe("search");
+  });
+
+  test("item id patterns match what the daemon enforces", () => {
+    const cartTools = ["remove_from_cart", "save_for_later", "move_to_cart", "delete_saved_item"];
+    for (const name of [...cartTools, "set_cart_quantity"]) {
+      const shape = getTool(name)!.input;
+      const args = (id: string) => ({ item_id: id, quantity: 1 });
+      expect(shape.safeParse(args("ABCDEF-1")).success, name).toBe(true);
+      expect(shape.safeParse(args("A".repeat(64))).success, name).toBe(true);
+      expect(shape.safeParse(args("ABCDEF1")).success, name).toBe(false);
+      expect(shape.safeParse(args("A".repeat(65))).success, name).toBe(false);
+      expect(shape.safeParse(args("ABCDEF 1")).success, name).toBe(false);
+    }
+    for (const name of ["remove_from_list", "update_list_item", "move_list_item"]) {
+      const shape = getTool(name)!.input;
+      const args = (id: string) => ({
+        item_id: id,
+        list_id: "ABCDEFGH",
+        to_list_id: "ABCDEFGH",
+      });
+      expect(shape.safeParse(args("ABC-12")).success, name).toBe(true);
+      expect(shape.safeParse(args("A".repeat(64))).success, name).toBe(true);
+      expect(shape.safeParse(args("ABC12")).success, name).toBe(false);
+      expect(shape.safeParse(args("A".repeat(65))).success, name).toBe(false);
+      expect(shape.safeParse(args("ABC_12")).success, name).toBe(false);
+    }
   });
 });
 

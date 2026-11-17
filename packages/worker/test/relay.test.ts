@@ -316,7 +316,6 @@ describe("tool call relay", () => {
     const { tokens } = await connectClient(key);
     const pending = callTool(tokens.access_token, "get_media", {
       asin: "B0FAKE0001",
-      with_images: true,
     });
     const call = await a.socket.next();
     a.socket.send({

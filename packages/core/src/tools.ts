@@ -36,10 +36,29 @@ const maxChars = z
     "Result size budget in characters (default 40000, hard cap 120000). Truncation is always explicit.",
   );
 
-const withImages = z
-  .boolean()
-  .optional()
-  .describe("Also return downscaled image blocks (default false: URLs only)");
+/** Cart line ids come from get_cart; the daemon checks this exact pattern. */
+const cartItemId = z
+  .string()
+  .regex(/^[A-Za-z0-9-]{8,64}$/)
+  .describe("Cart line id from get_cart");
+
+/** List item ids come from get_list; the daemon checks this exact pattern. */
+const listItemId = z
+  .string()
+  .regex(/^[A-Za-z0-9-]{6,64}$/)
+  .describe("List item id from get_list");
+
+/**
+ * Appended to the description of every tool the daemon does not implement yet (it answers
+ * `unsupported`). Delete the suffix from a tool when its flow ships.
+ */
+export const NOT_IMPLEMENTED_SUFFIX = " Not implemented yet in this version; answers unsupported.";
+
+/** For a result that can be cut but whose tool takes no `cursor`: say how to get the rest. */
+const CUT_RAISE_MAX_CHARS =
+  " A result over the budget is cut (truncated: true); this tool takes no cursor, so raise max_chars to get the rest.";
+const CUT_NO_WAY =
+  " A result over the default 40000-character budget is cut (truncated: true); this tool takes neither cursor nor max_chars, so the rest cannot be fetched.";
 
 const orderId = z
   .string()
@@ -154,9 +173,13 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "read",
     pacing: "search",
     description:
-      "Search amazon.com. Every result is labeled organic or sponsored (kind + is_sponsored). Returns results, " +
-      "widgets (carousels/shelves with their own sponsored flag), all available refinements grouped (each with an " +
-      "opaque token usable in `refinements`), sort options, applied filters, corrections and pagination.",
+      "Search amazon.com, one results page per call. Every result is labeled organic or sponsored (kind + " +
+      "is_sponsored). Returns results, widgets (carousels/shelves with their own sponsored flag), all available " +
+      "refinements grouped (each option has an opaque token), sort options, applied filters, corrections and " +
+      "pagination. Beyond query, department, sort, min_price, max_price and brand, filter by passing a refinement " +
+      "token from a previous response in `refinements` (Prime, star rating, condition, any left-rail filter). " +
+      "Tokens are cumulative: only the last one is applied, and it replaces query, department and brand." +
+      CUT_RAISE_MAX_CHARS,
     input: z.object({
       browser,
       query: z.string().min(1).max(300),
@@ -178,16 +201,13 @@ export const TOOLS: readonly ToolDef[] = [
       page: z.number().int().min(1).max(50).optional(),
       min_price: z.number().nonnegative().optional().describe("Dollars"),
       max_price: z.number().nonnegative().optional().describe("Dollars"),
-      prime_only: z.boolean().optional(),
-      min_rating: z.number().int().min(1).max(4).optional().describe("Minimum average stars"),
       brand: z.string().max(100).optional(),
-      condition: z.enum(["new", "used", "renewed"]).optional(),
       refinements: z
         .array(z.string().max(512))
         .max(30)
         .optional()
         .describe(
-          "Opaque refinement tokens from a previous search response (any left-rail filter)",
+          "Opaque refinement tokens from a previous search response (any left-rail filter, e.g. Prime, rating, condition)",
         ),
       max_chars: maxChars,
     }),
@@ -235,7 +255,8 @@ export const TOOLS: readonly ToolDef[] = [
       "The featured offer (if any) plus ALL offers (new, used, renewed). Each offer has a short-lived opaque " +
       "offer_id (required by add_to_cart), price, shipping, total, condition, seller, ships-from, fulfillment, " +
       "Prime, delivery promise, quantity limits and flags. Also purchase types (one-time, Subscribe & Save) and " +
-      "clippable coupons.",
+      "clippable coupons (listed only; clipping is not implemented). An offer_id expires after about 10 minutes." +
+      CUT_RAISE_MAX_CHARS,
     input: z.object({
       browser,
       asin,
@@ -248,13 +269,10 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Get media",
     kind: "read",
     pacing: "product",
-    description: "Hi-res image URLs per variant and videos (title, duration, URL, thumbnail).",
-    input: z.object({
-      browser,
-      asin,
-      with_images: withImages,
-      max_images: z.number().int().min(1).max(8).optional(),
-    }),
+    description:
+      "Hi-res image URLs per variant and videos (title, duration, URL, thumbnail). URLs only: no image data is returned." +
+      CUT_NO_WAY,
+    input: z.object({ browser, asin }),
   }),
   tool({
     name: "get_reviews",
@@ -262,8 +280,9 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "read",
     pacing: "reviews",
     description:
-      "Paged full review text with sort and filters. Each review: rating, title, body, date, verified, variant " +
-      "attributes, helpful votes, media, badges.",
+      "Full review text, ten reviews per page (`page` N returns the Nth block of ten), with sort and filters. " +
+      "Each review: rating, title, body, date, verified, variant attributes, helpful votes, media, badges." +
+      CUT_RAISE_MAX_CHARS,
     input: z.object({
       browser,
       asin,
@@ -283,7 +302,8 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "read",
     pacing: "product",
     description:
-      "Rating, count, histogram, the AI 'Customers say' text and aspect chips, top positive and critical review.",
+      "Rating, count, histogram, the AI 'Customers say' text and aspect chips, top positive and critical review." +
+      CUT_NO_WAY,
     input: z.object({ browser, asin }),
   }),
   tool({
@@ -292,8 +312,11 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "read",
     pacing: "price_history",
     description:
-      "Price history per source (amazon, camelcamelcamel, keepa): stats, series when obtainable, chart image URL, " +
-      "retrieval time and a terms note. Third-party lookups are cached for hours and rate limited.",
+      "Price history per source (default all three), each entry with a terms note. amazon: the price facts the " +
+      "product page shows (series only if the page embeds one). camelcamelcamel: stats, any series the page shows " +
+      "and a chart image URL. keepa: a chart image URL and link only (series_available: false), no price numbers. " +
+      "Chart URLs are links; no image data is returned. A failed lookup is reported inside its entry " +
+      "(unavailable: true). Third-party lookups are cached for 6 hours and rate limited.",
     input: z.object({
       browser,
       asin,
@@ -301,8 +324,8 @@ export const TOOLS: readonly ToolDef[] = [
         .array(z.enum(["amazon", "camelcamelcamel", "keepa"]))
         .min(1)
         .max(3)
-        .optional(),
-      with_images: withImages,
+        .optional()
+        .describe("Default all three"),
     }),
   }),
 
@@ -323,7 +346,11 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "read",
     pacing: "account",
     description:
-      "Order history by year or range, including archived and cancelled filters. Paged with a cursor.",
+      "Order history, one page per call: `year`, or `range` (last30, months-3), or neither for Amazon's default " +
+      "list (`year` wins over `range`). filter: orders (default), not_yet_shipped (open orders), cancelled (keeps " +
+      "only the cancelled orders found on the requested page, so a page can come back empty while more pages " +
+      "exist), archived (answers unsupported; archived orders still appear under their year). When Amazon has a " +
+      "further page the result has next_page_cursor; a result cut for size has next_cursor. Pass either as `cursor`.",
     input: z.object({
       browser,
       year: z.number().int().min(1995).max(2100).optional(),
@@ -340,7 +367,8 @@ export const TOOLS: readonly ToolDef[] = [
     pacing: "account",
     description:
       "Full order details: items, prices, totals, shipments and tracking, payment summary (card brand and last 4), " +
-      "return and refund status.",
+      "return and refund status." +
+      CUT_RAISE_MAX_CHARS,
     input: z.object({ browser, order_id: orderId, max_chars: maxChars }),
   }),
   tool({
@@ -348,7 +376,7 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Get invoice",
     kind: "read",
     pacing: "account",
-    description: "Invoice for an order: charge breakdown and payment transactions.",
+    description: "Invoice for an order: charge breakdown and payment transactions." + CUT_NO_WAY,
     input: z.object({ browser, order_id: orderId }),
   }),
   tool({
@@ -364,7 +392,7 @@ export const TOOLS: readonly ToolDef[] = [
     title: "List lists",
     kind: "read",
     pacing: "list",
-    description: "The owner's lists with privacy and item counts.",
+    description: "The owner's lists with privacy and item counts." + CUT_NO_WAY,
     input: z.object({ browser }),
   }),
   tool({
@@ -388,7 +416,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: "get_search_history",
     title: "Get search history",
     kind: "read",
-    pacing: "account",
+    pacing: "search",
     description:
       "Recent searches (best effort; returns `unsupported` with an explanation if Amazon hides it).",
     input: z.object({ browser }),
@@ -401,20 +429,34 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "cart",
     description:
-      "Add ONE specific offer to the cart. Always two-step: offer_id must come from get_buying_options. If the " +
-      "offer carries flags (used, no featured offer, price well above typical, slow or non-Prime, quantity quirks, " +
-      "unusual purchase type) the add returns needs_choice with the flags and alternatives and adds nothing, " +
-      "unless every flag is listed in `acknowledge`. Out of stock is never addable. Never subscribes unless " +
-      "purchase_type says so. Returns {changed, before, after}.",
+      "Add ONE specific offer to the cart, always in two steps: offer_id must come from get_buying_options. " +
+      "Adds nothing and fails with needs_choice (details.reason) when the offer is gone (offer_gone), its price or " +
+      "seller changed (price_changed, seller_changed), it is out of stock (out_of_stock, never addable), or it " +
+      "carries flags not all listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). " +
+      "Adds exactly one unit: quantity above 1 is not applied yet, and coupon clipping is not implemented yet. " +
+      "purchase_type subscribe_and_save is always refused with blocked_by_policy, because a subscription is a " +
+      "recurring order; use show_on_screen to finish one by hand. Result: {changed, before, after, added, " +
+      "acknowledged_flags, declined_upsells, quantity_note}: before/after are cart states, added is the cart line " +
+      "(its item_id works with the cart tools), acknowledged_flags the flags the offer carried, declined_upsells " +
+      "the protection-plan or add-on prompts the flow answered with no, quantity_note is set when quantity was " +
+      "above 1.",
     input: z.object({
       browser,
       offer_id: z.string().min(16).max(4096),
-      quantity: z.number().int().min(1).max(999).optional(),
+      quantity: z
+        .number()
+        .int()
+        .min(1)
+        .max(999)
+        .optional()
+        .describe(
+          "Default 1. One unit is added whatever this says; above 1 it only affects quantity flags",
+        ),
       purchase_type: z
         .enum(["one_time", "subscribe_and_save"])
         .optional()
-        .describe("Default one_time"),
-      clip_coupon: z.boolean().optional(),
+        .describe("Default one_time. subscribe_and_save is always refused (blocked_by_policy)"),
+      clip_coupon: z.boolean().optional().describe("Not implemented yet; ignored"),
       acknowledge: z.array(z.enum(OFFER_FLAGS)).max(OFFER_FLAGS.length).optional(),
     }),
   }),
@@ -424,10 +466,10 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "cart",
     description:
-      "Set the quantity of a cart item (item_id from get_cart). Returns {changed, before, after}.",
+      "Set the quantity of a cart item (item_id from get_cart)." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({
       browser,
-      item_id: z.string().min(4).max(256),
+      item_id: cartItemId,
       quantity: z.number().int().min(1).max(999),
     }),
   }),
@@ -437,24 +479,25 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     destructive: true,
     pacing: "cart",
-    description: "Remove an item from the cart. Returns {changed, before, after}.",
-    input: z.object({ browser, item_id: z.string().min(4).max(256) }),
+    description: "Remove an item from the cart. Returns {changed, before, after, item}.",
+    input: z.object({ browser, item_id: cartItemId }),
   }),
   tool({
     name: "save_for_later",
     title: "Save for later",
     kind: "write",
     pacing: "cart",
-    description: "Move a cart item to Saved for later. Returns {changed, before, after}.",
-    input: z.object({ browser, item_id: z.string().min(4).max(256) }),
+    description: "Move a cart item to Saved for later. Returns {changed, before, after, item}.",
+    input: z.object({ browser, item_id: cartItemId }),
   }),
   tool({
     name: "move_to_cart",
     title: "Move to cart",
     kind: "write",
     pacing: "cart",
-    description: "Move a Saved for later item back to the cart. Returns {changed, before, after}.",
-    input: z.object({ browser, item_id: z.string().min(4).max(256) }),
+    description:
+      "Move a Saved for later item back to the cart. Returns {changed, before, after, item}.",
+    input: z.object({ browser, item_id: cartItemId }),
   }),
   tool({
     name: "delete_saved_item",
@@ -462,8 +505,8 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     destructive: true,
     pacing: "cart",
-    description: "Delete a Saved for later item. Returns {changed, before, after}.",
-    input: z.object({ browser, item_id: z.string().min(4).max(256) }),
+    description: "Delete a Saved for later item. Returns {changed, before, after, item}.",
+    input: z.object({ browser, item_id: cartItemId }),
   }),
 
   // ---- writes: lists
@@ -472,7 +515,7 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Create list",
     kind: "write",
     pacing: "list",
-    description: "Create a list. Returns {changed, before, after}.",
+    description: "Create a list." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({
       browser,
       name: z.string().min(1).max(100),
@@ -484,7 +527,7 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Update list",
     kind: "write",
     pacing: "list",
-    description: "Rename a list and/or change its privacy. Returns {changed, before, after}.",
+    description: "Rename a list and/or change its privacy." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({
       browser,
       list_id: listId,
@@ -498,7 +541,7 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     destructive: true,
     pacing: "list",
-    description: "Delete a list. Returns {changed, before, after}.",
+    description: "Delete a list." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({ browser, list_id: listId }),
   }),
   tool({
@@ -506,7 +549,7 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Add to list",
     kind: "write",
     pacing: "list",
-    description: "Add a product to a list. Returns {changed, before, after}.",
+    description: "Add a product to a list." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({ browser, list_id: listId, asin }),
   }),
   tool({
@@ -516,8 +559,8 @@ export const TOOLS: readonly ToolDef[] = [
     destructive: true,
     pacing: "list",
     description:
-      "Remove an item from a list (item_id from get_list). Returns {changed, before, after}.",
-    input: z.object({ browser, list_id: listId, item_id: z.string().min(4).max(256) }),
+      "Remove an item from a list (item_id from get_list). Returns {changed, before, after, item}.",
+    input: z.object({ browser, list_id: listId, item_id: listItemId }),
   }),
   tool({
     name: "update_list_item",
@@ -525,11 +568,11 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "list",
     description:
-      "Set quantity wanted, priority and/or comment on a list item. Returns {changed, before, after}.",
+      "Set quantity wanted, priority and/or comment on a list item." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({
       browser,
       list_id: listId,
-      item_id: z.string().min(4).max(256),
+      item_id: listItemId,
       quantity_wanted: z.number().int().min(1).max(999).optional(),
       priority: z.enum(["lowest", "low", "medium", "high", "highest"]).optional(),
       comment: z.string().max(500).optional(),
@@ -541,11 +584,11 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "list",
     description:
-      "Move (or with copy: true, copy) an item to another list. Returns {changed, before, after}.",
+      "Move (or with copy: true, copy) an item to another list." + NOT_IMPLEMENTED_SUFFIX,
     input: z.object({
       browser,
       list_id: listId,
-      item_id: z.string().min(4).max(256),
+      item_id: listItemId,
       to_list_id: listId,
       copy: z.boolean().optional(),
     }),
@@ -557,8 +600,9 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Get status",
     kind: "hub",
     description:
-      "Hub and per-device state: versions, online, pacing budget left, cool-downs, parser health.",
-    input: z.object({ browser }),
+      "Hub state ({protocol, min_daemon_version, pending_calls}) plus the same per-computer rows as list_browsers " +
+      "(online, daemon version, cool-down, remaining pacing budget). Takes no arguments; does not report parser health.",
+    input: z.object({}),
   }),
   tool({
     name: "get_audit_log",
