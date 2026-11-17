@@ -41,5 +41,6 @@ export {
 } from "./reviews.ts";
 export { parseProduct, type ProductPage } from "./product.ts";
 export { parseSearch, type SearchPage } from "./search.ts";
+export { parseSearchHistory, type SearchHistoryPage } from "./search-history.ts";
 export { parseSubscriptions, type SubscriptionsPage } from "./subscriptions.ts";
 export { parseVariants, type VariantsData } from "./variants.ts";

@@ -1,4 +1,11 @@
-import { parseBrowsingHistory, parseCart, parseSubscriptions } from "@rainforest/parsers";
+import { RfError } from "@rainforest/core";
+import {
+  parseBrowsingHistory,
+  parseCart,
+  parseSearchHistory,
+  parseSubscriptions,
+} from "@rainforest/parsers";
+import { guardedClick } from "./click-guard.ts";
 import {
   AMAZON,
   arrayKeys,
@@ -75,5 +82,45 @@ export const getBrowsingHistory: Flow = async (args, ctx) => {
     );
     const body = pageBody(result, capture);
     return fitToBudget(body, arrayKeys(body), maxCharsOf(args), ctx.now());
+  });
+};
+
+/**
+ * Best effort: Amazon shows recent searches only in the search box dropdown, so open the
+ * home page, focus the empty search box and read the dropdown.
+ */
+export const getSearchHistory: Flow = async (_args, ctx) => {
+  const session = await ctx.browser.session();
+  return await session.run(async (page) => {
+    const { result } = await readPage(
+      page,
+      `${AMAZON}/`,
+      "search",
+      "search_history",
+      parseSearchHistory,
+      {
+        beforeCapture: async (p) => {
+          const box = p.page.locator("#twotabsearchtextbox");
+          await guardedClick(p, box, { what: "the search box", id: /^twotabsearchtextbox$/ });
+          await p.page
+            .waitForSelector(
+              ".autocomplete-results-container .s-suggestion, #nav-flyout-searchAjax .s-suggestion",
+              { timeout: 5000 },
+            )
+            .catch(() => {});
+          await new Promise((r) => setTimeout(r, 600));
+        },
+      },
+    );
+    if (!result.data.supported) {
+      throw new RfError(
+        "unsupported",
+        `recent searches are not available: ${result.data.note ?? "Amazon did not show them"}`,
+      );
+    }
+    return {
+      entries: result.data.entries,
+      note: "read from the search box dropdown; Amazon keeps only a short list",
+    };
   });
 };
