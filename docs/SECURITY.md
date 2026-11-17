@@ -154,8 +154,10 @@ host is a denial. Three checks on requests, plus a separate guard for clicks:
    the home page, search, product pages, all-offers, reviews, cart, orders and order details, the
    invoice print view, package tracking, lists, Subscribe & Save, browsing history, and three
    exact third-party URL shapes for price history (CamelCamelCamel product and chart pages, Keepa
-   graph images). Only GET. Anything else is refused, which is why a redirect to an unexpected page
-   fails.
+   graph images). Only GET, with one exception: the form that an offer's own Add to Cart control
+   in the all-offers panel submits (`/cart/add-to-cart/ref=aod_...`) may be posted as a page
+   navigation, and only when its body is readable and carries no buy marker. Anything else is
+   refused, which is why a redirect to an unexpected page fails.
 3. **Fragment allowlist.** Same-origin documents fetched from inside a loaded page (not
    navigations) must pass the hard-deny layer and match a short fragment list, currently the
    all-offers document.
