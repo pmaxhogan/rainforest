@@ -38,7 +38,17 @@ function describeInPage(el: any): Described {
       .slice(0, 200),
     id: el.id || null,
     name: el.getAttribute("name"),
-    ariaLabel: el.getAttribute("aria-label"),
+    // Buttons are often named by another element (aria-labelledby): use that text too.
+    ariaLabel:
+      el.getAttribute("aria-label") ||
+      String(
+        (el.getAttribute("aria-labelledby") &&
+          el.ownerDocument.getElementById(el.getAttribute("aria-labelledby"))?.textContent) ||
+          "",
+      )
+        .trim()
+        .slice(0, 200) ||
+      null,
     value: el.getAttribute("value"),
     href: el.getAttribute("href"),
     formAction: el.getAttribute("formaction") || (form ? form.getAttribute("action") : null),
