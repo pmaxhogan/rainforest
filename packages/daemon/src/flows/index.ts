@@ -2,6 +2,7 @@ import { RfError, type ToolDef } from "@rainforest/core";
 import type { SessionProvider } from "../browser-controller.ts";
 import type { ToolContext, ToolOutput, ToolRouter } from "../interfaces.ts";
 import { getBrowsingHistory, getCart, listSubscriptions } from "./account.ts";
+import { getMedia, getReviewSummary, getReviews, getVariants } from "./catalog.ts";
 import type { Flow } from "./common.ts";
 import { getList, listLists } from "./lists.ts";
 import { getInvoice, getOrder, listOrders } from "./orders.ts";
@@ -21,6 +22,10 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   list_lists: listLists,
   get_list: getList,
   get_price_history: getPriceHistory,
+  get_variants: getVariants,
+  get_media: getMedia,
+  get_reviews: getReviews,
+  get_review_summary: getReviewSummary,
 };
 
 export function createRouter(browser: SessionProvider, now: () => number = Date.now): ToolRouter {

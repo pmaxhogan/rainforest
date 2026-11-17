@@ -9,6 +9,7 @@ export {
   type ListPage,
   type ListsIndexPage,
 } from "./lists.ts";
+export { MEDIA_HOST_SUFFIXES, parseMedia, safeMediaUrl, type MediaData } from "./media.ts";
 export { parseOrderDetails, type OrderDetails } from "./order-details.ts";
 export { parseOrderList, type OrderCard, type OrderListPage } from "./order-list.ts";
 export {
@@ -23,4 +24,11 @@ export {
   type AmazonPriceHistory,
   type CamelPriceHistory,
 } from "./price-history.ts";
+export {
+  parseReviewSummary,
+  parseReviews,
+  type ReviewSummary,
+  type ReviewsPage,
+} from "./reviews.ts";
 export { parseSubscriptions, type SubscriptionsPage } from "./subscriptions.ts";
+export { parseVariants, type VariantsData } from "./variants.ts";
