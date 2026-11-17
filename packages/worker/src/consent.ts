@@ -63,7 +63,7 @@ export async function handleAuthorize(request: Request, env: Env): Promise<Respo
     if (request.method !== "POST") return plain("method not allowed", 405);
 
     const origin = request.headers.get("origin");
-    if (origin !== null && origin !== config.baseUrl) return plain("bad origin", 400);
+    if (origin !== config.baseUrl) return plain("bad origin", 400);
     const form = await request.formData();
     const handle = String(form.get("handle") ?? "");
     if (!handle) return plain("bad request", 400);
@@ -75,12 +75,12 @@ export async function handleAuthorize(request: Request, env: Env): Promise<Respo
 
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
     const stub = hub(env);
-    if ((await limited(env.RL_STRICT, `pw:${ip}`)) || (await stub.passwordLocked())) {
+    if ((await limited(env.RL_STRICT, `pw:${ip}`)) || !(await stub.beginPasswordAttempt())) {
       return plain("too many attempts - wait 15 minutes and start again from the client", 429);
     }
     const ok = await verifyPassword(String(form.get("password") ?? ""), config.passwordSha256);
-    await stub.recordPasswordAttempt(ok);
     if (!ok) return plain("wrong app password - go back and try again", 403);
+    await stub.passwordSucceeded();
 
     const approved = await oauth.approveConsent(request, handle, { scope: ["mcp"] });
     const client = await oauth.lookupClient(approved.request.clientId);

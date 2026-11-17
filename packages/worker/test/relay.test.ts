@@ -359,7 +359,7 @@ describe("tool call relay", () => {
   // WEAKNESS (mcp.ts callTool): a daemon error's message and details are returned outside
   // the untrusted-content wrapper. Daemon errors can carry page-derived text (for example
   // a layout_unrecognized excerpt), so they reach the model as if they were server text.
-  it.fails("daemon error text is wrapped as untrusted content", async () => {
+  it("daemon error text is wrapped as untrusted content", async () => {
     const a = await online("Desk Mac", 1);
     const { tokens } = await connectClient(key);
     const pending = callTool(tokens.access_token, "get_cart");
@@ -536,18 +536,15 @@ describe("tool call relay", () => {
 
   // WEAKNESS (mcp.ts + hub.ts #onResult): the hub audits the call as "ok" before mcp.ts
   // applies its 140k cap, so the audit log says ok while the client received an error.
-  it.fails(
-    "the audit row agrees with an over-cap result that the client saw as an error",
-    async () => {
-      const a = await online("Desk Mac", 1);
-      const { tokens } = await connectClient(key);
-      const pending = callTool(tokens.access_token, "get_cart");
-      await answerNext(a.socket, { blob: "x".repeat(200_000) });
-      await pending;
-      const row = (await auditRows()).find((r) => r.tool === "get_cart");
-      expect(row?.outcome).toBe("error");
-    },
-  );
+  it("the audit row agrees with an over-cap result that the client saw as an error", async () => {
+    const a = await online("Desk Mac", 1);
+    const { tokens } = await connectClient(key);
+    const pending = callTool(tokens.access_token, "get_cart");
+    await answerNext(a.socket, { blob: "x".repeat(200_000) });
+    await pending;
+    const row = (await auditRows()).find((r) => r.tool === "get_cart");
+    expect(row?.outcome).toBe("error");
+  });
 
   it("a result over the hub's frame budget becomes a 'result too large' error", async () => {
     const a = await online("Desk Mac", 1);
@@ -563,14 +560,14 @@ describe("tool call relay", () => {
     });
     expect(await hubStub().awaitCall(started.callId, 3000)).toMatchObject({
       done: true,
-      result: { ok: false, error: { code: "internal", message: "result too large" } },
+      result: { ok: false, error: { code: "internal", message: "result exceeded the size cap" } },
     });
   });
 
   // WEAKNESS (hub.ts webSocketMessage): a frame over MAX_RESULT_CHARS + 100k closes the
   // socket as "bad frame" and the pending call is left to time out after ~229 s instead
   // of failing fast with "result too large".
-  it.fails("a frame over the hard frame limit fails the call fast", async () => {
+  it("a frame over the hard frame limit fails the call fast", async () => {
     const a = await online("Desk Mac", 1);
     const started = await start(GRANT_A, "get_cart");
     if (!started.ok) throw new Error("start failed");

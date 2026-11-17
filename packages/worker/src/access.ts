@@ -24,6 +24,9 @@ interface Claims {
 
 const JWKS_TTL_MS = 60 * 60 * 1000;
 let jwksCache: { team: string; fetchedAt: number; keys: Jwk[] } | null = null;
+/** A forced refetch (unknown key id) happens at most this often, so callers cannot drive fetches. */
+const FORCED_REFETCH_MIN_MS = 60_000;
+let lastForcedAt = 0;
 
 /** Test hook: replace the JWKS fetch. */
 export type JwksFetcher = (teamDomain: string) => Promise<Jwk[]>;
@@ -37,14 +40,12 @@ async function defaultFetchJwks(teamDomain: string): Promise<Jwk[]> {
 
 async function jwks(teamDomain: string, force: boolean, fetcher: JwksFetcher): Promise<Jwk[]> {
   const now = Date.now();
-  if (
-    !force &&
-    jwksCache &&
-    jwksCache.team === teamDomain &&
-    now - jwksCache.fetchedAt < JWKS_TTL_MS
-  ) {
-    return jwksCache.keys;
+  if (jwksCache && jwksCache.team === teamDomain) {
+    if (!force && now - jwksCache.fetchedAt < JWKS_TTL_MS) return jwksCache.keys;
+    // An unknown key id may force one refetch, but not more often than the minimum gap.
+    if (force && now - lastForcedAt < FORCED_REFETCH_MIN_MS) return jwksCache.keys;
   }
+  if (force) lastForcedAt = now;
   const keys = await fetcher(teamDomain);
   jwksCache = { team: teamDomain, fetchedAt: now, keys };
   return keys;
@@ -52,6 +53,7 @@ async function jwks(teamDomain: string, force: boolean, fetcher: JwksFetcher): P
 
 export function resetJwksCache(): void {
   jwksCache = null;
+  lastForcedAt = 0;
 }
 
 function b64urlToBytes(value: string): Uint8Array<ArrayBuffer> {

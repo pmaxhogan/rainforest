@@ -219,9 +219,7 @@ describe("password and handle on POST /authorize", () => {
     expect(await verifyPassword(null, hash)).toBe(false);
   });
 
-  // Documents current behavior: a POST with no Origin header at all is accepted (the
-  // handle plus its __Host- binding cookie and the Access JWT are what bind the form).
-  it("POST without an Origin header is accepted", async () => {
+  it("POST without an Origin header is refused", async () => {
     const { jwt, handle, cookie } = await begin();
     const response = await postConsent(
       jwt,
@@ -229,8 +227,7 @@ describe("password and handle on POST /authorize", () => {
       { handle, password: TEST_PASSWORD, decision: "approve" },
       {},
     );
-    expect(response.status).toBe(302);
-    expect(locationCode(response)).toBeTruthy();
+    expect(response.status).toBe(400);
   });
 
   it("missing password -> 403", async () => {

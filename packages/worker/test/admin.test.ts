@@ -206,17 +206,17 @@ describe("/admin escaping", () => {
     const pending = await startPairing(hostile);
     expect(pending.code).toBeTruthy();
     const device = await pairDevice(`${hostile} paired`);
-    // Names and aliases set through the Hub RPC skip the pairing regex entirely.
-    await hubStub().updateDevice(device.deviceId, `${hostile} <b>"paired"</b>`, [
-      "<img src=x onerror=alert(1)>",
-    ]);
+    // The Hub RPC applies the same name rule: markup is refused there too.
+    expect(
+      await hubStub().updateDevice(device.deviceId, `${hostile} <b>"paired"</b>`, [
+        "<img src=x onerror=alert(1)>",
+      ]),
+    ).toBe(false);
     const { html } = await adminPage();
     expect(html).not.toContain("x' onmouseover");
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<b>");
     expect(html).toContain("x&#39; onmouseover &#39;alert(1)&#39; (a)");
-    expect(html).toContain("&#60;b&#62;&#34;paired&#34;&#60;/b&#62;");
-    expect(html).toContain("&#60;img src=x onerror=alert(1)&#62;");
   });
 
   it("the name regex refuses angle brackets and quotes outright", async () => {

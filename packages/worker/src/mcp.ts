@@ -20,6 +20,7 @@ import type { AwaitCallResult, SelectResult, StartCallResult } from "./hub.ts";
 
 export const SERVER_NAME = "rainforest";
 export const SERVER_VERSION = "0.1.0";
+const MAX_BODY_BYTES = 256 * 1024;
 const SUPPORTED_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 export interface GrantProps {
@@ -188,11 +189,20 @@ async function callTool(
     )) as AwaitCallResult;
     if (!waited.done) continue;
     const result = waited.result;
-    if (!result.ok)
-      return errorContent(
-        result.error ?? { code: "internal", message: "internal error" },
-        start.browser,
-      );
+    if (!result.ok) {
+      // A daemon error can carry page-derived text: it gets the untrusted wrapper too.
+      const failed: ToolEnvelope = {
+        ok: false,
+        browser: start.browser,
+        error: result.error ?? { code: "internal", message: "internal error" },
+      };
+      return {
+        content: [
+          { type: "text", text: wrapUntrusted(JSON.stringify(failed), crypto.randomUUID()) },
+        ],
+        isError: true,
+      };
+    }
     const envelope: ToolEnvelope = { ok: true, browser: start.browser, data: result.data };
     const json = JSON.stringify(envelope);
     if (json.length > HARD_MAX_CHARS + 20_000) {
@@ -267,10 +277,12 @@ export async function handleMcp(request: Request, env: Env, rawProps: unknown): 
     return new Response(null, { status: 405, headers: { allow: "POST" } });
   }
   const length = Number(request.headers.get("content-length") ?? "0");
-  if (length > 256 * 1024) return new Response("payload too large", { status: 413 });
+  if (length > MAX_BODY_BYTES) return new Response("payload too large", { status: 413 });
   let body: unknown;
   try {
-    body = await request.json();
+    const text = await request.text();
+    if (text.length > MAX_BODY_BYTES) return new Response("payload too large", { status: 413 });
+    body = JSON.parse(text);
   } catch {
     return Response.json(rpcError(null, -32700, "parse error"), { status: 400 });
   }

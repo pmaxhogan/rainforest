@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+  HARD_MAX_CHARS,
   PROTOCOL_VERSION,
   MIN_PEER_PROTOCOL,
   authTranscript,
@@ -27,6 +28,8 @@ const PAIRING_TTL_MS = 10 * 60_000;
 const MAX_PENDING_PAIRINGS = 5;
 const AUDIT_RETENTION_MS = 90 * 24 * 3600 * 1000;
 const MAX_RESULT_CHARS = 1_800_000;
+/** Largest JSON `data` a tool result may carry (the model-facing budget plus slack). */
+export const MAX_DATA_CHARS = HARD_MAX_CHARS + 20_000;
 const PASSWORD_WINDOW_MS = 15 * 60_000;
 const PASSWORD_MAX_FAILURES = 5;
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -232,6 +235,12 @@ export class Hub extends DurableObject<Env> {
   override async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     const state = this.#state(ws);
     if (!state || typeof raw !== "string" || raw.length > MAX_RESULT_CHARS + 100_000) {
+      if (state?.authed && state.deviceId) {
+        this.#failPending(state.deviceId, {
+          code: "internal",
+          message: "result exceeded the size cap",
+        });
+      }
       ws.close(1008, "bad frame");
       return;
     }
@@ -322,6 +331,20 @@ export class Hub extends DurableObject<Env> {
     const state = this.#state(ws);
     if (state?.authed && state.deviceId) {
       this.#sql.exec("UPDATE devices SET last_seen = ? WHERE id = ?", Date.now(), state.deviceId);
+      const stillConnected = this.ctx
+        .getWebSockets()
+        .some(
+          (other) =>
+            other !== ws &&
+            this.#state(other)?.deviceId === state.deviceId &&
+            this.#state(other)?.authed,
+        );
+      if (!stillConnected) {
+        this.#failPending(state.deviceId, {
+          code: "browser_offline",
+          message: "the browser disconnected during the call",
+        });
+      }
     }
     // Complete the closing handshake so the daemon sees the close promptly instead of
     // waiting out its own close timeout. Already-closed sockets throw; that is fine.
@@ -333,6 +356,16 @@ export class Hub extends DurableObject<Env> {
   }
 
   override async webSocketError(): Promise<void> {}
+
+  /** Fail every pending call of a device at once (it disconnected or sent garbage). */
+  #failPending(deviceId: string, error: ErrorPayload): void {
+    const rows = this.#sql
+      .exec("SELECT id FROM calls WHERE device_id = ? AND status = 'pending'", deviceId)
+      .toArray() as { id: string }[];
+    for (const row of rows) {
+      this.#onResult(deviceId, { type: "result", id: row.id, ok: false, error, duration_ms: 0 });
+    }
+  }
 
   #recordPresence(deviceId: string, presence: Presence): void {
     const now = Date.now();
@@ -363,17 +396,18 @@ export class Hub extends DurableObject<Env> {
       | undefined;
     // Only the device the call was sent to may answer it, and only once.
     if (!row || row.device_id !== deviceId || row.status !== "pending") return;
-    const serialized = JSON.stringify(msg);
-    const result: DaemonResult =
-      serialized.length > MAX_RESULT_CHARS
-        ? {
-            type: "result",
-            id: msg.id,
-            ok: false,
-            error: { code: "internal", message: "result too large" },
-            duration_ms: msg.duration_ms,
-          }
-        : msg;
+    const tooLarge =
+      JSON.stringify(msg).length > MAX_RESULT_CHARS ||
+      (msg.ok && JSON.stringify(msg.data ?? null).length > MAX_DATA_CHARS);
+    const result: DaemonResult = tooLarge
+      ? {
+          type: "result",
+          id: msg.id,
+          ok: false,
+          error: { code: "internal", message: "result exceeded the size cap" },
+          duration_ms: msg.duration_ms,
+        }
+      : msg;
     this.#sql.exec(
       "UPDATE calls SET status = 'done', result = ? WHERE id = ?",
       JSON.stringify(result),
@@ -871,6 +905,13 @@ export class Hub extends DurableObject<Env> {
       "UPDATE pairings SET status = 'expired' WHERE status = 'pending' AND expires_at < ?",
       now,
     );
+    const samePending = this.#sql
+      .exec(
+        "SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending' AND public_key = ?",
+        input.public_key,
+      )
+      .toArray()[0] as { n: number };
+    if (samePending.n > 0) return { ok: false, error: "a pairing for this key is already pending" };
     const pending = this.#sql
       .exec("SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending'")
       .toArray()[0] as { n: number };
@@ -1004,7 +1045,8 @@ export class Hub extends DurableObject<Env> {
       .map((a) => a.trim().slice(0, 40))
       .filter((a) => a.length > 0)
       .slice(0, 8);
-    if (!cleanName) return false;
+    if (!cleanName || !/^[\w .()'-]+$/.test(cleanName)) return false;
+    if (cleanAliases.some((a) => !/^[\w .()'-]+$/.test(a))) return false;
     this.#sql.exec(
       "UPDATE devices SET name = ?, aliases = ? WHERE id = ? AND revoked_at IS NULL",
       cleanName,
@@ -1016,20 +1058,24 @@ export class Hub extends DurableObject<Env> {
 
   // ------------------------------------------------------------------ password lockout
 
-  /** True when too many wrong passwords were entered recently. */
-  async passwordLocked(): Promise<boolean> {
+  /**
+   * Atomically reserve one password attempt. Returns false when the lockout is active.
+   * The attempt is counted as a failure up front and forgiven by a correct password, so
+   * parallel requests cannot exceed the limit.
+   */
+  async beginPasswordAttempt(): Promise<boolean> {
+    const now = Date.now();
     const row = this.#sql
-      .exec(
-        "SELECT COUNT(*) AS n FROM password_failures WHERE ts >= ?",
-        Date.now() - PASSWORD_WINDOW_MS,
-      )
+      .exec("SELECT COUNT(*) AS n FROM password_failures WHERE ts >= ?", now - PASSWORD_WINDOW_MS)
       .toArray()[0] as { n: number };
-    return row.n >= PASSWORD_MAX_FAILURES;
+    if (row.n >= PASSWORD_MAX_FAILURES) return false;
+    this.#sql.exec("INSERT INTO password_failures (ts) VALUES (?)", now);
+    return true;
   }
 
-  async recordPasswordAttempt(success: boolean): Promise<void> {
-    if (success) this.#sql.exec("DELETE FROM password_failures");
-    else this.#sql.exec("INSERT INTO password_failures (ts) VALUES (?)", Date.now());
+  /** A correct password clears the failure count. */
+  async passwordSucceeded(): Promise<void> {
+    this.#sql.exec("DELETE FROM password_failures");
   }
 }
 

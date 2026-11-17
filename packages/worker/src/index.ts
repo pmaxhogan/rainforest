@@ -73,7 +73,8 @@ const pairStatusSchema = z.object({
 async function readJson(request: Request): Promise<unknown> {
   if (Number(request.headers.get("content-length") ?? "0") > 4096) return null;
   try {
-    return await request.json();
+    const text = await request.text();
+    return text.length > 4096 ? null : JSON.parse(text);
   } catch {
     return null;
   }

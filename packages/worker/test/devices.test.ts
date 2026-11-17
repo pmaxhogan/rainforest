@@ -105,7 +105,7 @@ describe("/pair/start", () => {
 
   // BUG (hub.ts pairStart): only active devices are checked, so one key can hold several
   // pending pairings and both can be approved, giving two device ids for one key.
-  it.fails("refuses a second pending pairing for the same key", async () => {
+  it("refuses a second pending pairing for the same key", async () => {
     const key = await makeDeviceKey();
     const first = await pairStart(
       { public_key: key.publicKey, name: "One", os: "macos" },
