@@ -12,7 +12,6 @@ import {
   getTool,
   hubMessage,
   inputJsonSchema,
-  NOT_IMPLEMENTED_SUFFIX,
   toErrorPayload,
   wrapUntrusted,
 } from "../src/index.ts";
@@ -113,29 +112,26 @@ describe("tool registry", () => {
   });
 });
 
-// Hardcoded on purpose: a tool leaves this list only when its daemon flow ships.
-const UNIMPLEMENTED = [
-  "create_list",
-  "update_list",
-  "delete_list",
-  "add_to_list",
-  "update_list_item",
-  "move_list_item",
-];
-
 describe("tool descriptions tell the truth", () => {
-  test("unimplemented tools carry the shared suffix and implemented ones do not", () => {
-    expect(NOT_IMPLEMENTED_SUFFIX).toContain("unsupported");
+  test("every tool is implemented: no description says it is not", () => {
     for (const t of TOOLS) {
-      const marked = t.description.endsWith(NOT_IMPLEMENTED_SUFFIX);
-      expect(marked, t.name).toBe(UNIMPLEMENTED.includes(t.name));
-      if (marked) expect(t.description.split(NOT_IMPLEMENTED_SUFFIX).length, t.name).toBe(2);
+      expect(t.description, t.name).not.toMatch(
+        /not implemented yet in this version|answers unsupported\.$/i,
+      );
     }
   });
 
-  test("unimplemented descriptions promise no result shape", () => {
-    for (const name of UNIMPLEMENTED) {
-      expect(getTool(name)!.description, name).not.toMatch(/returns/i);
+  test("the list write tools describe their real results", () => {
+    const expected: Record<string, RegExp> = {
+      create_list: /Returns \{changed, list, before, after\}/,
+      update_list: /Returns \{changed, before, after\}/,
+      delete_list: /cannot be undone/,
+      add_to_list: /Returns \{changed, added, before_count, after_count\}/,
+      update_list_item: /Returns \{changed, before, after\}/,
+      move_list_item: /copy: true answers unsupported/,
+    };
+    for (const [name, re] of Object.entries(expected)) {
+      expect(getTool(name)!.description, name).toMatch(re);
     }
   });
 

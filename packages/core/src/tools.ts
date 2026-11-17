@@ -48,12 +48,6 @@ const listItemId = z
   .regex(/^[A-Za-z0-9-]{6,64}$/)
   .describe("List item id from get_list");
 
-/**
- * Appended to the description of every tool the daemon does not implement yet (it answers
- * `unsupported`). Delete the suffix from a tool when its flow ships.
- */
-export const NOT_IMPLEMENTED_SUFFIX = " Not implemented yet in this version; answers unsupported.";
-
 /** For a result that can be cut but whose tool takes no `cursor`: say how to get the rest. */
 const CUT_RAISE_MAX_CHARS =
   " A result over the budget is cut (truncated: true); this tool takes no cursor, so raise max_chars to get the rest.";
@@ -519,7 +513,9 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Create list",
     kind: "write",
     pacing: "list",
-    description: "Create a list." + NOT_IMPLEMENTED_SUFFIX,
+    description:
+      "Create a list (privacy defaults to private). Returns {changed, list, before, after}: the new list and the lists " +
+      "page read back before and after.",
     input: z.object({
       browser,
       name: z.string().min(1).max(100),
@@ -531,7 +527,8 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Update list",
     kind: "write",
     pacing: "list",
-    description: "Rename a list and/or change its privacy." + NOT_IMPLEMENTED_SUFFIX,
+    description:
+      "Rename a list and/or set its privacy (private, shared or public). Returns {changed, before, after} read back from the list page.",
     input: z.object({
       browser,
       list_id: listId,
@@ -545,7 +542,8 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     destructive: true,
     pacing: "list",
-    description: "Delete a list." + NOT_IMPLEMENTED_SUFFIX,
+    description:
+      "Delete a whole list with all its items; this cannot be undone. Returns {changed, before, after, list}: the lists page read back before and after.",
     input: z.object({ browser, list_id: listId }),
   }),
   tool({
@@ -553,7 +551,8 @@ export const TOOLS: readonly ToolDef[] = [
     title: "Add to list",
     kind: "write",
     pacing: "list",
-    description: "Add a product to a list." + NOT_IMPLEMENTED_SUFFIX,
+    description:
+      "Add a product to a list. Returns {changed, added, before_count, after_count}, or {changed: false} when the product is already on the list.",
     input: z.object({ browser, list_id: listId, asin }),
   }),
   tool({
@@ -572,7 +571,7 @@ export const TOOLS: readonly ToolDef[] = [
     kind: "write",
     pacing: "list",
     description:
-      "Set quantity wanted, priority and/or comment on a list item." + NOT_IMPLEMENTED_SUFFIX,
+      "Set quantity wanted, priority and/or comment on a list item. Returns {changed, before, after}: the item read back before and after.",
     input: z.object({
       browser,
       list_id: listId,
@@ -584,11 +583,12 @@ export const TOOLS: readonly ToolDef[] = [
   }),
   tool({
     name: "move_list_item",
-    title: "Move or copy list item",
+    title: "Move list item",
     kind: "write",
     pacing: "list",
     description:
-      "Move (or with copy: true, copy) an item to another list." + NOT_IMPLEMENTED_SUFFIX,
+      "Move an item to another list. Returns {changed, item, source_after, destination_has_item}. Only moving is implemented: " +
+      "copy: true answers unsupported (use add_to_list for the other list instead).",
     input: z.object({
       browser,
       list_id: listId,

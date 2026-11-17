@@ -435,13 +435,17 @@ if (!start.ok) {
       });
     });
 
-    test.todo("create_list (flow not built yet): #createList popover -> POST /hz/wishlist/create");
     test.todo(
-      "update_list (flow not built yet): #editYourList settings popover -> POST /hz/wishlist/settings/<ID>",
+      "create_list (the mock storefront does not model this page's real markup yet): #createList popover -> POST /hz/wishlist/create",
     );
-    test.todo("delete_list (flow not built yet): settings popover submit.deleteList");
     test.todo(
-      "add_to_list (flow not built yet): #addToWishlist on the product page -> POST /hz/wishlist/additem",
+      "update_list (the mock storefront does not model this page's real markup yet): #editYourList settings popover -> POST /hz/wishlist/settings/<ID>",
+    );
+    test.todo(
+      "delete_list (the mock storefront does not model this page's real markup yet): settings popover submit.deleteList",
+    );
+    test.todo(
+      "add_to_list (the mock storefront does not model this page's real markup yet): #addToWishlist on the product page -> POST /hz/wishlist/additem",
     );
     it("remove_from_list deletes exactly that item", async () => {
       const lists = (await h.call("list_lists")) as { lists: { list_id: string }[] };
@@ -464,10 +468,10 @@ if (!start.ok) {
       expect(st.session!.lists[1]!.items).toHaveLength(1);
     });
     test.todo(
-      "update_list_item (flow not built yet): reg-dispatch-modal edit-notes -> POST /hz/wishlist/cqp",
+      "update_list_item (the mock storefront does not model this page's real markup yet): reg-dispatch-modal edit-notes -> POST /hz/wishlist/cqp",
     );
     test.todo(
-      "move_list_item (flow not built yet): show-move-to-list-popover -> POST /hz/wishlist/movetolist",
+      "move_list_item (the mock storefront does not model this page's real markup yet): show-move-to-list-popover -> POST /hz/wishlist/movetolist",
     );
   });
 
