@@ -124,6 +124,13 @@ export default {
     if (path === "/oauth/register" || path === "/oauth/token") {
       if (await limited(env.RL_PUBLIC, `oauth:${ip}`)) return plain("slow down", 429);
     }
+    if (path === "/.well-known/oauth-protected-resource") {
+      // The provider serves RFC 9728 metadata only at the path-suffixed URL of the one
+      // resource (/mcp). Clients that probe the bare well-known URL get the same document.
+      const alias = new URL(request.url);
+      alias.pathname = "/.well-known/oauth-protected-resource/mcp";
+      return provider(config.baseUrl).fetch(new Request(alias, request), env, ctx);
+    }
     return provider(config.baseUrl).fetch(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;

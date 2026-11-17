@@ -313,10 +313,22 @@ export class Hub extends DurableObject<Env> {
     }
   }
 
-  override async webSocketClose(ws: WebSocket): Promise<void> {
+  override async webSocketClose(
+    ws: WebSocket,
+    code: number,
+    reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {
     const state = this.#state(ws);
     if (state?.authed && state.deviceId) {
       this.#sql.exec("UPDATE devices SET last_seen = ? WHERE id = ?", Date.now(), state.deviceId);
+    }
+    // Complete the closing handshake so the daemon sees the close promptly instead of
+    // waiting out its own close timeout. Already-closed sockets throw; that is fine.
+    try {
+      ws.close(code === 1005 || code === 1006 ? 1000 : code, reason);
+    } catch {
+      // already closed
     }
   }
 
