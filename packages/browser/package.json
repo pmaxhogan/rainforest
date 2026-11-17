@@ -13,6 +13,6 @@
     "@rainforest/core": "^0.0.0",
     "playwright-core": "^1.66.0-alpha-2026-11-09",
     "ws": "^8.23.0",
-    "zod": "^4.6.7"
+    "zod": "^4.6.6"
   }
 }
