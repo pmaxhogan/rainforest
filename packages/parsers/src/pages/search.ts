@@ -20,6 +20,7 @@ import {
   type Money,
   type MoneyRange,
   type Rating,
+  INVISIBLE_TAGS,
   attr,
   collapse,
   moneyFromPriceElement,
@@ -578,6 +579,20 @@ function hiddenMarkers(el: DomElement, stop: DomElement): DomElement[] {
   return out;
 }
 
+/**
+ * Visible, or hidden only by `display: contents` wrappers between it and `stop` (those have
+ * no box of their own, but their children render).
+ */
+function visibleThroughContents(el: DomElement, stop: DomElement): boolean {
+  if (!visible(stop)) return false;
+  for (let cur: DomElement | null = el; cur != null && cur !== stop; cur = cur.parentElement) {
+    if (INVISIBLE_TAGS.has(cur.localName)) return false;
+    if (cur.getAttribute(HIDDEN_ATTR) !== "1") continue;
+    if (!/display:\s*contents/i.test(cur.getAttribute("style") ?? "")) return false;
+  }
+  return true;
+}
+
 // ---- product field extraction (cards and widget items)
 
 interface Ctx {
@@ -739,6 +754,16 @@ function parseProduct(root: DomElement, ctx: Ctx, meta: ParseMeta): ProductField
       take(b);
     }
     finish(titleRecipe);
+  }
+
+  // -- deal badges: their `display: contents` wrapper is marked hidden by the capture pass
+  // although the badge renders, so read them through such a wrapper (only).
+  for (const d of rawAll(root, ".a-badge[data-a-badge-type='deal']")) {
+    if (!visibleThroughContents(d, root)) continue;
+    const t = collapse(d.querySelector(".a-badge-text")?.textContent ?? d.textContent ?? "");
+    if (t === "") continue;
+    badges.push({ type: "deal", text: t });
+    take(d.closest("a[href^='/deals']") ?? d);
   }
 
   // -- badges outside the recipes
@@ -1339,11 +1364,18 @@ function tileUrl(a: DomElement): string | undefined {
   }
 }
 
-function widgetLinks(el: DomElement, ctx: Ctx, type: SearchWidgetType): WidgetLink[] {
+function widgetLinks(
+  el: DomElement,
+  ctx: Ctx,
+  type: SearchWidgetType,
+  itemRoots: readonly DomElement[],
+): WidgetLink[] {
   const out: WidgetLink[] = [];
   const seen = new Set<string>();
   for (const a of qa(el, "a")) {
     if (ctx.consumed.covers(a)) continue;
+    // An item's own anchors (title, image, price) belong to the item, not the shelf.
+    if (itemRoots.some((r) => within(a, r))) continue;
     const href = attr(a, "href");
     let label = clean(a);
     if (label === "") {
@@ -1634,12 +1666,13 @@ function parseCorrections(scope: DomElement, ctx: Ctx): Correction[] {
     const t = clean(box);
     const link = qa(box, "a[href]")[0];
     const corr: Correction = { type: hit[1], text: t };
-    const quoted = /["“]([^"”]+)["”]/.exec(t)?.[1];
+    const quoted = /["\u201c]([^"\u201d]+)["\u201d]/.exec(t)?.[1];
     const linkText = clean(link);
     const stateText = clean(q(box, ".a-color-state, .a-text-bold"));
     const qText =
       linkText !== "" ? linkText : (quoted ?? (stateText !== "" ? stateText : undefined));
-    if (qText !== undefined && qText !== "") corr.query = qText.replace(/^["“]|["”]$/g, "");
+    if (qText !== undefined && qText !== "")
+      corr.query = qText.replace(/^["\u201c]|["\u201d]$/g, "");
     const token = searchToken(attr(link, "href"), ctx.base);
     if (token !== undefined) corr.token = token;
     out.push(corr);
@@ -1743,7 +1776,7 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
         "info-bar-state",
         () =>
           clean(crumb === undefined ? undefined : q(crumb, ".a-color-state")).replace(
-            /^["“]|["”]$/g,
+            /^["\u201c]|["\u201d]$/g,
             "",
           ),
       ],
@@ -1800,7 +1833,7 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
     const idxRaw = attr(child, "data-index");
     const index = idxRaw !== undefined && /^\d+$/.test(idxRaw) ? Number(idxRaw) : undefined;
     const markers = hiddenMarkers(child, mainSlot as DomElement);
-    const hiddenInBrowser = markers.length > 0 || !visible(child);
+    let hiddenInBrowser = markers.length > 0 || !visible(child);
     if (hiddenInBrowser && markers.length === 0) continue; // hidden from above the results list
     const signals = sponsoredSignals(child, mainSlot);
 
@@ -1864,6 +1897,14 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
       }
       unmask(markers, child);
       data.hidden_skipped.sponsored_widgets++;
+    } else if (signals.length > 0 && clean(child, (e) => consumed.covers(e)) === "") {
+      // A visible shelf wrapper whose sponsored content (carousel, lazy loader) is hidden.
+      const inner = rawAll(child, `[${HIDDEN_ATTR}='1']`);
+      if (inner.length > 0) {
+        unmask(inner, child);
+        hiddenInBrowser = true;
+        data.hidden_skipped.sponsored_widgets++;
+      }
     }
     const before = clean(child, (e) => consumed.covers(e));
     if (before === "") {
@@ -1889,7 +1930,8 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
     for (const l of sponsoredLabelElements(child)) {
       if (visible(l)) consumed.take(labelHolder(l, child));
     }
-    for (const itemRoot of widgetItemRoots(child)) {
+    const itemRoots = widgetItemRoots(child);
+    for (const itemRoot of itemRoots) {
       const im = newMeta();
       const fields = parseProduct(itemRoot, ctx, im);
       tally.merge("widget_items", im);
@@ -1907,8 +1949,12 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
         consumed.take(head);
       }
       widget.items.push(item);
-      for (const l of qa(itemRoot, "a"))
-        if (!consumed.covers(l) && clean(l) === "") consumed.take(l);
+      // Image links and repeated title links carry nothing the item does not already have.
+      for (const l of qa(itemRoot, "a")) {
+        if (consumed.covers(l)) continue;
+        const lt = clean(l);
+        if (lt === "" || lt === fields.title) consumed.take(l);
+      }
       if (clean(itemRoot, (e) => consumed.covers(e)) === "") consumed.take(itemRoot);
     }
     for (const b of qa(
@@ -1917,7 +1963,7 @@ export const parseSearch: Parser<SearchPage> = (capture: Capture) => {
     )) {
       consumed.take(b);
     }
-    widget.links = widgetLinks(child, ctx, type);
+    widget.links = widgetLinks(child, ctx, type, itemRoots);
     tally.merge(`widgets.${type}`, wm);
     // A short remainder (disclosure footers, "or" between links) is kept as the widget's text;
     // a long one stays unconsumed so the lossless report carries it.

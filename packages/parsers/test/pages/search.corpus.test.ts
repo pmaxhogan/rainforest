@@ -43,7 +43,11 @@ function labelKind(card: DomElement): "sponsored" | "featured" | undefined {
   const all = Array.from(card.querySelectorAll("*"));
   if (all.some((e) => /^Sponsored$/i.test(ownText(e)))) return "sponsored";
   if (
-    all.some((e) => /(^|\s)puis-sponsored-label-text(\s|$)/.test(e.getAttribute("class") ?? ""))
+    all.some(
+      (e) =>
+        /(^|\s)puis-sponsored-label-text(\s|$)/.test(e.getAttribute("class") ?? "") ||
+        /^Featured from Amazon brands$/i.test(ownText(e)),
+    )
   ) {
     return "featured";
   }
@@ -127,6 +131,23 @@ describe.skipIf(CORPUS === undefined)("search parser over the private corpus", (
       expect(flaggedVisible.length).toBe(visibleLabels);
       const fragile = flagged.filter((r) => r.sponsored_signals.length === 1).length;
 
+      // Same cross-check for widgets: non-card children of the results list that hold a label,
+      // visible or hidden, must each come back as one sponsored widget.
+      const shelves = Array.from(slot.children).filter(
+        (c) =>
+          c.getAttribute("data-component-type") !== "s-search-result" &&
+          !["script", "style", "link", "noscript"].includes(c.localName),
+      );
+      const labelShelves = shelves.filter((c) => labelKind(c) !== undefined).length;
+      const sponsoredWidgets = data.widgets.filter((w) => w.is_sponsored);
+      expect(sponsoredWidgets.length).toBe(labelShelves);
+      const fragileWidgets = sponsoredWidgets.filter(
+        (w) => w.sponsored_signals.length === 1,
+      ).length;
+
+      // False-positive watch for text-anchor strategies that the corpus never exercises.
+      const selected = data.refinements.flatMap((g) => g.options).filter((o) => o.selected).length;
+
       const ratio = expectLosslessCoverage(result, capture, MIN_COVERAGE, {
         root: doc.querySelector("#search") ?? undefined,
       });
@@ -137,7 +158,9 @@ describe.skipIf(CORPUS === undefined)("search parser over the private corpus", (
           `flagged_sponsored=${flagged.length} (visible ${flaggedVisible.length}) ` +
           `label_cards=${sponsoredLabels}+${featuredLabels}featured (visible ${visibleLabels}) ` +
           `single_signal=${fragile} multi_signal=${flagged.length - fragile} ` +
-          `widgets=${data.widgets.length} (sponsored ${data.widgets.filter((w) => w.is_sponsored).length}) ` +
+          `widgets=${data.widgets.length} (sponsored ${sponsoredWidgets.length}, label_shelves ${labelShelves}, single_signal ${fragileWidgets}) ` +
+          `selected_options=${selected} applied_filters=${data.applied_filters.length} ` +
+          `corrections=${data.corrections.length} department=${data.department === undefined ? "no" : "yes"} ` +
           `refinement_groups=${data.refinements.length} max_token=${Math.max(0, ...tokens.map((t) => t.length))} ` +
           `notes=${notes} other_sections=${result.other_sections.length} coverage=${ratio.toFixed(3)} ` +
           `warnings=${result.meta.warnings.length}`,

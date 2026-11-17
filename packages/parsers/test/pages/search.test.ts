@@ -528,9 +528,12 @@ describe("parseSearch: result fields", () => {
   });
 
   it("reads coupons, subscribe and save, savings badge and deal / choice badges", () => {
-    const badges = `<div class="a-section puis-status-badge-container"><span aria-label="Amazon's Choice"><span class="rush-component" data-component-type="s-status-badge-component"><div class="a-section" data-csa-c-badge-text="Overall Pick"><span class="a-badge" id="B0FAKE0008-amazons-choice" data-a-badge-type="status"><span class="a-badge-label"><span class="a-badge-label-inner"><span class="a-badge-text">Overall Pick</span></span></span></span></div></span></span></div>
-<div class="a-section"><span class="a-badge" data-a-badge-type="deal"><span class="a-badge-label"><span class="a-badge-text">Limited time deal</span></span></span></div>`;
-    const price = `<div data-cy="price-recipe"><div class="a-row"><a href="/dp/B0FAKE0008"><div class="a-section savings-badge-wrapper"><span class="a-size-extra-large apex-savings-percent">-21%</span> <span class="apex-savings-price"><span class="a-price" data-a-color="base"><span class="a-offscreen">$39.00</span></span></span></div></a></div>
+    const badges = `<div class="a-section puis-status-badge-container"><span aria-label="Amazon's Choice"><span class="rush-component" data-component-type="s-status-badge-component"><div class="a-section" data-csa-c-badge-text="Overall Pick"><span class="a-badge" id="B0FAKE0008-amazons-choice" data-a-badge-type="status"><span class="a-badge-label"><span class="a-badge-label-inner"><span class="a-badge-text">Overall Pick</span></span></span></span></div></span></span></div>`;
+    // Real nesting: the deal badge sits in a display:contents wrapper that the capture pass
+    // marks hidden although it renders.
+    const price = `<div data-cy="price-recipe"><div class="a-row"><a class="a-link-normal" href="/deals"><span style="display: contents; --fake-bg: #000000;" data-rf-hidden="1"><span id="DEAL_B0FAKE0008" class="a-badge" data-a-badge-type="deal"><span class="a-badge-label"><span class="a-badge-label-inner a-text-ellipsis"><span class="a-badge-text">Limited time deal</span></span></span></span></span></a></div>
+<div class="a-row"><a class="a-link-normal" href="/deals"><span data-rf-hidden="1"><span class="a-badge" data-a-badge-type="deal"><span class="a-badge-text">Truly hidden deal</span></span></span></a></div>
+<div class="a-row"><a href="/dp/B0FAKE0008"><div class="a-section savings-badge-wrapper"><span class="a-size-extra-large apex-savings-percent">-21%</span> <span class="apex-savings-price"><span class="a-price" data-a-color="base"><span class="a-offscreen">$39.00</span></span></span></div></a></div>
 <div class="a-row a-size-base a-color-secondary"><span class="rush-component"><div class="s-coupon-tile-container"><label class="s-coupon-checkbox-label"><span class="s-coupon-tile-text-content"><span class="a-size-base a-color-base a-text-normal">Coupon price</span><span class="a-color-base s-coupon-tile-price-content"><span class="a-price" data-a-color="base"><span class="a-offscreen">$35.10</span><span aria-hidden="true">$35.10</span></span></span></span></label><div class="s-coupon-tile-content-container aok-hidden" data-rf-hidden="1">Saving $3.90 at purchase</div></div></span></div>
 <div class="a-row"><span class="rush-component" data-component-type="s-coupon-component"><span class="s-coupon-unclipped aok-block"><span class="s-coupon-highlight-color">Extra 15% off</span> <span class="a-color-base">when you subscribe</span></span></span></div></div>`;
     const { data } = parse(
@@ -543,9 +546,10 @@ describe("parseSearch: result fields", () => {
     expect(r.coupon_price?.amount).toBe(35.1);
     expect(r.subscribe_and_save).toBe("Extra 15% off when you subscribe");
     expect(r.badges).toEqual([
+      { type: "deal", text: "Limited time deal" },
       { type: "amazons_choice", text: "Overall Pick", context: "Amazon's Choice" },
-      { type: "limited_time_deal", text: "Limited time deal" },
     ]);
+    expect(JSON.stringify(r)).not.toContain("Truly hidden deal");
     expect(r.promotions).toBeUndefined();
   });
 
@@ -671,10 +675,29 @@ describe("parseSearch: widgets", () => {
       expect(w?.items.map((i) => [i.asin, i.title, i.price?.amount, i.is_sponsored])).toEqual([
         ["B0FAKE0041", "Fake Brand Cable, 2-Pack", 9.99, true],
       ]);
-      // Off-site ad click URLs are not kept.
+      // Off-site ad click URLs are not kept; the item's own link is not repeated as a shelf link.
       expect(JSON.stringify(w)).not.toContain("sponsored-ads.example.com");
+      expect(w?.links).toEqual([]);
       expect(data.hidden_skipped.sponsored_widgets).toBe(hidden ? 1 : 0);
     }
+  });
+
+  it("reports a visible shelf wrapper whose sponsored carousel is hidden", () => {
+    const shelf = `<div class="sg-col-20-of-24 s-result-item s-widget" data-index="33" data-cel-widget="search_result_33"><div class="sg-col-inner"><div class="s-widget-container template=SEARCH_RESULTS">
+<span data-component-type="aspa-asin-ajax-lazy-loader" data-rf-hidden="1"></span>
+<span data-component-type="s-searchgrid-carousel" data-rf-hidden="1"><div class="s-shopping-adviser-heading"><h2>Fake trending shelf</h2><a class="s-widget-sponsored-label-text" href="#">Sponsored</a></div>
+<ol class="a-carousel"><li class="a-carousel-card"><span data-csa-c-item-id="amzn1.asin.1.B0FAKE0091"><div data-cy="title-recipe"><a class="a-text-normal" href="/sspa/click?url=%2Fdp%2FB0FAKE0091"><h2 aria-label="Sponsored Ad - Fake Shelf Item"><span>Fake Shelf Item</span></h2></a></div></span></li></ol></span>
+</div></div></div>`;
+    const { data, meta } = parse(
+      page(card({ asin: "B0FAKE0001", title: "One", index: 3 }) + shelf),
+    );
+    const w = data.widgets.find((x) => x.index === 33);
+    expect(w?.hidden_in_browser).toBe(true);
+    expect(w?.is_sponsored).toBe(true);
+    expect(w?.heading).toBe("Fake trending shelf");
+    expect(w?.items.map((i) => i.title)).toEqual(["Fake Shelf Item"]);
+    expect(data.hidden_skipped.sponsored_widgets).toBe(1);
+    expect(meta.unparsed_text_chars).toBe(0);
   });
 
   it("reads a video ad widget", () => {
@@ -759,6 +782,138 @@ describe("parseSearch: widgets", () => {
     );
     expect(data.widgets.some((w) => w.heading === "Fake hidden shelf")).toBe(false);
     expect(data.hidden_skipped.widgets).toBe(1);
+  });
+});
+
+describe("parseSearch: strategy fallbacks", () => {
+  const bare = (inner: string, index: number): string =>
+    `<div data-index="${index}" data-component-type="s-search-result" class="s-result-item">${inner}</div>`;
+
+  it("falls back for asin, title, rating, review count, prices and prime", () => {
+    const a = bare(
+      `<a class="a-link-normal" href="/Fake/dp/B0FAKE00A1/ref=sr_1_1"><h2 class="a-size-base"><span>Dp Link Widget</span></h2></a>
+<div data-cy="reviews-block"><div class="a-row"><a href="javascript:void(0)" aria-label="3.9 out of 5 stars, rating details"></a></div></div>
+<div data-cy="price-recipe"><div class="a-row"><span data-csa-c-price-to-pay="7.25"></span></div><div class="a-row"><span data-strikethroughprice="1"><span class="a-price a-text-price"><span class="a-offscreen">$8.00</span></span></span></div></div>
+<div data-cy="delivery-recipe"><div class="a-row"><span role="img" aria-label="Prime"></span> FREE delivery Fri, Jan 3</div></div>`,
+      3,
+    );
+    const b = bare(
+      `<div data-asin="B0FAKE00A2"><span class="a-truncate"><span class="a-truncate-full a-offscreen">Truncated Widget</span><span class="a-truncate-cut" aria-hidden="true">Truncated Wid...</span></span></div>
+<div data-cy="reviews-block"><div class="a-row"><span>4.2</span><i class="a-icon a-star-mini-4"></i></div><div class="a-row"><span>(321)</span></div></div>
+<div data-cy="price-recipe"><div class="a-row"><span class="a-price" data-a-color="base"><span class="a-offscreen">$3.00</span></span> <span>($0.25/ounce)</span></div></div>
+<div data-cy="delivery-recipe"><div class="a-row">FREE delivery for Prime members</div></div>`,
+      4,
+    );
+    const { data, meta } = parse(page(a + b));
+    const ra = result(data, "B0FAKE00A1");
+    expect(ra.title).toBe("Dp Link Widget");
+    expect(ra.rating).toEqual({ value: 3.9, out_of: 5 });
+    expect(ra.price?.amount).toBe(7.25);
+    expect(ra.list_price?.amount).toBe(8);
+    expect(ra.prime).toBe(true);
+    const rb = result(data, "B0FAKE00A2");
+    expect(rb.title).toBe("Truncated Widget");
+    expect(rb.rating).toEqual({ value: 4.2, out_of: 5 });
+    expect(rb.review_count?.value).toBe(321);
+    expect(rb.unit_price).toEqual({
+      amount: { amount: 0.25, currency: "USD", raw: "$0.25" },
+      unit: "ounce",
+      raw: "($0.25/ounce)",
+    });
+    expect(rb.prime).toBe(true);
+    const s = meta.strategies;
+    expect(s["results.asin"]).toBe("dp-link:1,descendant-data-asin:1");
+    expect(s["results.title"]).toBe("heading:1,truncate-full:1");
+    expect(s["results.rating"]).toBe("aria-label:1,rating-number:1");
+    expect(s["results.review_count"]).toBe("text-anchor:1");
+    expect(s["results.price"]).toBe("price-to-pay-attr:1,a-price:1");
+    expect(s["results.list_price"]).toBe("strike-attr:1");
+    expect(s["results.unit_price"]).toBe("text-anchor:1");
+    expect(s["results.prime"]).toBe("aria-label:1,text-anchor:1");
+  });
+
+  it("detects a selected refinement by checkbox, bold label or a Remove label alone", () => {
+    const group = (key: string, li: string): string =>
+      `<div role="group"><div id="${key}-title" role="heading"><span>Group ${key}</span></div><ul id="filter-${key}" aria-labelledby="${key}-title">${li}</ul></div>`;
+    const extra =
+      group(
+        "p_901",
+        `<li><a class="s-navigation-item" href="/s?k=a&amp;rh=p_901"><input type="checkbox" checked><span>By checkbox</span></a></li>`,
+      ) +
+      group(
+        "p_902",
+        `<li><a class="s-navigation-item" href="/s?k=a&amp;rh=p_902"><span class="a-text-bold">By bold</span></a></li>`,
+      ) +
+      group(
+        "p_903",
+        `<li><a class="s-navigation-item" aria-label="Remove By remove filter" href="/s?k=a"><span>By remove</span></a></li>`,
+      ) +
+      group(
+        "p_904",
+        `<li><a class="s-navigation-item" href="/s?k=a&amp;rh=p_904"><span>Not selected</span></a></li>`,
+      );
+    const { data } = parse(
+      page(card({ asin: "B0FAKE0001", title: "One", index: 3 }), { railExtra: extra }),
+    );
+    const sel = (key: string) => data.refinements.find((g) => g.key === key)?.options[0]?.selected;
+    expect([sel("p_901"), sel("p_902"), sel("p_903"), sel("p_904")]).toEqual([
+      true,
+      true,
+      true,
+      false,
+    ]);
+    expect(data.refinements.find((g) => g.key === "p_903")?.options[0]?.label).toBe("By remove");
+  });
+
+  it("falls back for sort links, pagination, totals, query and widget headings", () => {
+    const body = `<div class="s-main-slot">
+<div data-index="1" class="s-result-item"><span>1-48 of 500 results</span></div>
+${card({ asin: "B0FAKE0001", title: "One", index: 3 })}
+<div data-index="5" class="s-result-item s-widget"><div role="region" aria-label="Fake region shelf"><div data-asin="B0FAKE00B1"><a href="/dp/B0FAKE00B1"><span>Region Item</span></a></div></div></div>
+<div data-index="9" class="s-result-item"><div class="s-pagination-container" role="navigation" aria-label="pagination"><a class="s-pagination-item" href="/s?k=a&amp;page=1">1</a><a class="s-pagination-item s-pagination-next" href="/s?k=a&amp;page=3">Next</a></div></div>
+</div>
+<div class="sort-links"><a href="/s?k=a&amp;s=price-asc-rank&amp;ref=sr_st_price-asc-rank">Price: Low to High</a><a aria-current="true" href="/s?k=a&amp;s=review-rank&amp;ref=sr_st_review-rank">Avg. Customer Review</a></div>`;
+    const { data, meta } = parse(body, `${HOST}/s?k=a&page=2`);
+    expect(data.total_results_text).toBe("1-48 of 500 results");
+    expect(meta.strategies.total_results_text).toBe("text-anchor");
+    expect(data.result_range).toEqual({ first: 1, last: 48, total: 500, total_approximate: false });
+    expect(data.query).toBe("fake widget");
+    expect(meta.strategies.query).toBe("search-box");
+    expect(data.sort_options).toEqual([
+      {
+        label: "Price: Low to High",
+        value: "price-asc-rank",
+        selected: false,
+        token: "/s?k=a&s=price-asc-rank&ref=sr_st_price-asc-rank",
+      },
+      {
+        label: "Avg. Customer Review",
+        value: "review-rank",
+        selected: true,
+        token: "/s?k=a&s=review-rank&ref=sr_st_review-rank",
+      },
+    ]);
+    expect(meta.strategies.sort_options).toBe("links");
+    expect(data.pagination?.current_page).toBe(2);
+    expect(data.pagination?.has_next).toBe(true);
+    expect(meta.strategies.pagination).toBe("nav-aria");
+    expect(meta.warnings).toContain(
+      "pagination: no selected page item, current page taken from the URL",
+    );
+    const w = data.widgets.find((x) => x.index === 5);
+    expect(w?.heading).toBe("Fake region shelf");
+    expect(w?.items.map((i) => i.title)).toEqual(["Region Item"]);
+    expect(meta.strategies["widgets.other.heading"]).toBe("aria-region:1");
+  });
+
+  it("finds a pagination container without strip or navigation role", () => {
+    const pag = `<div data-index="9" class="s-result-item"><div class="s-pagination-container"><span class="s-pagination-item s-pagination-selected">4</span></div></div>`;
+    const { data, meta } = parse(
+      page(card({ asin: "B0FAKE0001", title: "One", index: 3 }), { pag }),
+    );
+    expect(data.pagination?.current_page).toBe(4);
+    expect(data.pagination?.has_next).toBe(false);
+    expect(meta.strategies.pagination).toBe("container-class");
   });
 });
 
