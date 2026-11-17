@@ -964,17 +964,45 @@ describe("empty and unusual pages", () => {
   });
 
   it("reports a requested orderFilter as applied when its tab is selected", () => {
+    // As on the real page, the selected tab is a plain list item without a link.
     const tabs = `<div class="page-tabs"><ul>
-      <li class="page-tabs__tab"><a href="/your-orders/orders?ref_=fake&orderFilter=open">Orders</a></li>
-      <li class="page-tabs__tab page-tabs__tab--selected">Not Yet Shipped</li></ul></div>`.replace(
-      '<li class="page-tabs__tab page-tabs__tab--selected">Not Yet Shipped</li>',
-      '<li class="page-tabs__tab page-tabs__tab--selected"><a href="/your-orders/orders?orderFilter=open">Not Yet Shipped</a></li>',
-    );
+      <li class="page-tabs__tab"><a href="/your-orders/orders?ref_=fake">Orders</a></li>
+      <li class="page-tabs__tab page-tabs__tab--selected">Not Yet Shipped</li></ul></div>`;
     const r = parseOrderList(
       page({ tabs, url: `${FAKE.host}/your-orders/orders?orderFilter=open` }),
     );
     expect(r.data.requested.order_filter_applied).toBe(true);
     expect(r.data.selected_tab).toBe("not_yet_shipped");
+    expect(r.meta.warnings).toEqual([]);
+  });
+
+  it("maps every orderFilter value to the tab it selects", () => {
+    const selected = (label: string): string =>
+      `<div class="page-tabs"><ul><li class="page-tabs__tab"><a href="/your-orders/orders">Orders</a></li>
+      <li class="page-tabs__tab page-tabs__tab--selected">${label}</li></ul></div>`;
+    const cases: [string, string][] = [
+      ["open", "Not Yet Shipped"],
+      ["digital", "Digital Orders"],
+      ["cancelled", "Cancelled Orders"],
+      ["archived", "Archived Orders"],
+    ];
+    for (const [value, label] of cases) {
+      const r = parseOrderList(
+        page({
+          tabs: selected(label),
+          url: `${FAKE.host}/your-orders/orders?orderFilter=${value}`,
+        }),
+      );
+      expect(r.data.requested.order_filter_applied, value).toBe(true);
+    }
+    const wrong = parseOrderList(
+      page({
+        tabs: selected("Digital Orders"),
+        url: `${FAKE.host}/your-orders/orders?orderFilter=open`,
+      }),
+    );
+    expect(wrong.data.requested.order_filter_applied).toBe(false);
+    expect(wrong.meta.warnings[0]).toContain("selected tab (digital)");
   });
 
   it("throws layout_unrecognized for a page with no order list structure", () => {
@@ -1147,5 +1175,135 @@ describe("cleanLink", () => {
     expect(cleanLink("#frag")).toBeUndefined();
     expect(cleanLink("")).toBeUndefined();
     expect(cleanLink(undefined)).toBeUndefined();
+  });
+});
+
+describe("remaining strategy fallbacks", () => {
+  const base = orderCard({});
+  const noContentId = (s: string): string =>
+    s.replace(' data-csa-c-content-id="amzn1.yourorders.order-card"', "");
+
+  it("finds cards by the js class, then by the slot id", () => {
+    const js = noContentId(base).replace(
+      'class="order-card js-order-card"',
+      'class="js-order-card"',
+    );
+    const r1 = parseOrderList(page({ cards: [js] }));
+    expect(r1.meta.strategies["orders"]).toBe("js-order-card");
+    expect(r1.data.orders).toHaveLength(1);
+
+    const slot = noContentId(base).replace('class="order-card js-order-card"', 'class="fake-card"');
+    const r2 = parseOrderList(page({ cards: [slot] }));
+    expect(r2.meta.strategies["orders"]).toBe("csa-slot-id");
+    expect(r2.data.orders[0]?.order_id).toBe("000-0000000-0000001");
+  });
+
+  it("finds the header by the offset box when the class is gone", () => {
+    const card = base.replace(
+      "a-color-offset-background order-header",
+      "a-color-offset-background",
+    );
+    const r = parseOrderList(page({ cards: [card] }));
+    expect(r.meta.strategies["order.header"]).toBe("offset-box");
+    expect(r.data.orders[0]?.placed?.iso).toBe("2026-11-16");
+  });
+
+  it("falls back to the header text for the order id", () => {
+    const card = base
+      .replace(' data-csa-c-slot-id="amzn1.yourorders.order-card.000-0000000-0000001"', "")
+      .replace("yohtmlc-order-id", "fake-id-class")
+      .replaceAll("/your-orders/order-details?orderID=", "/fake/path?x=")
+      .replaceAll("/gp/css/summary/print.html?orderID=", "/fake/path?y=");
+    const r = parseOrderList(page({ cards: [card] }));
+    expect(r.data.orders[0]?.order_id).toBe("000-0000000-0000001");
+    expect(r.meta.strategies["order.order_id"]).toBe("header-text");
+  });
+
+  it("falls back to any money in the header when the total label is unknown", () => {
+    const card = base.replace(">Total<", ">Fake Amount<");
+    const r = parseOrderList(page({ cards: [card] }));
+    expect(r.data.orders[0]?.total).toEqual({ amount: 12.34, currency: "USD", raw: "$12.34" });
+    expect(r.meta.strategies["order.total"]).toBe("header-money");
+    expect(r.data.orders[0]?.header_fields).toEqual([{ label: "Fake Amount", value: "$12.34" }]);
+  });
+
+  it("treats the whole card as one shipment when there is no delivery box", () => {
+    const card = base.replace('class="a-box delivery-box"', 'class="a-box fake-shipment-box"');
+    const r = parseOrderList(page({ cards: [card] }));
+    const o = r.data.orders[0];
+    expect(r.meta.strategies["order.shipments"]).toBe("item-containers");
+    expect(o?.shipments).toHaveLength(1);
+    expect(o?.shipments[0]?.items.map((i) => i.asin)).toEqual(["B0FAKE0001"]);
+    expect(o?.shipments[0]?.status_primary).toBe("Delivered November 18");
+    // The header columns are not mistaken for the status area.
+    expect(o?.shipments[0]?.status_extra).toEqual([]);
+    expect(o?.shipments[0]?.actions.map((a) => a.label)).toEqual(["View or edit order"]);
+  });
+
+  it("reads tabs from a tablist and the selection from aria-selected", () => {
+    const tabs = `<ul role="tablist"><li role="tab" aria-selected="true">Orders</li>
+      <li role="tab"><a href="/gp/buyagain?ref_=fake">Buy Again</a></li></ul>`;
+    const r = parseOrderList(page({ tabs }));
+    expect(r.meta.strategies["tabs"]).toBe("tablist");
+    expect(r.data.tabs.map((t) => [t.kind, t.selected])).toEqual([
+      ["orders", true],
+      ["buy_again", false],
+    ]);
+  });
+
+  it("finds the time filter through its form when the select has no id or name", () => {
+    const form = timeFilterForm("5 orders", "year-2025")
+      .replace('id="time-filter"', "")
+      .replace('name="timeFilter"', "");
+    const r = parseOrderList(page({ timeFilter: form }));
+    expect(r.meta.strategies["time_filter"]).toBe("form");
+    expect(r.data.time_filter?.selected_value).toBe("year-2025");
+  });
+
+  it("finds a bold order count outside the usual row", () => {
+    const r = parseOrderList(
+      page({ timeFilter: `<div class="fake-count"><b>5 orders</b> placed in</div>` }),
+    );
+    expect(r.meta.strategies["order_count"]).toBe("bold-count");
+    expect(r.data.order_count).toBe(5);
+    expect(r.data.order_count_text).toBe("5 orders placed in");
+  });
+
+  it("finds pagination by class when it is not a ul", () => {
+    const bar = `<ol class="a-pagination"><li class="a-selected"><a href="/your-orders/orders?page=0">1</a></li>
+      <li class="a-normal"><a href="/your-orders/orders?page=1">2</a></li></ol>`;
+    const r = parseOrderList(page({ pagination: bar }));
+    expect(r.meta.strategies["pagination"]).toBe("pagination-class");
+    expect(r.data.pagination?.pages.map((p) => p.label)).toEqual(["1", "2"]);
+    expect(r.data.pagination?.current_index).toBe(0);
+  });
+
+  it("reads an item whose title is a plain product link", () => {
+    const plain = `<li><span class="a-list-item"><div class="a-fixed-left-grid item-box">
+      <a href="/dp/B0FAKE0016?ref=ppx_fake">Fake Plain Link Title</a></div></span></li>`;
+    const r = parseOrderList(
+      page({
+        cards: [orderCard({ boxes: [{ primary: "Arriving December 2", afterItems: plain }] })],
+      }),
+    );
+    const item = r.data.orders[0]?.shipments[0]?.items[0];
+    expect(item?.title).toBe("Fake Plain Link Title");
+    expect(item?.asin).toBe("B0FAKE0016");
+    expect(r.meta.strategies["order.item.title_element"]).toBe("dp-link");
+  });
+
+  it("falls back to bare product links when the shipment has no item containers", () => {
+    const bare = `<a href="/dp/B0FAKE0017?ref=ppx_fake">Fake Bare Link</a>`;
+    const r = parseOrderList(
+      page({
+        cards: [orderCard({ boxes: [{ primary: "Arriving December 2", afterItems: bare }] })],
+      }),
+    );
+    const item = r.data.orders[0]?.shipments[0]?.items[0];
+    expect(r.meta.strategies["order.shipment.items"]).toBe("dp-link");
+    expect(r.meta.strategies["order.item.title_element"]).toBe("self-link");
+    expect(item?.title).toBe("Fake Bare Link");
+    expect(item?.asin).toBe("B0FAKE0017");
+    expect(item?.url_path).toBe("/dp/B0FAKE0017");
   });
 });

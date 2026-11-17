@@ -1,13 +1,15 @@
 /**
  * Dev-only: runs the order_list parser over every capture under
  * $RAINFOREST_CORPUS/order_list/<case>/ and checks sanity invariants. Skipped when the
- * variable is unset. Embeds no expected values and prints no page content.
+ * variable is unset. Embeds no expected values and prints no page content: every
+ * assertion on a text value is a boolean, so a failure message cannot echo private data.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Capture } from "@rainforest/core";
 import { parseDocument } from "../../src/dom.ts";
+import { visibleTextChars } from "../../src/lossless.ts";
 import { expectLosslessCoverage } from "../../src/testing.ts";
 import { orderListLosslessOptions, parseOrderList } from "../../src/pages/order-list.ts";
 
@@ -41,6 +43,9 @@ function cases(): { name: string; capture: Capture }[] {
 
 const ORDER_ID = /^[A-Z0-9]{3}-\d{7}-\d{7}$/;
 const ASIN = /^[A-Z0-9]{10}$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const READ_ONLY =
+  /^\/(?:your-orders\/order-details|gp\/css\/summary\/print\.html|progress-tracker\/|gp\/css\/order-details|gp\/your-account\/|gp\/css\/shiptrack|dp\/|gp\/product\/)/;
 
 describe.skipIf(root === undefined || root === "")("order_list corpus", () => {
   const all = cases();
@@ -67,17 +72,17 @@ describe.skipIf(root === undefined || root === "")("order_list corpus", () => {
 
       it("gives every order an id, a date and at least one shipment with items", () => {
         for (const o of d.orders) {
-          expect(o.order_id).toMatch(ORDER_ID);
-          expect(o.placed?.iso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-          expect(o.total?.currency).toBeTruthy();
+          expect(ORDER_ID.test(o.order_id ?? "")).toBe(true);
+          expect(ISO_DATE.test(o.placed?.iso ?? "")).toBe(true);
+          expect(o.total?.currency !== undefined).toBe(true);
           expect(o.shipments.length).toBeGreaterThan(0);
           expect(o.item_count).toBeGreaterThan(0);
           for (const s of o.shipments) {
             expect(s.items.length).toBeGreaterThan(0);
             for (const item of s.items) {
               expect(item.title.length).toBeGreaterThan(0);
-              expect(item.asin ?? "").toMatch(ASIN);
-              expect(item.url_path).toMatch(/^\/dp\//);
+              expect(ASIN.test(item.asin ?? "")).toBe(true);
+              expect((item.url_path ?? "").startsWith("/dp/")).toBe(true);
             }
           }
         }
@@ -87,27 +92,24 @@ describe.skipIf(root === undefined || root === "")("order_list corpus", () => {
 
       it("never exposes a path outside the read-only allowlist", () => {
         const paths: string[] = [];
+        const collect = (acts: { path?: string }[]): void => {
+          for (const a of acts) if (a.path !== undefined) paths.push(a.path);
+        };
         for (const o of d.orders) {
-          paths.push(...o.actions.flatMap((a) => (a.path === undefined ? [] : [a.path])));
+          collect(o.actions);
           for (const s of o.shipments) {
-            paths.push(...s.actions.flatMap((a) => (a.path === undefined ? [] : [a.path])));
-            for (const i of s.items) {
-              paths.push(...i.actions.flatMap((a) => (a.path === undefined ? [] : [a.path])));
-            }
+            collect(s.actions);
+            for (const i of s.items) collect(i.actions);
           }
         }
-        for (const p of paths) {
-          expect(p).toMatch(
-            /^\/(?:your-orders\/order-details|gp\/css\/summary\/print\.html|progress-tracker\/|gp\/css\/order-details|gp\/your-account\/|gp\/css\/shiptrack|dp\/|gp\/product\/)/,
-          );
-        }
+        expect(paths.every((p) => READ_ONLY.test(p))).toBe(true);
       });
 
       it("reads the page chrome that is present", () => {
-        expect(d.heading).toBeTruthy();
+        expect(d.heading !== undefined).toBe(true);
         expect(d.tabs.length).toBeGreaterThan(0);
         expect(d.tabs.filter((t) => t.selected).length).toBe(1);
-        expect(d.order_count_text).toMatch(/\d+ orders?/);
+        expect(/\d+ orders?/.test(d.order_count_text ?? "")).toBe(true);
         // The time filter is absent on some orderFilter responses; when present it must be complete.
         if (d.time_filter !== undefined) {
           expect(d.time_filter.options.length).toBeGreaterThan(2);
@@ -117,30 +119,34 @@ describe.skipIf(root === undefined || root === "")("order_list corpus", () => {
         if (d.pagination !== undefined) {
           expect(d.pagination.index_param).toBe("page");
           expect(d.pagination.pages.length).toBeGreaterThan(0);
-          expect(d.pagination.current_label).toBeTruthy();
+          expect(d.pagination.current_label !== undefined).toBe(true);
         }
       });
 
       it("only warns about requested filters the page ignores", () => {
-        for (const w of result.meta.warnings) expect(w.startsWith("requested ")).toBe(true);
+        expect(result.meta.warnings.every((w) => w.startsWith("requested "))).toBe(true);
       });
 
       it("accounts for the visible text (lossless) and leaves little in other_sections", () => {
-        const opts = orderListLosslessOptions(parseDocument(capture.html));
+        const doc = parseDocument(capture.html);
+        const opts = orderListLosslessOptions(doc);
         // The parser consumes every block it understands and reports the rest, so the
         // unparsed share must be tiny; 0.98 leaves room for new decoration on the page.
         const ratio = expectLosslessCoverage(result, capture, 0.98, opts);
         expect(ratio).toBeGreaterThanOrEqual(0.98);
+        // Typed data must carry the page: other_sections stay a small share of the visible
+        // text (the denominator excludes scripts and styles, unlike raw textContent).
+        const total = visibleTextChars(doc, opts);
         const other = result.other_sections.reduce((n, s) => n + s.text.length, 0);
-        const total = parseDocument(capture.html).body.textContent?.length ?? 1;
+        expect(total).toBeGreaterThan(0);
         expect(other / total).toBeLessThan(0.05);
       });
 
       it("is JSON serializable and compact", () => {
         const json = JSON.stringify(result);
-        expect(JSON.parse(json)).toBeTruthy();
+        expect(JSON.parse(json) !== null).toBe(true);
         expect(json.length).toBeLessThan(250_000);
-        expect(json).not.toMatch(/<(?:div|span|a|li)\b/);
+        expect(/<(?:div|span|a|li)\b/.test(json)).toBe(false);
       });
     });
   }

@@ -561,6 +561,8 @@ function parseItem(
         "dp-link",
         () => qa(el, "a[href*='/dp/'], a[href*='/gp/product/']").find((a) => text(a) !== ""),
       ],
+      // The item element is itself the product link (last-resort item discovery).
+      ["self-link", () => (asinFromHref(attr(el, "href")) !== undefined ? el : undefined)],
     ],
     meta,
     { optional: true },
@@ -572,7 +574,6 @@ function parseItem(
       "item.title",
       [
         ["title-link", () => (titleLink === undefined ? undefined : text(titleLink))],
-        ["title-element", () => (titleEl === undefined ? undefined : text(titleEl))],
         ["image-alt", () => attr(imageEl, "alt")],
       ],
       meta,
@@ -651,6 +652,13 @@ function parseItem(
 
 // ---- shipment parsing
 
+/** A shipment's status (left) or action (right) column, never one of the order header's. */
+function shipmentColumn(box: DomElement, side: "left" | "right"): DomElement | undefined {
+  return qa(box, `.a-fixed-right-grid-col.a-col-${side}`).find(
+    (c) => c.closest(".order-header") === null,
+  );
+}
+
 function actionKey(li: DomElement): string | undefined {
   const id = attr(li, "data-csa-c-item-id");
   if (id === undefined || id === "") return undefined;
@@ -685,7 +693,7 @@ function parseShipmentActions(
     }
     consumed.take(q(box, ".yo-collapsible-actions__toggle"));
   } else {
-    const right = q(box, ".a-fixed-right-grid-col.a-col-right");
+    const right = shipmentColumn(box, "right");
     if (right !== undefined) {
       meta.strategies["shipment.actions"] = "right-column";
       actions.push(...parseActionList(right, consumed));
@@ -733,7 +741,7 @@ function parseShipment(
 
   // Everything else in the status rows of the left column (help links, notes).
   const extra: string[] = [];
-  const left = q(box, ".a-fixed-right-grid-col.a-col-left") ?? box;
+  const left = shipmentColumn(box, "left") ?? box;
   for (const row of childElements(left)) {
     if (!visible(row) || !classOf(row).split(/\s+/).includes("a-row")) continue;
     if (row.querySelector(".item-box, .yo-enhanced-card, .a-carousel") !== null) continue;
@@ -808,7 +816,6 @@ function parseCard(
   index: number,
   consumed: Consumption,
   meta: ParseMeta,
-  pageKind: string,
 ): OrderCard {
   const header = firstOf<DomElement>(
     "header",
@@ -964,26 +971,15 @@ function parseCard(
     .filter((x): x is string => x !== undefined);
   if (refunds.length > 0) card_.return_or_refund = refunds.join(" | ");
 
+  // Digital order ids start with a letter (D01-...), physical ones with three digits.
   card_.order_type =
-    firstOf<OrderCard["order_type"]>(
-      "order_type",
-      [
-        [
-          "id-prefix",
-          () =>
-            orderId === null
-              ? undefined
-              : /^D\d\d-/.test(orderId)
-                ? "digital"
-                : /^\d{3}-/.test(orderId)
-                  ? "physical"
-                  : "other",
-        ],
-        ["tab", () => (pageKind === "digital" ? "digital" : undefined)],
-      ],
-      meta,
-      { optional: true },
-    ) ?? "other";
+    orderId === null
+      ? "other"
+      : /^D\d\d-/.test(orderId)
+        ? "digital"
+        : /^\d{3}-/.test(orderId)
+          ? "physical"
+          : "other";
   return card_;
 }
 
@@ -1021,6 +1017,25 @@ function tabKind(
   if (/archiv/.test(l) || filter === "archived") return "archived";
   if (/amazon pay/.test(l)) return "amazon_pay";
   return "other";
+}
+
+/** `orderFilter` URL values and the tab kind each selects (core's `not_yet_shipped` is `open`). */
+const ORDER_FILTER_TABS: Readonly<Record<string, FilterTab["kind"]>> = {
+  open: "not_yet_shipped",
+  digital: "digital",
+  cancelled: "cancelled",
+  archived: "archived",
+};
+
+/**
+ * The selected tab is a plain list item without a link, so it carries no `orderFilter` value
+ * of its own: match on the tab kind (or on a link value when the page does give one).
+ */
+function orderFilterApplied(value: string, tabs: FilterTab[]): boolean {
+  const kind = ORDER_FILTER_TABS[value];
+  return tabs.some(
+    (t) => t.selected && (t.filter_value === value || (kind !== undefined && t.kind === kind)),
+  );
 }
 
 function parseTabs(root: DomElement, consumed: Consumption, meta: ParseMeta): FilterTab[] {
@@ -1340,7 +1355,7 @@ export const parseOrderList: Parser<OrderListPage> = (
   const selectedTab = tabs.find((t) => t.selected);
   (cardEls ?? []).forEach((el, i) => {
     const cardMeta = newMeta();
-    orders.push(parseCard(el, i, consumed, cardMeta, selectedTab?.kind ?? ""));
+    orders.push(parseCard(el, i, consumed, cardMeta));
     log.add(cardMeta, i, meta);
   });
   log.into(meta);
@@ -1374,11 +1389,11 @@ export const parseOrderList: Parser<OrderListPage> = (
     order_filter_applied:
       requestedRaw.order_filter === null
         ? null
-        : tabs.some((t) => t.selected && t.filter_value === requestedRaw.order_filter),
+        : orderFilterApplied(requestedRaw.order_filter, tabs),
   };
   if (requested.order_filter_applied === false) {
     meta.warnings.push(
-      `requested orderFilter=${requestedRaw.order_filter} is not reflected by any selected tab; the page shows the default list`,
+      `requested orderFilter=${requestedRaw.order_filter} is not reflected by the selected tab (${selectedTab?.kind ?? "none"})`,
     );
   }
   if (requested.time_filter_applied === false) {
