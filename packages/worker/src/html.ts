@@ -9,7 +9,9 @@ const SECURITY_HEADERS: Record<string, string> = {
     "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   "x-frame-options": "DENY",
   "x-content-type-options": "nosniff",
-  "referrer-policy": "no-referrer",
+  // Not "no-referrer": that makes browsers send "Origin: null" on same-origin form posts,
+  // and the POST handlers require the exact origin.
+  "referrer-policy": "same-origin",
   "cache-control": "no-store",
 };
 
@@ -29,10 +31,18 @@ form.inline { display: inline; }
 export function page(
   title: string,
   body: string,
-  init: { status?: number; headers?: Headers } = {},
+  init: { status?: number; headers?: Headers; redirectsAfterSubmit?: boolean } = {},
 ): Response {
   const headers = new Headers(init.headers);
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
+  if (init.redirectsAfterSubmit) {
+    // The consent form's POST answers with a redirect to the client's own redirect URI.
+    // Browsers apply form-action to that redirect too, so it cannot be 'self' here.
+    headers.set(
+      "content-security-policy",
+      SECURITY_HEADERS["content-security-policy"]!.replace(" form-action 'self';", ""),
+    );
+  }
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>${STYLE}</style></head><body>${body}</body></html>`;
   return new Response(html, { status: init.status ?? 200, headers });
 }

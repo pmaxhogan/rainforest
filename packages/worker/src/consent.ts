@@ -58,7 +58,10 @@ export async function handleAuthorize(request: Request, env: Env): Promise<Respo
       const authRequest = await oauth.parseAuthRequest(request);
       const details = await oauth.describeConsent(authRequest);
       const consent = await oauth.beginConsent(authRequest);
-      return page("Authorize", consentPage(details, consent.handle), { headers: consent.headers });
+      return page("Authorize", consentPage(details, consent.handle), {
+        headers: consent.headers,
+        redirectsAfterSubmit: true,
+      });
     }
     if (request.method !== "POST") return plain("method not allowed", 405);
 
