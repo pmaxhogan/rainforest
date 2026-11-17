@@ -53,7 +53,7 @@ jobs:
       # Privacy gate 2: fixtures may only carry the reserved fake ranges (see FAKE in
       # packages/core/src/capture.ts). No secrets, no dependencies; passes with no fixtures/.
       - name: Fixture allowlist
-        run: node scripts/check-fixtures.mjs
+        run: npm run fixtures:check
 
       # json-summary feeds the coverage compare job; cobertura feeds GitHub Code
       # Quality's native coverage rule.
