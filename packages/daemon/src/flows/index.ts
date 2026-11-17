@@ -7,6 +7,7 @@ import { deleteSavedItem, moveToCart, removeFromCart, saveForLater } from "./car
 import { getMedia, getReviewSummary, getReviews, getVariants } from "./catalog.ts";
 import type { Flow } from "./common.ts";
 import { showOnScreen } from "./handoff.ts";
+import { removeFromList } from "./list-writes.ts";
 import { getList, listLists } from "./lists.ts";
 import { getInvoice, getOrder, listOrders } from "./orders.ts";
 import { getPriceHistory } from "./price.ts";
@@ -33,6 +34,7 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   save_for_later: saveForLater,
   move_to_cart: moveToCart,
   delete_saved_item: deleteSavedItem,
+  remove_from_list: removeFromList,
   search,
   get_product: getProduct,
   get_buying_options: getBuyingOptions,
