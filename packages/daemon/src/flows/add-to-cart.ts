@@ -232,6 +232,26 @@ export const addToCart: Flow = async (args, ctx) => {
       name: /^submit\.addToCart$/,
     });
     await new Promise((r) => setTimeout(r, 3000));
+    // What the rails refused between the click and now (paths only), for diagnosis.
+    const refusedAfterClick = page.guard
+      .blocked()
+      .slice(-5)
+      .map((b) => {
+        let path = "";
+        try {
+          path = new URL(b.url).pathname.slice(0, 120);
+        } catch {
+          path = "";
+        }
+        return { method: b.method, path, rule: b.verdict.rule, main_frame: b.mainFrameDocument };
+      });
+    const landedPath = (() => {
+      try {
+        return new URL(page.page.url()).pathname.slice(0, 120);
+      } catch {
+        return "";
+      }
+    })();
     const declined = await declineUpsells(page);
 
     const after = await loadCart(page);
@@ -260,7 +280,11 @@ export const addToCart: Flow = async (args, ctx) => {
         "internal",
         "the cart did not change as intended after the add; the observed cart state is attached",
         {
-          details: result,
+          details: {
+            ...result,
+            refused_after_click: refusedAfterClick,
+            page_after_click: landedPath,
+          },
         },
       );
     }
