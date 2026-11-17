@@ -64,7 +64,7 @@ jobs:
           --coverage.reporter=json-summary
           --coverage.reporter=cobertura
 
-      # The Worker suite runs inside workerd (@cloudflare/vitest-pool-workers, vitest 4),
+      # The Worker suite runs inside workerd (@cloudflare/vitest-plugin),
       # so it is a separate vitest run; the root vitest config excludes packages/worker.
       - name: Worker tests
         run: npm run test:worker

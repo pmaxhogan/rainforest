@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { ACCESS_AUD, BASE_URL, OWNER_EMAIL, TEAM_DOMAIN, TEST_PASSWORD } from "./test/constants.ts";
 
 /**
- * Worker tests run inside workerd through @cloudflare/vitest-pool-workers (vitest 4).
+ * Worker tests run inside workerd through @cloudflare/vitest-plugin.
  * Bindings come from wrangler.jsonc; the owner secrets and the KV namespace (which has no
  * id in wrangler.jsonc because it is provisioned at deploy) are supplied here.
  */
@@ -13,9 +13,6 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
-        // wrangler.jsonc pins 2026-11-01, newer than the workerd this pool version ships
-        // (it supports up to 2026-08-22). Tests run at the newest date the binary knows.
-        compatibilityDate: "2026-08-22",
         kvNamespaces: ["OAUTH_KV"],
         bindings: {
           PUBLIC_BASE_URL: BASE_URL,
