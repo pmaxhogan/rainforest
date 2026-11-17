@@ -100,7 +100,8 @@ async function lineAction(
     const before = await loadCart(page);
     const item = find(before, itemId, spec.list);
     const name = `submit.${spec.control}.${itemId}`;
-    const locator = page.page.locator(`input[name="${name}"]`);
+    // The page repeats some controls inside hidden layouts; only the visible one counts.
+    const locator = page.page.locator(`input[name="${name}"]:visible`);
     clearCaptureCache();
     await guardedClick(page, locator, {
       what: spec.what,
