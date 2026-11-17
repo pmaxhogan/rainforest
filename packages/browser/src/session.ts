@@ -34,6 +34,12 @@ export interface SessionOptions {
 export interface PageContext {
   /** Policy-checked, paced navigation. Throws structured errors. */
   goto(url: string, type: PageType): Promise<void>;
+  /**
+   * The same checks and pacing as goto, but the navigation starts inside the current page
+   * (as a link click would), so the request carries the page as its referrer. The target
+   * must be on the same origin as the current page.
+   */
+  follow(url: string, type: PageType): Promise<void>;
   /** Serialize the current page (with hidden markers) and classify interstitials. */
   capture(kind: PageKind): Promise<Capture>;
   /**
@@ -243,6 +249,7 @@ export class BrowserSession {
       page,
       guard,
       goto: (url, type) => this.#goto(page, guard, url, type),
+      follow: (url, type) => this.#goto(page, guard, url, type, true),
       capture: (kind) => this.#capture(page, kind),
       fetchFragment: (pathAndQuery, type) => this.#fetchFragment(page, pathAndQuery, type),
     };
@@ -250,9 +257,28 @@ export class BrowserSession {
 
   #leaving: Promise<unknown> = Promise.resolve();
 
-  async #goto(page: Page, guard: Guard, url: string, type: PageType): Promise<void> {
+  async #goto(
+    page: Page,
+    guard: Guard,
+    url: string,
+    type: PageType,
+    inPage = false,
+  ): Promise<void> {
     // A refused navigation may still be leaving the page; let it finish first.
     await this.#leaving;
+    if (inPage) {
+      const origin = (value: string): string | null => {
+        try {
+          return new URL(value).origin;
+        } catch {
+          return null;
+        }
+      };
+      const sameOrigin = origin(url) !== null && origin(url) === origin(page.url());
+      if (!sameOrigin) {
+        throw new RfError("internal", "an in-page navigation must stay on the current origin");
+      }
+    }
     const verdict = checkNavigation(url);
     if (!verdict.allow) {
       throw new RfError("blocked_by_policy", `navigation refused by policy (${verdict.reason})`, {
@@ -273,7 +299,17 @@ export class BrowserSession {
     this.#lastUrl = url;
     try {
       await retryOnDrag(
-        () => page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }),
+        () =>
+          inPage
+            ? Promise.all([
+                page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45_000 }),
+                page.evaluate((target) => {
+                  (
+                    globalThis as unknown as { location: { assign(u: string): void } }
+                  ).location.assign(target);
+                }, url),
+              ]).then(([response]) => response)
+            : page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }),
         this.#sleep,
       );
     } catch (error) {

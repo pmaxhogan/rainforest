@@ -173,7 +173,7 @@ export const addToCart: Flow = async (args, ctx) => {
     );
   }
   const acknowledge = Array.isArray(args.acknowledge) ? (args.acknowledge as string[]) : [];
-  requireBudget(ctx, 3, "cart");
+  requireBudget(ctx, 4, "cart");
   const session = await ctx.browser.session();
   return await session.run(async (page) => {
     const before = await loadCart(page);
@@ -181,7 +181,11 @@ export const addToCart: Flow = async (args, ctx) => {
     // Open the product with the all-offers panel and read the offers from the panel as
     // it is rendered in the page (listing ids change on every load, so the control that
     // gets clicked must come from this same DOM).
-    await page.goto(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
+    // Reach the panel the way a visitor does: the product page first, then a navigation
+    // from inside that page (a direct jump to the panel URL draws a challenge).
+    await page.goto(`${AMAZON}/dp/${snapshot.asin}?th=1`, "product");
+    await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
+    await page.follow(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
     await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
     await page.page
       .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
