@@ -1,0 +1,19 @@
+{
+  "name": "@rainforest/mock-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic fake storefront for end-to-end tests. Test-only; never shipped.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "rainforest-mock-site": "./src/cli.ts"
+  },
+  "devDependencies": {
+    "@rainforest/browser": "^0.0.0",
+    "@rainforest/core": "*",
+    "@rainforest/parsers": "^0.0.0",
+    "playwright": "1.66.0-alpha-2026-11-09"
+  }
+}
