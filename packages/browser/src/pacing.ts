@@ -34,7 +34,7 @@ export const DEFAULT_CAPS: Readonly<Record<Exclude<PageType, "none">, Caps>> = {
 export const MIN_GAP_MS = 4000;
 export const MAX_GAP_MS = 9000;
 /** Cap across ALL page types together: per-type caps alone add up to too much traffic. */
-export const GLOBAL_CAPS: Caps = { perHour: 20, perDay: 150 };
+export const GLOBAL_CAPS: Caps = { perHour: 30, perDay: 200 };
 /**
  * Burst cap across all page types. Measured: about 63 loads in 47 minutes, 13 of them in
  * the last 10, drew a "continue shopping" checkpoint. These limits stay far below that.

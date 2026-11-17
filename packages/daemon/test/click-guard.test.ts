@@ -103,6 +103,7 @@ describe("offer tokens", () => {
     seller_id: null,
     seller_name: "Example Seller",
     condition: "new",
+    sub_condition: null,
     price_cents: 1299,
     flags: [],
     out_of_stock: false,

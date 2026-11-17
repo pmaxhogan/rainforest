@@ -408,7 +408,7 @@ export const TOOLS: readonly ToolDef[] = [
       "purchase_type says so. Returns {changed, before, after}.",
     input: z.object({
       browser,
-      offer_id: z.string().min(16).max(512),
+      offer_id: z.string().min(16).max(4096),
       quantity: z.number().int().min(1).max(999).optional(),
       purchase_type: z
         .enum(["one_time", "subscribe_and_save"])

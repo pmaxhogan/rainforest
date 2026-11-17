@@ -153,6 +153,7 @@ function present(offer: Offer, data: OffersData, now: number): Record<string, un
         seller_id: internal.seller_id,
         seller_name: offer.seller?.name ?? null,
         condition: offer.condition,
+        sub_condition: offer.sub_condition ?? null,
         price_cents: cents(offer),
         flags,
         out_of_stock: outOfStock,

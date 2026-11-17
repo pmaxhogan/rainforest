@@ -61,6 +61,7 @@ const snapshot: OfferSnapshot = {
   seller_id: null,
   seller_name: "Example Store",
   condition: "new",
+  sub_condition: null,
   price_cents: 1299,
   flags: [],
   out_of_stock: false,

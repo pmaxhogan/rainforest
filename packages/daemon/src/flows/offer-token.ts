@@ -16,6 +16,8 @@ export interface OfferSnapshot {
   seller_id: string | null;
   seller_name: string | null;
   condition: string | null;
+  /** Finer condition text, for example "Used - Very Good". */
+  sub_condition: string | null;
   /** Price in cents at mint time. */
   price_cents: number | null;
   /** Flags known at mint time (time-independent ones). */

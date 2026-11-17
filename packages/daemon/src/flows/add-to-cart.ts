@@ -21,9 +21,6 @@ import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
  * by reading the cart again. It never retries the click.
  */
 
-const AOD_PATH = (asin: string): string =>
-  `/gp/product/ajax/aodAjaxMain/ref=dp_aod_ALL_mbc?asin=${asin}&m=&qid=&smid=&sourcecustomerorglistid=&sourcecustomerorglistitemid=&sr=&pc=dp`;
-
 type Internal = { asin: string | null; offer_listing_id: string | null; seller_id: string | null };
 
 function internalOf(offer: Offer): Internal | undefined {
@@ -44,6 +41,28 @@ function summarize(offer: Offer): Record<string, unknown> {
 
 function needsChoice(reason: string, message: string, details: Record<string, unknown>): never {
   throw new RfError("needs_choice", message, { details: { reason, ...details } });
+}
+
+/**
+ * Find the offer the token was minted for among the offers on the page now. Listing ids
+ * are not stable between loads, so identity is seller + condition + sub-condition; when
+ * that is ambiguous the price at mint time breaks the tie, and a remaining ambiguity is
+ * "not found" (fail closed).
+ */
+export function matchOffer(all: Offer[], snapshot: OfferSnapshot): Offer | null {
+  const same = all.filter(
+    (o) =>
+      (internalOf(o)?.seller_id ?? null) === snapshot.seller_id &&
+      (o.seller?.name ?? null) === snapshot.seller_name &&
+      o.condition === snapshot.condition &&
+      (o.sub_condition ?? null) === snapshot.sub_condition &&
+      Boolean(internalOf(o)?.offer_listing_id),
+  );
+  if (same.length === 1) return same[0]!;
+  const byPrice = same.filter(
+    (o) => o.price !== null && Math.round(o.price.amount * 100) === snapshot.price_cents,
+  );
+  return byPrice.length === 1 ? byPrice[0]! : null;
 }
 
 /** Decide whether the add may proceed. Pure: exported for tests. */
@@ -156,34 +175,32 @@ export const addToCart: Flow = async (args, ctx) => {
     );
   }
   const acknowledge = Array.isArray(args.acknowledge) ? (args.acknowledge as string[]) : [];
-  requireBudget(ctx, 4, "cart");
+  requireBudget(ctx, 3, "cart");
   const session = await ctx.browser.session();
   return await session.run(async (page) => {
     const before = await loadCart(page);
 
-    // Open the product with the all-offers panel and re-read the offer from a fresh fragment.
+    // Open the product with the all-offers panel and read the offers from the panel as
+    // it is rendered in the page (listing ids change on every load, so the control that
+    // gets clicked must come from this same DOM).
     await page.goto(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
     await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-    const capture = await page.capture("offers");
-    capture.fragments = { aod: await page.fetchFragment(AOD_PATH(snapshot.asin), "offers") };
-    const data = parseOffers(capture).data;
-    const all = [data.pinned_offer, ...data.offers].filter((o): o is Offer => o !== null);
-    const current =
-      all.find((o) => internalOf(o)?.offer_listing_id === snapshot.offer_listing_id) ?? null;
-    const { flags } = decideAdd({ snapshot, current, data, acknowledge, quantity, now });
-
-    // The panel must be open in the page; find THIS offer's control by its listing id.
     await page.page
-      .waitForSelector("#aod-container, #all-offers-display", { timeout: 15_000 })
+      .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
       .catch(() => {
         throw new RfError(
           "layout_unrecognized",
           "the all-offers panel did not open; nothing was added",
         );
       });
-    await page.page
-      .waitForSelector("span[data-action='aod-atc-action']", { timeout: 15_000 })
-      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 1000));
+    const data = parseOffers(await page.capture("offers")).data;
+    const all = [data.pinned_offer, ...data.offers].filter((o): o is Offer => o !== null);
+    const current = matchOffer(all, snapshot);
+    const { flags } = decideAdd({ snapshot, current, data, acknowledge, quantity, now });
+
+    // Find THIS offer's control in the panel by the listing id just read from it.
+    const wantedListing = current ? (internalOf(current)?.offer_listing_id ?? "") : "";
     const index = await page.page.evaluate(
       `((wanted) => {
         const spans = [...document.querySelectorAll("span[data-action='aod-atc-action']")];
@@ -198,7 +215,7 @@ export const addToCart: Flow = async (args, ctx) => {
           }
         }
         return -1;
-      })(${JSON.stringify(snapshot.offer_listing_id)})`,
+      })(${JSON.stringify(wantedListing)})`,
     );
     if (typeof index !== "number" || index < 0) {
       throw new RfError(
