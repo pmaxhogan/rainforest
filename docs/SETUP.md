@@ -80,6 +80,18 @@ From the repository root, `npm run deploy:hub` runs the same deploy with the hos
 the `HUB_DOMAIN` environment variable (`wrangler deploy --config packages/worker/wrangler.jsonc
 --domain "$HUB_DOMAIN"`).
 
+**Deploying on every push.** Instead of deploying by hand each time, connect the Worker to your
+repository with Cloudflare Workers Builds; every push to the branch you choose (normally `main`)
+then builds and deploys the hub. `npm run deploy:hub` exists for this: set it as the build's
+deploy command, leave the root directory at the repository root, and add `HUB_DOMAIN` as a build
+variable (a build variable is not a Worker secret, and it never goes in the repository). A build
+command is optional; one that runs `npm run check` keeps a commit that fails the checks from
+deploying. Workers Builds reports each deploy on the commit as a check named
+`Workers Builds: rainforest-hub`, next to the release workflow's checks, so one push ships both
+the hub and the daemon. This project's own hub is deployed this way. The settings named here are
+what the `deploy:hub` script was written for; the build settings of any one deployment live in
+its Cloudflare dashboard, not in this repository.
+
 `wrangler.jsonc` deliberately holds no account id, route or hostname. `--domain` attaches the Worker
 as a custom domain on your zone (checked with `wrangler deploy --help`; the zone must be in the same
 account). The `OAUTH_KV` namespace has no id in the config; current Wrangler provisions it on first
@@ -319,10 +331,12 @@ Try `list_browsers` first. Each connection chooses its own default computer with
 
 ## 6. Updating
 
-- **The Worker.** Pull the new commit, `npm ci`, and run the same
+- **The Worker.** If it is connected to Workers Builds (step 3), a push to `main` deploys it and
+  the commit gets a `Workers Builds: rainforest-hub` check when the deploy is done; do not deploy
+  by hand as well. Otherwise pull the new commit, `npm ci`, and run the same
   `npx wrangler deploy --domain <your-hostname>` again from `packages/worker`. The secrets
-  persist. A daemon older than your `MIN_DAEMON_VERSION`, if you set one, is told to update and is
-  refused until it does.
+  persist either way. A daemon older than your `MIN_DAEMON_VERSION`, if you set one, is told to
+  update and is refused until it does.
 - **The daemon.** It checks for a newer signed release 20 seconds after it starts, then every
   `check_interval_s` (`setup` writes 600 seconds on a first run; the schema default is 6 hours;
   the minimum is 300), and whenever the hub sends a hint. `node packages/daemon/src/main.ts update`

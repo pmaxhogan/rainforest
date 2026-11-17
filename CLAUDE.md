@@ -17,6 +17,10 @@ and the quiet Playwright extension fork.
   itself unless the extension build and a free broker port exist (`RAINFOREST_E2E_REQUIRE=1` makes
   that an error, as CI does; see `.github/workflows/e2e.yml`)
 - `npm run format` - prettier --write
+- Shipping is a push to `main`, nothing else: `.github/workflows/release.yml` signs and publishes
+  the daemon, and Cloudflare Workers Builds deploys the hub (check `Workers Builds: rainforest-hub`
+  on the commit; `npm run deploy:hub` is the script that build is meant to run). Do not run
+  `wrangler deploy` by hand for a hub that is connected this way
 - `node scripts/package-daemon.mjs [--version v] [--out dir]` - build the release tarball + manifest (CI signs and publishes via `.github/workflows/release.yml`; `scripts/verify-release.mjs <dir>` checks one)
 - `node packages/daemon/src/main.ts --help` - the `rainforestd` commands, run from a checkout
 - `node packages/mock-site/src/cli.ts [--port n] [--seed n]` - run the fake storefront by hand
