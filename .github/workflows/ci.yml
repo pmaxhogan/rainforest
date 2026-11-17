@@ -50,6 +50,11 @@ jobs:
       - name: ASCII check
         run: node scripts/check-ascii.mjs
 
+      # Privacy gate 2: fixtures may only carry the reserved fake ranges (see FAKE in
+      # packages/core/src/capture.ts). No secrets, no dependencies; passes with no fixtures/.
+      - name: Fixture allowlist
+        run: node scripts/check-fixtures.mjs
+
       # json-summary feeds the coverage compare job; cobertura feeds GitHub Code
       # Quality's native coverage rule.
       - name: Test with coverage

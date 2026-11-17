@@ -15,8 +15,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "ascii": "node scripts/check-ascii.mjs",
+    "fixtures:check": "node scripts/check-fixtures.mjs",
     "test": "vitest run --coverage",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run ascii && npm test"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run ascii && npm run fixtures:check && npm test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

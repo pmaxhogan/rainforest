@@ -1,0 +1,13 @@
+{
+  "name": "@rainforest/scrubber",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@rainforest/core": "*",
+    "linkedom": "^0.18.15"
+  }
+}

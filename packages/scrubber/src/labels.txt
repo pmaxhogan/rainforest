@@ -1,0 +1,216 @@
+# Structural UI label strings that survive scrubbing verbatim. Parsers anchor on these.
+#
+# One label per line. Matching is case-insensitive with whitespace collapsed and an
+# optional trailing ":" "," or ".". A label is kept when it is the whole trimmed text node,
+# when it LEADS the node (the rest is a value and is synthesized), or when it ENDS the node
+# (the head is a value and is synthesized).
+#
+# Optional "| kind" tells the scrubber what the value next to the label is:
+#   name           a person's name -> synthetic name list
+#   place          a delivery location -> fake city and reserved ZIP
+#   name-or-place  either, split on " - "
+#   rating         the head is a star rating -> synthetic rating in 1.0..5.0
+#   asin           a 10-character ASIN or ISBN -> reserved fake ASIN
+#   whole          only kept as the entire text node, never as a prefix or suffix
+#
+# Never add anything that could be personal: no names, places, product words or digits.
+
+# Search and product
+Sponsored
+Add to Cart
+Add to List
+Buy Now
+In Stock
+Only a few left in stock
+Currently unavailable
+Temporarily out of stock
+Ships from
+Sold by
+Ships from and sold by
+Shipper / Seller
+Amazon
+Amazon.com
+Amazon.com Services LLC
+Amazon Fresh
+out of 5 stars | rating
+out of 5 | rating
+ratings
+rating
+global ratings
+customer reviews
+rating details
+bought in past month
+Typical price
+Typical:
+List Price
+List:
+Price
+Was:
+With Deal:
+You Save:
+Save
+Savings
+Limited time deal
+Deal
+Lightning Deal
+Coupon
+Apply coupon
+Clip coupon
+FREE delivery
+FREE Returns
+FREE Shipping
+Prime
+Subscribe & Save
+One-time purchase
+Qty:
+Quantity
+Brand
+Color
+Size
+Style
+Model
+Condition
+New
+Used
+Renewed
+See all buying options
+Other sellers on Amazon
+About this item
+Product description
+Product information
+Technical Details
+Additional Information
+Item model number
+Date First Available
+Best Sellers Rank
+ASIN | asin
+Results
+results for
+Sort by
+Featured
+Price: Low to High
+Price: High to Low
+Avg. Customer Review
+Newest Arrivals
+Best Sellers
+Department
+Next
+Previous
+Page
+See more
+See less
+Read more
+See all details
+Details
+
+# Delivery and location
+Deliver to | name-or-place
+Delivering to | place
+Ship to | name
+Shipping address
+Delivery address
+Update location
+Arriving
+Delivered
+Shipped
+Out for delivery
+Today
+Tomorrow
+Overnight
+Delivery window
+Last purchased
+Buy it again
+Buy again
+
+# Account and header
+Hello, | name
+Hello, sign in
+Sign in
+Sign Out
+Account & Lists
+Returns & Orders
+Your Account
+Your Orders
+Your Lists
+Cart
+Returns
+Return policy
+Customer Service
+Today's Deals
+Gift Cards
+Registry
+
+# Cart and lists
+Save for later
+Saved for later
+Move to cart
+Delete
+Remove
+Edit
+Subtotal
+This is a gift
+Gift options not available
+Wish List
+Shopping List
+Idea List
+
+# Orders and invoices
+Order placed
+Order #
+Order number
+Total
+Order Total
+Order total
+Grand Total
+Item(s) Subtotal
+Shipping & Handling
+Total before tax
+Estimated tax to be collected
+Order Summary
+Payment method
+Invoice
+View order details
+View invoice
+Track package
+Return or replace items
+Write a product review
+Get product support
+Leave seller feedback
+Archive order
+View your item
+
+# Reviews
+Verified Purchase
+Reviewed in the United States on
+Top reviews
+Top reviews from the United States
+See more reviews
+Helpful
+Report
+Customer Reviews
+
+# Browsing and search history
+Your browsing history
+Search history
+Clear
+
+# Weekdays and months: whole text node only. Inside dates they are shifted with the date.
+Monday | whole
+Tuesday | whole
+Wednesday | whole
+Thursday | whole
+Friday | whole
+Saturday | whole
+Sunday | whole
+January | whole
+February | whole
+March | whole
+April | whole
+May | whole
+June | whole
+July | whole
+August | whole
+September | whole
+October | whole
+November | whole
+December | whole
