@@ -71,6 +71,27 @@ describe("fail closed when owner configuration is missing or malformed", () => {
     expect(await response.json()).toMatchObject({ ok: true, configured: true });
   });
 
+  it("positive control: a copied env keeps every binding and the routes answer normally", async () => {
+    const copy = { ...testEnv } as Env;
+    expect(ownerConfig(copy)).not.toBeNull();
+    expect(await (await call(copy, "/healthz")).json()).toMatchObject({ configured: true });
+    // Without a token /mcp is 401 (not 503), /admin is 401, metadata is 200.
+    expect((await call(copy, "/mcp", { method: "POST", body: "{}" })).status).toBe(401);
+    expect((await call(copy, "/admin")).status).toBe(401);
+    expect((await call(copy, "/.well-known/oauth-authorization-server")).status).toBe(200);
+    expect(
+      (
+        await call(copy, "/pair/start", {
+          method: "POST",
+          headers: { "cf-connecting-ip": "10.255.255.1" },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(400);
+    // And a single knocked-out secret is what flips it, not the copy itself.
+    expect((await call(without("OWNER_EMAIL"), "/admin")).status).toBe(503);
+  });
+
   it("the secret list matches the configuration the Worker reads", () => {
     for (const name of SECRETS) {
       expect(ownerConfig(without(name)), name).toBeNull();

@@ -1,5 +1,6 @@
 import { reset } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { MIN_PASSWORD_LENGTH, sha256Hex, verifyPassword } from "../src/password.ts";
 import { ACCESS_AUD, BASE_URL, TEAM_DOMAIN, TEST_PASSWORD } from "./constants.ts";
 import {
   authorizeQuery,
@@ -191,7 +192,15 @@ describe("password and handle on POST /authorize", () => {
     expect(locationCode(right)).toBeTruthy();
   });
 
-  it("a password shorter than the minimum is refused even if it were right", async () => {
+  it("a password shorter than the minimum is refused even when its hash matches", async () => {
+    expect(MIN_PASSWORD_LENGTH).toBe(22);
+    for (const short of ["", "x", "a".repeat(21)]) {
+      expect(await verifyPassword(short, await sha256Hex(short)), short).toBe(false);
+    }
+    const exact = "a".repeat(22);
+    expect(await verifyPassword(exact, await sha256Hex(exact))).toBe(true);
+    expect(await verifyPassword("a".repeat(257), await sha256Hex("a".repeat(257)))).toBe(false);
+    // Through the route: a truncated password is a plain refusal with no code.
     const { jwt, handle, cookie } = await begin();
     const response = await postConsent(jwt, cookie, {
       handle,
@@ -199,6 +208,29 @@ describe("password and handle on POST /authorize", () => {
       decision: "approve",
     });
     expect(response.status).toBe(403);
+    expect(locationCode(response)).toBeNull();
+  });
+
+  it("verifyPassword refuses a malformed expected hash", async () => {
+    const hash = await sha256Hex(TEST_PASSWORD);
+    expect(await verifyPassword(TEST_PASSWORD, hash)).toBe(true);
+    for (const bad of [hash.toUpperCase(), hash.slice(1), "", null, undefined])
+      expect(await verifyPassword(TEST_PASSWORD, bad)).toBe(false);
+    expect(await verifyPassword(null, hash)).toBe(false);
+  });
+
+  // Documents current behavior: a POST with no Origin header at all is accepted (the
+  // handle plus its __Host- binding cookie and the Access JWT are what bind the form).
+  it("POST without an Origin header is accepted", async () => {
+    const { jwt, handle, cookie } = await begin();
+    const response = await postConsent(
+      jwt,
+      cookie,
+      { handle, password: TEST_PASSWORD, decision: "approve" },
+      {},
+    );
+    expect(response.status).toBe(302);
+    expect(locationCode(response)).toBeTruthy();
   });
 
   it("missing password -> 403", async () => {

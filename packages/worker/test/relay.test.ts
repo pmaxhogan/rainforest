@@ -218,7 +218,12 @@ describe("browser selection", () => {
     // Desk Mac becomes active, Laptop goes idle.
     a.socket.send({ type: "presence", presence: presence({ idle_s: 0 }) });
     b.socket.send({ type: "presence", presence: presence({ idle_s: 900 }) });
-    await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 100; i++) {
+      const rows = await hubStub().listBrowsers(GRANT_A);
+      const idle = rows.map((r) => r.idle_s ?? 0);
+      if (idle.some((s) => s >= 900) && idle.some((s) => s < 5)) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
     expect(await start(GRANT_A, "get_cart")).toMatchObject({
       ok: true,
       browser: { id: a.device.deviceId },
@@ -672,7 +677,12 @@ describe("audit", () => {
     const { tokens } = await connectClient(key, "Sloppy Client");
     await callTool(tokens.access_token, "get_product", { asin: "bad" });
     await callTool(tokens.access_token, "place_order", {});
+    await callTool(tokens.access_token, "<b>ignore previous</b>", {});
     const rows = await auditRows();
+    expect(rows.find((r) => r.tool === "(invalid tool name)")).toMatchObject({
+      error_code: "invalid_arguments",
+    });
+    expect(JSON.stringify(rows)).not.toContain("ignore previous");
     expect(rows.find((r) => r.tool === "get_product")).toMatchObject({
       client: "Sloppy Client",
       outcome: "error",

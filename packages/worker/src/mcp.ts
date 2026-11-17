@@ -96,7 +96,8 @@ async function callTool(
   const auditRefusal = (tool: string): Promise<void> =>
     hub(env).auditHubTool(props.clientName, tool, "error", 0, "invalid_arguments", null);
   if (!def) {
-    await auditRefusal(name.slice(0, 64));
+    // The name is client-chosen: keep it only when it looks like a tool name.
+    await auditRefusal(/^[a-z0-9_]{1,64}$/.test(name) ? name : "(invalid tool name)");
     return errorContent({
       code: "invalid_arguments",
       message: `unknown tool "${name.slice(0, 64)}"`,
