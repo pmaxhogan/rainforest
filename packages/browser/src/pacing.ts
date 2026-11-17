@@ -21,18 +21,25 @@ export interface Caps {
 }
 
 export const DEFAULT_CAPS: Readonly<Record<Exclude<PageType, "none">, Caps>> = {
-  search: { perHour: 60, perDay: 400 },
-  product: { perHour: 90, perDay: 600 },
-  offers: { perHour: 60, perDay: 400 },
-  reviews: { perHour: 40, perDay: 250 },
-  account: { perHour: 60, perDay: 300 },
-  cart: { perHour: 90, perDay: 500 },
-  list: { perHour: 60, perDay: 300 },
-  price_history: { perHour: 12, perDay: 60 },
+  search: { perHour: 15, perDay: 100 },
+  product: { perHour: 20, perDay: 120 },
+  offers: { perHour: 15, perDay: 100 },
+  reviews: { perHour: 20, perDay: 120 },
+  account: { perHour: 12, perDay: 80 },
+  cart: { perHour: 20, perDay: 120 },
+  list: { perHour: 12, perDay: 80 },
+  price_history: { perHour: 6, perDay: 30 },
 };
 
-export const MIN_GAP_MS = 1500;
-export const MAX_GAP_MS = 4000;
+export const MIN_GAP_MS = 4000;
+export const MAX_GAP_MS = 9000;
+/** Cap across ALL page types together: per-type caps alone add up to too much traffic. */
+export const GLOBAL_CAPS: Caps = { perHour: 20, perDay: 150 };
+/**
+ * Burst cap across all page types. Measured: about 63 loads in 47 minutes, 13 of them in
+ * the last 10, drew a "continue shopping" checkpoint. These limits stay far below that.
+ */
+export const BURST_CAP = { loads: 5, windowMs: 10 * 60_000 } as const;
 export const DEFAULT_COOLDOWN_MS = 30 * 60_000;
 
 export interface PacingState {
@@ -109,6 +116,35 @@ export class Pacer {
         };
       }
     }
+    if (type !== "none") {
+      const all = Object.values(this.#state.loads)
+        .flat()
+        .filter((t): t is number => typeof t === "number" && now - t < DAY)
+        .sort((a, b) => a - b);
+      const burst = all.filter((t) => now - t < BURST_CAP.windowMs);
+      if (burst.length >= BURST_CAP.loads) {
+        return {
+          ok: false,
+          reason: "hourly_cap",
+          retryAfterMs: Math.max(1000, burst[0]! + BURST_CAP.windowMs - now),
+        };
+      }
+      const lastHour = all.filter((t) => now - t < HOUR);
+      if (lastHour.length >= GLOBAL_CAPS.perHour) {
+        return {
+          ok: false,
+          reason: "hourly_cap",
+          retryAfterMs: Math.max(1000, lastHour[0]! + HOUR - now),
+        };
+      }
+      if (all.length >= GLOBAL_CAPS.perDay) {
+        return {
+          ok: false,
+          reason: "daily_cap",
+          retryAfterMs: Math.max(1000, all[0]! + DAY - now),
+        };
+      }
+    }
     const gap = MIN_GAP_MS + Math.floor(this.#random() * (MAX_GAP_MS - MIN_GAP_MS));
     const waitMs = Math.max(0, this.#state.lastLoadAt + gap - now);
     return { ok: true, waitMs };
@@ -131,6 +167,13 @@ export class Pacer {
   budget(): Record<string, { hour_left: number; day_left: number }> {
     const now = this.#now();
     const out: Record<string, { hour_left: number; day_left: number }> = {};
+    const everything = Object.values(this.#state.loads)
+      .flat()
+      .filter((t): t is number => typeof t === "number" && now - t < DAY);
+    out.all = {
+      hour_left: Math.max(0, GLOBAL_CAPS.perHour - everything.filter((t) => now - t < HOUR).length),
+      day_left: Math.max(0, GLOBAL_CAPS.perDay - everything.length),
+    };
     for (const [type, caps] of Object.entries(this.#caps)) {
       const loads = (this.#state.loads[type as PageType] ?? []).filter((t) => now - t < DAY);
       out[type] = {

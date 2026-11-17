@@ -1,13 +1,25 @@
 import { expect, test } from "vitest";
-import { DEFAULT_CAPS, DEFAULT_COOLDOWN_MS, MAX_GAP_MS, MIN_GAP_MS, Pacer } from "../src/pacing.ts";
+import {
+  BURST_CAP,
+  DEFAULT_CAPS,
+  GLOBAL_CAPS,
+  DEFAULT_COOLDOWN_MS,
+  MAX_GAP_MS,
+  MIN_GAP_MS,
+  Pacer,
+} from "../src/pacing.ts";
 
 function clock(start = 1_000_000_000) {
   let t = start;
   return { now: () => t, advance: (ms: number) => (t += ms) };
 }
 
-test("default review cap is about 40 pages per hour", () => {
-  expect(DEFAULT_CAPS.reviews.perHour).toBe(40);
+test("caps stay far below the traffic level that drew a checkpoint", () => {
+  expect(GLOBAL_CAPS.perHour).toBeLessThanOrEqual(20);
+  expect(BURST_CAP.loads).toBeLessThanOrEqual(5);
+  expect(MIN_GAP_MS).toBeGreaterThanOrEqual(4000);
+  for (const caps of Object.values(DEFAULT_CAPS))
+    expect(caps.perHour).toBeLessThanOrEqual(GLOBAL_CAPS.perHour);
 });
 
 test("gaps are jittered between the bounds", () => {
@@ -42,6 +54,10 @@ test("hourly cap refuses and recovers", () => {
   expect(refused.ok).toBe(false);
   expect(!refused.ok && refused.reason).toBe("hourly_cap");
   expect(p.budget().reviews).toEqual({ hour_left: 0, day_left: 97 });
+  expect(p.budget().all).toEqual({
+    hour_left: GLOBAL_CAPS.perHour - 3,
+    day_left: GLOBAL_CAPS.perDay - 3,
+  });
   c.advance(3_600_000);
   expect(p.plan("reviews").ok).toBe(true);
 });
@@ -82,4 +98,17 @@ test("account friction pages are recognized and nothing else is", async () => {
   expect(accountFriction("https://www.amazon.com/dp/B0FAKE0001")).toBeNull();
   expect(accountFriction("https://www.example.com/checkpoint/continue")).toBeNull();
   expect(accountFriction("not a url")).toBeNull();
+});
+
+test("the global cap bounds all page types together", () => {
+  const c = clock();
+  const p = new Pacer({ now: c.now });
+  const types = ["search", "product", "cart", "list"] as const;
+  for (let i = 0; i < GLOBAL_CAPS.perHour; i++) {
+    p.record(types[i % types.length]!);
+    c.advance(20_000);
+  }
+  const refused = p.plan("account");
+  expect(!refused.ok && refused.reason).toBe("hourly_cap");
+  expect(p.plan("none").ok).toBe(true);
 });
