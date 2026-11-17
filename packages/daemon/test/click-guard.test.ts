@@ -20,6 +20,19 @@ describe("click guard", () => {
     expect(() => assertClickAllowed(CART, del, expectDelete)).not.toThrow();
   });
 
+  test("an anchored label matches one part and refuses a different control", () => {
+    const LIST = "https://www.amazon.com/hz/wishlist/ls/ABCDEFGHIJ123";
+    const button = { text: "", value: " Delete  list ", name: null, id: null, tag: "INPUT" };
+    const want = { what: "delete list", label: /^delete list$/i };
+    expect(() => assertClickAllowed(LIST, button, want)).not.toThrow();
+    expect(() =>
+      assertClickAllowed(LIST, { ...button, value: "Delete list and items" }, want),
+    ).toThrow(/expected control \(label\)/);
+    expect(() => assertClickAllowed(LIST, { ...button, value: "" }, want)).toThrow(
+      /expected control \(label\)/,
+    );
+  });
+
   test("refuses on a page that is not allowlisted", () => {
     for (const url of [
       "https://www.amazon.com/gp/buy/spc/handlers/display.html",

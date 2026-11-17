@@ -89,10 +89,15 @@ export function assertClickAllowed(
     refuse("it is not the expected control (id)");
   }
   if (expected.label) {
-    const label = [control.text, control.value, control.ariaLabel]
+    // Each part is tested by itself (so an anchored pattern can match one of them) and
+    // then all of them together.
+    const parts = [control.text, control.value, control.ariaLabel]
       .filter((s): s is string => typeof s === "string")
-      .join(" | ");
-    if (!expected.label.test(label)) refuse("it is not the expected control (label)");
+      .map((s) => s.trim().replace(/\s+/g, " "))
+      .filter((s) => s.length > 0);
+    const pattern = expected.label;
+    if (!parts.some((p) => pattern.test(p)) && !pattern.test(parts.join(" | ")))
+      refuse("it is not the expected control (label)");
   }
   if (expected.href && !(typeof control.href === "string" && expected.href.test(control.href))) {
     refuse("it is not the expected control (link target)");
