@@ -15,6 +15,8 @@
 #   asin           a 10-character ASIN or ISBN -> reserved fake ASIN
 #   whole          only kept as the entire text node, never as a prefix or suffix
 #   suffix         kept as the entire node or when it ENDS the node, never as a prefix
+#   word           a single word kept wherever it stands as a whole word (outside address
+#                  blocks); only for generic unit and frequency words
 #
 # Never add anything that could be personal: no names, places, product words or digits.
 
@@ -217,3 +219,153 @@ September | whole
 October | whole
 November | whole
 December | whole
+
+# Order details and invoices (status, charge and link copy)
+Order Details
+Print | whole
+Refund Total
+Refunded | whole
+Your return is in transit. Your refund has been issued.
+Your refund has been issued.
+When will I get my refund?
+View return/refund status
+Share gift receipt
+Shipping | whole
+Handling | whole
+Rewards Points
+rewards) applied | suffix
+View related transactions
+See terms and conditions
+Supplied by
+Auto-delivered
+
+# Order list
+Search Orders
+Not Yet Shipped
+Digital Orders
+Amazon Pay
+placed in
+orders | suffix
+View transactions
+Return window closed on
+Problem with order
+Ask Product Question
+View your Subscribe
+
+# Cart
+Shopping Cart
+Your Amazon Cart
+Your Items
+Shipped from
+Learn more
+Only
+left in stock - order soon. | suffix
+
+# Subscribe and save
+Manage Your Deliveries
+Deliveries | whole
+Subscriptions | whole
+Shop | whole
+Upcoming delivery days
+Last day to edit
+Manage | whole
+Skip items
+You've saved
+since
+Your Subscriptions
+Edit All
+Next delivery
+Recommended for you
+Purchased
+One-Time Price
+Extra
+Deliver every
+Subscribe now
+Subscribe | whole
+
+# Lists
+Gift Finder
+Baby Registry
+Birthday Gift List
+Wedding Registry
+Custom Gift List
+Lists Help
+List help
+Your Friends
+Create a List
+Default List
+Private | whole
+Alexa List
+Add item
+Invite | whole
+Show: | whole
+Unpurchased
+Most recently added
+Item added
+Add a note
+Move | whole
+FREE One-Day
+shipping | suffix
+End of list
+Manage people
+
+# Price history sites (camelcamelcamel page chrome and field names)
+Popular Products
+Top Price Drops
+Sign Up
+ID | whole
+UPC | whole
+EAN | whole
+SKU | whole
+Product group
+Category | whole
+Manufacturer | whole
+Locale | whole
+Product Details
+View all sizes / colors
+Amazon Price History
+This is our record of Amazon price changes for
+since we began monitoring it on on
+Price Type
+Lowest Ever
+Highest Ever
+Current | whole
+Average | whole
+3rd Party New
+3rd Party Used
+Share | whole
+Last update scan
+Last tracked
+as of
+days ago | suffix
+day ago | suffix
+View at Amazon
+view data going back to
+Last checked
+camelcamelcamel monitors individual product prices across three Price Types
+1m | whole
+3m | whole
+6m | whole
+1y | whole
+
+# Unit and frequency words: kept wherever they stand ("every 3 weeks", "Purchased 2 times").
+unit | word
+units | word
+every | word
+day | word
+days | word
+week | word
+weeks | word
+month | word
+months | word
+year | word
+years | word
+time | word
+times | word
+off | word
+
+# Return windows (label plus its fixed lead-in word, so the date after it is the value)
+Return items: Eligible through
+Return or replace items: Eligible through
+Return items
+Eligible through

@@ -93,7 +93,8 @@ describe("tokens and numbers", () => {
     expect(text("+1 999-555-1234")).toBe("+1 555-555-0100");
     expect(text("ASIN: 0123456789")).toBe("ASIN: B0FAKE0000");
     const mixed = text("Model Ab12cD34");
-    expect(mixed).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]\d\d[a-z][A-Z]\d\d$/);
+    // Shape kept, letters lower-cased (split ids must not rejoin into an upper-case id).
+    expect(mixed).toMatch(/^Model [a-z]{2}\d\d[a-z]{2}\d\d$/);
     expect(mixed).not.toContain("Ab12cD34");
   });
 
@@ -276,7 +277,7 @@ describe("cli main and fixture writing in-process", () => {
       join(raw, "capture.json"),
       JSON.stringify({
         ...sampleCapture(),
-        html: '<p id="https://evil.invalid/">x</p>',
+        html: '<p id="ZZ 12345">x</p>',
         fragments: undefined,
       }),
     );

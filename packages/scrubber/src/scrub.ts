@@ -3,6 +3,7 @@
  * depends only on the input and `seed`, so re-scrubbing a capture is byte-identical.
  */
 import type { Capture } from "@rainforest/core";
+import { ID_PARAMS } from "./allowlists.ts";
 import { auditScrubbed } from "./audit.ts";
 import { createContext, SYNTHETIC_CAPTURED_AT, type Category } from "./context.ts";
 import { scrubHtml } from "./html.ts";
@@ -13,6 +14,11 @@ export const DEFAULT_SEED = "rainforest-scrubber-v1";
 export interface ScrubOptions {
   /** Changes every synthetic choice. Default DEFAULT_SEED. */
   seed?: string;
+  /**
+   * Structure-preserving size reduction (default off): drop site chrome and hidden
+   * subtrees parsers do not read, and collapse whitespace. Check parsers still agree.
+   */
+  reduce?: boolean;
 }
 
 export interface ReportFinding {
@@ -52,13 +58,25 @@ export function scrubCapture(capture: Capture, opts: ScrubOptions = {}): ScrubRe
     fragNames.map((n) => [n, capture.fragments?.[n] ?? ""]),
   ]);
   const ctx = createContext(material, capture.captured_at);
+  collectKnownIds(
+    [
+      capture.url,
+      capture.final_url,
+      capture.html,
+      ...fragNames.map((n) => capture.fragments?.[n] ?? ""),
+    ],
+    ctx.knownIds,
+  );
 
   // Fixed processing order so the first-appearance numbering is stable.
   const url = scrubUrl(capture.url, ctx, "page");
   const finalUrl = scrubUrl(capture.final_url, ctx, "page");
-  const html = scrubHtml(capture.html, ctx);
+  const hopts = { reduce: opts.reduce === true };
+  const html = scrubHtml(capture.html, ctx, hopts);
   const fragments: Record<string, string> = {};
-  for (const name of fragNames) fragments[name] = scrubHtml(capture.fragments?.[name] ?? "", ctx);
+  for (const name of fragNames) {
+    fragments[name] = scrubHtml(capture.fragments?.[name] ?? "", ctx, hopts);
+  }
 
   const out: Capture = {
     kind: capture.kind,
@@ -82,4 +100,19 @@ export function scrubCapture(capture: Capture, opts: ScrubOptions = {}): ScrubRe
   const counts: Record<string, number> = {};
   for (const k of [...ctx.counts.keys()].sort() as Category[]) counts[k] = ctx.counts.get(k) ?? 0;
   return { capture: out, report: { counts, findings } };
+}
+
+const ORDER_OR_ASIN = /^(?:[0-9D]\d{2}-\d{7}-\d{7}|[BX]0[A-Z0-9]{8}|\d{9}[\dX])$/i;
+const ID_PARAM_RE = new RegExp(`[?&](?:amp;)?(?:${ID_PARAMS.join("|")})=([A-Za-z0-9._-]{6,})`, "g");
+
+/** Every value an id-bearing query parameter carries anywhere in the raw documents. */
+function collectKnownIds(docs: string[], out: Set<string>): void {
+  for (const d of docs) {
+    for (const m of d.matchAll(ID_PARAM_RE)) {
+      const v = m[1];
+      // Order ids and ASINs have their own consistent fakes; leave them to those rules.
+      if (v === undefined || ORDER_OR_ASIN.test(v)) continue;
+      out.add(v);
+    }
+  }
 }

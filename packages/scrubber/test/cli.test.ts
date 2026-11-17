@@ -76,14 +76,14 @@ describe("cli", () => {
   });
 
   test("exits 1 and writes nothing when the self-audit finds residual risk", () => {
-    // A URL in a kept structural value (id) only gets the token pass, so it survives
+    // A ZIP in a kept structural value (id) only gets the token pass, so it survives
     // and the audit must stop the write.
-    const raw = rawCapture('<div id="https://evil.invalid/x">x</div>');
+    const raw = rawCapture('<div id="ZZ 12345">x</div>');
     const caseDir = join(tmp(), "out");
     const r = run([raw, caseDir]);
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain("url-host");
-    expect(r.stderr + r.stdout).not.toContain("evil.invalid");
+    expect(r.stderr).toContain("zip");
+    expect(r.stderr + r.stdout).not.toContain("12345");
     expect(existsSync(caseDir)).toBe(false);
   });
 

@@ -23,7 +23,7 @@ import {
   styleWeekday,
   weekdayIndex,
 } from "./dates.ts";
-import { PATTERNS, SYNTHETIC, isOpaque, isUpperId } from "./rules.mjs";
+import { PATTERNS, SYNTHETIC, isFakeUuid, isOpaque, isUpperId } from "./rules.mjs";
 import { scrubUrl } from "./url.ts";
 
 export type TextMode = "text" | "name" | "address";
@@ -80,7 +80,6 @@ const VOCAB = {
 // (a-f) and no b/x, so a replacement can never become a UUID or an ASIN.
 const LOWER = "ghijklmnopqrstuvwyz";
 const PLACEHOLDER = new RegExp(`^(?:${SYNTHETIC.idPrefix}|${SYNTHETIC.tokenPrefix})[0-9]{4,}$`);
-const UPPER = LOWER.toUpperCase();
 
 function sticky(src: string, flags = ""): RegExp {
   return new RegExp(src, `${flags}y`);
@@ -116,7 +115,8 @@ const R = {
   monthYear: new RegExp(`(${MON})\\.?,?\\s+((?:19|20)\\d{2})(?!\\d)`, "dy"),
   time12: /(?<![\d:])(\d{1,2})(?::(\d{2}))?(\s?)([AaPp])(\.?[Mm]\.?)(?![A-Za-z])/dy,
   time24: /(?<![\d:])(\d{1,2}):(\d{2})(?::(\d{2}))?(?![\d:])/dy,
-  zone: /(?<![A-Za-z])(?:[ECMP][SD]T|AK[SD]T|H[SD]T|[ECMP]T|GMT|UTC)(?:\s?[+-]\d{1,2}(?::?\d{2})?)?(?![A-Za-z])/y,
+  // Not inside a letter/digit run: "ET4M8N..." is an id, not a time zone.
+  zone: /(?<![A-Za-z0-9])(?:[ECMP][SD]T|AK[SD]T|H[SD]T|[ECMP]T|GMT|UTC)(?:\s?[+-]\d{1,2}(?::?\d{2})?)?(?![A-Za-z0-9])/y,
   street:
     /(?<![A-Za-z0-9])\d{1,6}\s+(?:[A-Za-z0-9.'#-]+\s+){0,5}?(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Way|Ct|Court|Pl|Place|Pkwy|Parkway|Hwy|Highway|Ter|Terrace|Cir|Circle|Loop|Trl|Trail|Sq|Square)\.?(?![A-Za-z])/y,
   cityStateZip:
@@ -133,7 +133,18 @@ const R = {
   month:
     /(?<![A-Za-z])(?:January|February|March|April|June|July|August|September|October|November|December)(?![A-Za-z])/y,
   alnum: /[A-Za-z0-9]+/y,
-  number: /\d+(?:[.,]\d+)*/y,
+  // Optional exponent ("3.09E-4"): kept attached so its letter is not read as a word.
+  number: /\d+(?:[.,]\d+)*(?:[eE][+-]?\d+(?![A-Za-z0-9]))?/y,
+  pctRun:
+    /(?<![A-Za-z0-9+/=_%-])(?:[A-Za-z0-9+/=_-]|%[0-9A-Fa-f]{2})*%[0-9A-Fa-f]{2}(?:[A-Za-z0-9+/=_-]|%[0-9A-Fa-f]{2})*/y,
+  pctEscape: /%([0-9A-Fa-f]{2})/y,
+  caseRun: /(?<![A-Za-z0-9+])[A-Za-z0-9+]{8,}(?![A-Za-z0-9+])/y,
+  mediaId: /(?<![A-Za-z0-9+-])\d{2}[A-Za-z0-9+-]{6,10}L(?![A-Za-z0-9+-])/y,
+  word: /[A-Za-z0-9_-]+/y,
+  cardBrand:
+    /(?<![A-Za-z])(?:American Express|AMEX|Amex|Master ?[Cc]ard|MASTERCARD|Visa|VISA|Discover|DISCOVER|Diners Club|JCB|Union ?Pay)(?=\s*(?:[*\u2022\u00b7]{2,}|[xX]{4}|ending|ends in))/y,
+  asinBare: /[BbXx]0[A-Za-z0-9]{8}(?![A-Za-z0-9])/y,
+  upperIdBare: /[A-Z0-9]{10,}(?![A-Za-z0-9])/y,
   uniLetters: /\p{L}+/uy,
   uniDigits: /\p{Nd}+/uy,
 };
@@ -159,7 +170,10 @@ function splice(m: RegExpExecArray, repl: Record<number, string>): string {
 }
 
 function caseStyle(orig: string, word: string): string {
-  if (orig.length > 1 && orig === orig.toUpperCase()) return word.toUpperCase();
+  // Caseless scripts (CJK) are lower case here: upper-casing them minted id-shaped runs.
+  if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase()) {
+    return word.toUpperCase();
+  }
   if (orig[0] !== undefined && orig[0] !== orig[0].toLowerCase()) {
     return word[0]?.toUpperCase() + word.slice(1);
   }
@@ -184,7 +198,8 @@ function charwise(ctx: ScrubContext, tok: string): string {
   let out = "";
   for (const ch of tok) {
     if (ch >= "0" && ch <= "9") out += String(ctx.int(0, 9));
-    else if (ch >= "A" && ch <= "Z") out += UPPER[ctx.int(0, UPPER.length - 1)];
+    // Letters come out lower case: fragments of one id split across nodes (a real ASIN
+    // in two spans) must not rejoin, in parser output, into an upper-case id shape.
     else out += LOWER[ctx.int(0, LOWER.length - 1)];
   }
   ctx.count("word");
@@ -226,7 +241,8 @@ function isoDateTime(ctx: ScrubContext, m: RegExpExecArray): string | null {
     repl[5] = pad2(ctx.int(0, 23));
     repl[6] = pad2(ctx.int(0, 59));
     if (m[7] !== undefined) repl[7] = pad2(ctx.int(0, 59));
-    if (m[8] !== undefined) repl[8] = "." + "0".repeat(m[8].length - 1);
+    // At most 3 fraction digits: "39.000000000Z" reads as a 10-character upper-case id.
+    if (m[8] !== undefined) repl[8] = "." + "0".repeat(Math.min(3, m[8].length - 1));
     // Normalize any offset to UTC: an offset is a time zone, which is a location.
     if (m[9] !== undefined) {
       repl[9] = "Z";
@@ -322,20 +338,59 @@ function zipOut(ctx: ScrubContext, zip: string, plus4: string | undefined): stri
 function digitsOf(ctx: ScrubContext, numberText: string, standalone: boolean): string {
   if (standalone && /^\d$/.test(numberText)) return numberText;
   ctx.count("number");
-  return numberText.replace(/\d+/g, (run) => ctx.fakeDigits(run));
+  // A lower-case exponent letter: "1E" next to a digit run would read as an upper-case id.
+  return numberText.replace(/\d+/g, (run) => ctx.fakeDigits(run)).replace(/E/g, "e");
+}
+
+/** Offset of the first UUID that starts inside s[i, i+len) after i, else len. */
+function uuidStart(s: string, i: number, len: number): number {
+  for (let k = 1; k < len; k++) if (at(R.uuid, s, i + k)) return k;
+  return len;
+}
+
+/**
+ * A short media or instance id, not a camelCase name: the Amazon media id shape (two digits,
+ * 6-10 more characters, a final "L", both cases), or both cases plus at least two digit
+ * groups that are not just a trailing number ("displayAddressLine1" stays).
+ */
+function isCaseMixedId(tok: string): boolean {
+  if (!/[A-Z]/.test(tok) || !/[a-z]/.test(tok)) return false;
+  if (/^\d{2}[A-Za-z0-9+]{6,10}L$/.test(tok)) return true;
+  const inner = tok.replace(/\d+$/, "");
+  return (inner.match(/\d+/g) ?? []).length >= 2;
+}
+
+function decodePct(s: string): string {
+  return s.replace(/%([0-9A-Fa-f]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function hasOpaque(s: string): boolean {
+  for (const m of s.matchAll(new RegExp(PATTERNS.opaqueRun, "g"))) if (isOpaque(m[0])) return true;
+  return false;
 }
 
 export interface ValueOptions {
   /** Map identifiers only; keep words and numbers verbatim (structural attribute values). */
   tokensOnly?: boolean;
+  /** Keep "word" labels inside the text (default true). Off in address blocks. */
+  words?: boolean;
 }
 
 /**
  * Scrub free text without the label pass: identifiers mapped, dates shifted, numbers and
  * words synthesized. Punctuation and whitespace are kept.
  */
-export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}): string {
+export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions = {}): string {
   const tokensOnly = opts.tokensOnly === true;
+  const keepWords = opts.words !== false;
+  // A UUID glued to a word ("checkbox<uuid>") is still a UUID to the audit, whose hex-only
+  // boundary does not see the word, while the scan below would consume it inside the word.
+  const s = input.replace(new RegExp(PATTERNS.uuid, "g"), (u) => {
+    if (isFakeUuid(u)) return u;
+    ctx.count("uuid");
+    return ctx.fakeUuid(u.toLowerCase());
+  });
+  const hasUuid = s.includes(SYNTHETIC.uuidPrefix);
   let out = "";
   let i = 0;
   let mixedUntil = -1;
@@ -357,6 +412,45 @@ export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}
       out += ctx.fakeEmail(m[0].toLowerCase());
       ctx.count("email");
       i += m[0].length;
+      continue;
+    }
+    if (
+      ctx.knownIds.size > 0 &&
+      (i === 0 || !/[A-Za-z0-9]/.test(s[i - 1] ?? "")) &&
+      (m = at(R.word, s, i)) &&
+      ctx.knownIds.has(m[0])
+    ) {
+      // An account-scoped id seen in an id query parameter, echoed here verbatim.
+      out += ctx.fakeToken(m[0]);
+      ctx.count("id");
+      i += m[0].length;
+      continue;
+    }
+    if (i > mixedUntil && (m = at(R.pctRun, s, i)) && hasOpaque(decodePct(m[0]))) {
+      // A percent-encoded run ("abc%2Bdef%3D") is judged by what it decodes to, the view
+      // the audit scans, so an encoded token cannot slip through in pieces.
+      out += ctx.fakeToken(m[0]);
+      ctx.count("token");
+      i += m[0].length;
+      continue;
+    }
+    if ((m = at(R.pctEscape, s, i))) {
+      // One escape is atomic: its hex digits are not letters and digits of the text. A
+      // punctuation escape is structure and kept; any other byte is data.
+      const code = parseInt(m[1] ?? "", 16);
+      const punct = code >= 0x20 && code < 0x7f && !/[A-Za-z0-9]/.test(String.fromCharCode(code));
+      out += tokensOnly || punct ? m[0] : "%5F";
+      i += m[0].length;
+      // The escape's hex digits defeat the usual left boundary of an id that follows it.
+      if ((m = at(R.asinBare, s, i))) {
+        out += ctx.fakeAsin(m[0].toUpperCase());
+        ctx.count("asin");
+        i += m[0].length;
+      } else if ((m = at(R.upperIdBare, s, i)) && (isUpperId(m[0]) || PLACEHOLDER.test(m[0]))) {
+        out += m[0].startsWith(SYNTHETIC.tokenPrefix) ? ctx.fakeToken(m[0]) : ctx.fakeId(m[0]);
+        ctx.count("id");
+        i += m[0].length;
+      }
       continue;
     }
     if (i > mixedUntil && (m = at(R.run, s, i)) && isOpaque(m[0])) {
@@ -385,13 +479,20 @@ export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}
       continue;
     }
     if ((m = at(R.uuid, s, i))) {
-      out += ctx.fakeUuid(m[0].toLowerCase());
-      ctx.count("uuid");
+      // Only fakes from the pass above reach here; they stay as they are.
+      out += m[0];
       i += m[0].length;
       continue;
     }
     if ((m = at(R.phone, s, i))) {
       out += fakePhoneLike(ctx, m[0]);
+      i += m[0].length;
+      continue;
+    }
+    if (!tokensOnly && (m = at(R.cardBrand, s, i))) {
+      // The owner's card network is account data; one constant brand keeps the shape.
+      out += "Visa";
+      ctx.count("card");
       i += m[0].length;
       continue;
     }
@@ -463,9 +564,23 @@ export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}
       i += m[0].length;
       continue;
     }
+    if (
+      tokensOnly &&
+      (((m = at(R.mediaId, s, i)) && /[A-Z]/.test(m[0]) && /[a-z]/.test(m[0])) ||
+        ((m = at(R.caseRun, s, i)) && isCaseMixedId(m[0])))
+    ) {
+      // A short id mixing upper case, lower case and digits ("61Ab3dE+fGL", an image or
+      // media id) in a structural value: shorter than an opaque blob, still not structure.
+      out += ctx.fakeToken(m[0]);
+      ctx.count("token");
+      i += m[0].length;
+      continue;
+    }
     if (tokensOnly) {
       if ((m = at(R.alnum, s, i))) {
-        out += m[0];
+        // A long all-digit run in a structural value is a number id (a customer, session
+        // or request id), not structure: same digit count, fresh digits.
+        out += /^\d{7,}$/.test(m[0]) ? ctx.fakeDigits(m[0]) : m[0];
         i += m[0].length;
       } else {
         out += s[i];
@@ -512,18 +627,28 @@ export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}
       continue;
     }
     if ((m = at(R.alnum, s, i))) {
-      const tok = m[0];
+      // Stop the word where a (mapped) UUID begins, so its digits are not re-randomized
+      // into a fresh UUID shape.
+      const tok = hasUuid ? m[0].slice(0, uuidStart(s, i, m[0].length)) : m[0];
       const hasDigit = /[0-9]/.test(tok);
       const hasLetter = /[A-Za-z]/.test(tok);
-      if (hasLetter && (hasDigit || i <= mixedUntil)) {
+      const isWord = hasLetter && !hasDigit && keepWords && WORDS.has(tok.toLowerCase());
+      if (hasLetter && !isWord && (hasDigit || i <= mixedUntil)) {
         out += charwise(ctx, tok);
+        i += tok.length;
+      } else if (isWord) {
+        // A closed set of unit and frequency words ("every 3 weeks", "90-day") is kept
+        // anywhere, also as the letter part of a hyphenated run.
+        ctx.count("label_kept");
+        out += tok;
         i += tok.length;
       } else if (hasLetter) {
         out += loremWord(ctx, tok);
         i += tok.length;
       } else {
         const num = at(R.number, s, i);
-        const text = num !== null ? num[0] : tok;
+        const whole = num !== null ? num[0] : tok;
+        const text = hasUuid ? whole.slice(0, uuidStart(s, i, whole.length)) : whole;
         const prev = i > 0 ? s[i - 1] : "";
         const next = s[i + text.length] ?? "";
         const standalone = prev !== "$" && next !== "%" && next !== "." && next !== ",";
@@ -533,7 +658,9 @@ export function scrubValue(s: string, ctx: ScrubContext, opts: ValueOptions = {}
       continue;
     }
     if ((m = at(R.uniLetters, s, i))) {
-      out += loremWord(ctx, m[0]);
+      // Lower case: a non-ASCII word ("\uff35\uff33\uff22") turned into upper-case ASCII next
+      // to digits reads as an id.
+      out += loremWord(ctx, m[0]).toLowerCase();
       i += m[0].length;
       continue;
     }
@@ -598,6 +725,7 @@ const COMPILED: CompiledLabel[] = LABELS.map((l) => {
 }).sort((a, b) => b.norm.length - a.norm.length);
 
 const EXACT = new Map(COMPILED.map((l) => [l.norm, l]));
+const WORDS = new Set(LABELS.filter((l) => l.kind === "word").map((l) => l.text.toLowerCase()));
 
 function synthName(ctx: ScrubContext, value: string): string {
   const lead = /^\s*/.exec(value)?.[0] ?? "";
@@ -650,6 +778,17 @@ function plainValue(ctx: ScrubContext, value: string, mode: TextMode): string {
     const lead = /^\s*/.exec(value)?.[0] ?? "";
     const trail = value.trim() === "" ? "" : (/\s*$/.exec(value)?.[0] ?? "");
     return value.trim() === "" ? value : lead + addressLine(ctx, value.trim()) + trail;
+  }
+  // A trailing label is structure even after a leading one ("Only 3 left in stock - order
+  // soon."): keep it, the head between the two is scrubbed as usual.
+  const trimmed = value.trim();
+  if (trimmed !== "") {
+    const sfx = scrubSuffixes(trimmed, ctx);
+    if (sfx !== null) {
+      const lead = /^\s*/.exec(value)?.[0] ?? "";
+      const trail = /\s*$/.exec(value)?.[0] ?? "";
+      return lead + sfx + trail;
+    }
   }
   return scrubValue(value, ctx);
 }
@@ -707,7 +846,7 @@ function addressLine(ctx: ScrubContext, core: string): string {
     ctx.count("address");
     return SYNTHETIC.city;
   }
-  return scrubValue(core, ctx);
+  return scrubValue(core, ctx, { words: false });
 }
 
 /**
@@ -741,7 +880,7 @@ function scrubCore(core: string, ctx: ScrubContext, mode: TextMode): string {
   // that say what their value is ("Deliver to", "Hello,") apply there.
   const restricted = mode !== "text";
   for (const l of COMPILED) {
-    if (l.kind === "whole" || SUFFIX_KINDS.includes(l.kind)) continue;
+    if (l.kind === "whole" || l.kind === "word" || SUFFIX_KINDS.includes(l.kind)) continue;
     if (restricted && l.kind === null) continue;
     const p = l.prefix.exec(core);
     if (p !== null && p[0].length < core.length) {
@@ -751,5 +890,22 @@ function scrubCore(core: string, ctx: ScrubContext, mode: TextMode): string {
   }
   if (mode === "name") return synthName(ctx, core);
   if (mode === "address") return addressLine(ctx, core);
-  return scrubSuffixes(core, ctx) ?? scrubValue(core, ctx);
+  const sfx = scrubSuffixes(core, ctx);
+  if (sfx !== null) return sfx;
+  // " - " separates clauses ("1 month - view data going back to <date>"). Split only when a
+  // later clause starts with a label, so a date range ("Feb 3 - 7") stays one value.
+  const parts = core.split(/(\s+-\s+)/);
+  if (parts.some((p, k) => k >= 2 && k % 2 === 0 && leadingLabel(p))) {
+    return parts.map((p, k) => (k % 2 === 1 || p === "" ? p : scrubCore(p, ctx, mode))).join("");
+  }
+  return scrubValue(core, ctx);
+}
+
+function leadingLabel(s: string): boolean {
+  for (const l of COMPILED) {
+    if (l.kind === "whole" || l.kind === "word" || SUFFIX_KINDS.includes(l.kind)) continue;
+    const p = l.prefix.exec(s);
+    if (p !== null && p[0].length < s.length) return true;
+  }
+  return false;
 }
