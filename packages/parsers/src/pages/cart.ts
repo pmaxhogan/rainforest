@@ -955,8 +955,10 @@ export const parseCart: Parser<CartPage> = (capture: Capture): ParseResult<CartP
 
   // Empty state.
   const emptyHeading =
-    q(doc, "#sc-active-cart .sc-your-amazon-cart-is-empty, #sc-active-cart h3") ??
-    q(doc, ".sc-your-amazon-cart-is-empty");
+    q(doc, "#sc-active-cart .sc-your-amazon-cart-is-empty") ??
+    q(doc, ".sc-your-amazon-cart-is-empty") ??
+    // A bare heading counts only when the active cart has no items (item titles are h3 too).
+    (active.length === 0 ? q(doc, "#sc-active-cart h3") : undefined);
   const emptyMessage = emptyHeading === undefined ? null : text(emptyHeading) || null;
   if (emptyMessage !== null) cons.take(emptyHeading);
   cons.take(emptyEl);

@@ -505,15 +505,9 @@ if (!start.ok) {
       ["checkpoint", "checkpoint"],
       ["captcha-redirect", "captcha"],
     ] as const) {
-      it(`a 302 into the ${trap} page never loads it`, async () => {
-        await expectRefusal(() => goto(`/s?k=example&mock=${flag}`), "blocked_by_policy");
-        expect((await h.state()).trap_counts[trap]).toBe(0);
-      });
-      // Known gap: the session maps a refused REDIRECT hop to needs_human only for
-      // sign-in, so a 302 into /checkpoint or /errors/validateCaptcha is reported as
-      // blocked_by_policy and starts no cool-down. See the proposed session.ts change.
-      it.fails(`a 302 into the ${trap} page is needs_human with a cool-down`, async () => {
+      it(`a 302 into the ${trap} page never loads it and asks for a human`, async () => {
         await expectRefusal(() => goto(`/s?k=example&mock=${flag}`), "needs_human");
+        expect((await h.state()).trap_counts[trap]).toBe(0);
         expect(h.pacer.state.coolingDownUntil).toBeGreaterThan(Date.now());
       });
     }

@@ -221,7 +221,7 @@ export class BrowserSession {
         if (current === "about:blank" || checkNavigation(current).allow) return;
         this.#violation = current.split("?")[0]!.slice(0, 120);
         this.#options.log?.("navigation guard: the tab committed a refused URL; leaving it");
-        void page.goto("about:blank").catch(() => {});
+        this.#leaving = page.goto("about:blank").catch(() => {});
       });
       this.#guard = await installGuard(page, (blocked) => {
         let where = "?";
@@ -248,7 +248,11 @@ export class BrowserSession {
     };
   }
 
+  #leaving: Promise<unknown> = Promise.resolve();
+
   async #goto(page: Page, guard: Guard, url: string, type: PageType): Promise<void> {
+    // A refused navigation may still be leaving the page; let it finish first.
+    await this.#leaving;
     const verdict = checkNavigation(url);
     if (!verdict.allow) {
       throw new RfError("blocked_by_policy", `navigation refused by policy (${verdict.reason})`, {
@@ -278,6 +282,9 @@ export class BrowserSession {
         await page.goto("about:blank").catch(() => {});
         if (blocked.verdict.reason === "sign_in")
           this.#needsHuman("sign_in", "Amazon asked to sign in again");
+        const hopFriction = accountFriction(blocked.url);
+        if (hopFriction)
+          this.#needsHuman(hopFriction, `Amazon showed a ${hopFriction.replace("_", " ")} page`);
         throw new RfError(
           "blocked_by_policy",
           `a redirect was refused by policy (${blocked.verdict.reason})`,
