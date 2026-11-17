@@ -301,3 +301,21 @@ describe("Windows scheduled task", () => {
     await expect(service.install()).rejects.toThrow(/Create failed/);
   });
 });
+
+describe("windows account", () => {
+  test("prefers whoami and falls back to the environment", async () => {
+    const { windowsAccount } = await import("../src/service/index.ts");
+    expect(windowsAccount(() => "examplepc\\alex\r\n", { USERDOMAIN: "WORKGROUP" })).toBe(
+      "examplepc\\alex",
+    );
+    expect(
+      windowsAccount(
+        () => {
+          throw new Error("no whoami");
+        },
+        { USERDOMAIN: "EXAMPLE" },
+      ),
+    ).toMatch(/^EXAMPLE\\/);
+    expect(windowsAccount(() => "not an account name", {})).not.toContain(" ");
+  });
+});

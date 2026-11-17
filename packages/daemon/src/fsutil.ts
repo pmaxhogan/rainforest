@@ -90,7 +90,14 @@ export function currentWindowsAccount(env: Record<string, string | undefined> = 
  */
 export async function restrictToCurrentUser(file: string, deps: SecretWriteDeps): Promise<void> {
   if (deps.platform !== "win32") return;
-  const account = deps.account ?? currentWindowsAccount();
+  // `whoami` is authoritative: in a remote (ssh) session USERDOMAIN can name a workgroup
+  // that is not a valid account domain, and icacls then fails to resolve the account.
+  let account = deps.account;
+  if (!account) {
+    const who = await deps.exec("whoami", []);
+    const name = who.code === 0 ? who.stdout.trim() : "";
+    account = /^[^\s"]+\\[^\s"]+$/.test(name) ? name : currentWindowsAccount();
+  }
   const res = await deps.exec("icacls", icaclsArgs(file, account));
   if (res.code !== 0) throw new Error(`icacls failed (exit ${res.code})`);
 }
