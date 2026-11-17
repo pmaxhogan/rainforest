@@ -57,7 +57,8 @@ It could:
 
 - see tool arguments and results in transit (the hub relays everything), and the audit log;
 - send calls for any tool in the registry with schema-valid arguments, to any paired computer, and
-  have them run, within the daemon's pacing budget. That includes the write tools, but
+  have them run, within the daemon's pacing budget and the per-grant `/mcp` rate limit (120 calls
+  per 60 seconds). That includes the write tools, but
   `add_to_cart` needs an offer id that only the daemon process holds the key for (the hub cannot
   mint one), and every write acts on one named cart line or list item behind the click guard;
 - return false results to the client, or omit the untrusted-content wrapper (the Worker applies
@@ -154,9 +155,9 @@ host is a denial. Three checks on requests, plus a separate guard for clicks:
    the home page, search, product pages, all-offers, reviews, cart, orders and order details, the
    invoice print view, package tracking, lists, Subscribe & Save, browsing history, and three
    exact third-party URL shapes for price history (CamelCamelCamel product and chart pages, Keepa
-   graph images). Only GET, with one exception: the form that an offer's own Add to Cart control
-   in the all-offers panel submits (`/cart/add-to-cart/ref=aod_...`) may be posted as a page
-   navigation, and only when its body is readable and carries no buy marker. Anything else is
+   graph images). Only GET, with exactly one exception (a single rule, `MAIN_FRAME_POST_ALLOWLIST`):
+   the form that an offer's own Add to Cart control in the all-offers panel submits
+   (`/cart/add-to-cart/ref=aod_...`) may be posted as a page navigation, and only when its body is readable and carries no buy marker. Anything else is
    refused, which is why a redirect to an unexpected page fails.
 3. **Fragment allowlist.** Same-origin documents fetched from inside a loaded page (not
    navigations) must pass the hard-deny layer and match a short fragment list, currently the
@@ -216,8 +217,8 @@ it requires that:
 
 1. the tab is currently on an allowlisted page (the main-frame check of the URL policy);
 2. the locator matches exactly one element, and that element is the specific control the flow
-   expects: its `name`, `id` or label must match the pattern the flow gave (a flow that names none
-   is refused);
+   expects: its `name`, `id`, label or link target must match the pattern the flow gave (a flow that
+   names none is refused);
 3. the element is not a credential field (password or email input) and does not look like a
    purchase control (`isPurchaseControl`: its text, id, name, aria label and value against the
    purchase wording above, and its link or form action against the URL policy).

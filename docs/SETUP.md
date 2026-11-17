@@ -213,7 +213,8 @@ This copies the stable launcher into the app directory, points the `current` ver
 checkout (`--link-dev`), and registers autostart: a LaunchAgent labeled `dev.rainforest.daemon` in
 `~/Library/LaunchAgents` on macOS (runs at login, kept alive), or a per-user Scheduled Task named
 `rainforest-daemon` on Windows (runs at logon, restarts on failure, started through
-`conhost.exe --headless` to avoid a console window, which is unverified on real Windows). It starts
+`conhost.exe --headless` to avoid a console window, which is unverified on real Windows; the
+launcher also keeps the daemon as a child process and starts it again after a self-update). It starts
 the service immediately unless you pass `--no-start`.
 
 Confirm it connected:
@@ -381,6 +382,6 @@ The codes are defined in docs/TOOLS.md; what to do about the common ones:
 | `busy`              | That computer already has 4 calls queued; retry in about 15 seconds                                                                                                                         |
 | `daemon_outdated`   | The daemon is below `MIN_DAEMON_VERSION` and is updating; retry in a minute                                                                                                                 |
 | `blocked_by_policy` | The URL policy refused a page; this is working as intended                                                                                                                                  |
-| `unsupported`       | A planned tool that is not implemented yet, or a page Amazon does not offer (archived orders, search history)                                                                               |
+| `unsupported`       | Something not implemented (`move_list_item` with `copy: true`), or a page Amazon does not offer (archived orders, search history)                                                           |
 | `needs_choice`      | `add_to_cart` refused the offer and added nothing (flags, price or seller changed, gone, out of stock); read `details` and ask again                                                        |
 | `timeout`           | A page did not load in 45 seconds, or the call passed 225 seconds                                                                                                                           |

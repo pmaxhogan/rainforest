@@ -50,7 +50,9 @@ refuses everything except `/healthz`.
 
 Access tokens last one hour and refresh tokens one year. OAuth scope is the single scope `mcp`.
 The app-password step, the pairing routes, the WebSocket route and the OAuth registration and token
-routes are rate limited per client IP; a failing limiter denies rather than allows.
+routes are rate limited per client IP; a failing limiter denies rather than allows. `/mcp` is rate
+limited per OAuth grant (120 calls per 60 seconds); over that, or if the limiter fails, a call
+returns `throttled` with `retry_after_s` 60.
 
 The MCP endpoint is minimal and stateless: POST only, JSON responses only (no event streams), a
 256 KiB body limit, batches of up to 20 requests, and the methods `initialize`, `ping`, `tools/list`
@@ -92,7 +94,7 @@ the daemon can update itself while the launcher never changes. The pieces:
 - **Router and flows.** Each tool name maps to one typed flow (`FLOWS` in
   `packages/daemon/src/flows/index.ts`: reads, the hand-off and the cart and list writes). There is
   no generic "navigate" or "click" primitive reachable from the hub. A registered tool with no flow
-  in this daemon (the planned ones) returns `unsupported`.
+  in this daemon would return `unsupported`; every non-hub tool has one today.
 - **Browser controller.** Owns the broker connection, the pacer, and the single browser session.
 - **Updater.** Polls signed GitHub releases; see below.
 - **Operator commands.** `setup`, `pair`, `install`, `uninstall`, `status`, `doctor`, `update`,
@@ -111,8 +113,10 @@ extension mode:
 3. To attach, the daemon asks Playwright's extension relay to connect. The relay would normally
    launch a browser with a connect URL (which activates the browser and steals focus). The daemon
    intercepts that launch in process, swallows it, and sends the connect URL to the broker instead;
-   the extension opens it in an unfocused window. If the broker cannot deliver, the attach times
-   out and no browser is started.
+   the extension opens it in an unfocused window. The window is opened unnamed: a named window gets
+   an extra title tab the automation cannot close, so it would outlive every detach; unnamed, the
+   automation tab is its only tab and closing the tab closes the window. If the broker cannot
+   deliver, the attach times out and no browser is started.
 4. The relay yields a Playwright `Page` in an automation tab. Focus emulation is turned on so a
    background tab keeps rendering.
 5. Any tab the automation page opens by itself is closed immediately.
@@ -142,7 +146,7 @@ assumes the others can fail (what each refuses is detailed in docs/SECURITY.md):
    landed on is checked again, and tabs the page opens by itself are closed.
 5. **Click guard** (`flows/click-guard.ts`). The only way a write flow clicks. Before each click it
    asserts the tab is on an allowlisted page, the target is exactly one specific control the flow
-   expects (by `name`, `id` or label) and the control does not look like a purchase control.
+   expects (by `name`, `id`, label or link target) and the control does not look like a purchase control.
 6. **Friction handling.** Amazon pages that mean "prove you are a person" (sign-in, captcha,
    checkpoint, challenge) are recognized by URL (also on a refused redirect hop) and by a content
    classifier. The call stops with `needs_human` (`kind`: `captcha`, `sign_in`, `soft_challenge`
@@ -217,7 +221,9 @@ being read back:
 `add_to_cart` adds an offer re-check. The caller holds an opaque offer id minted by
 `get_buying_options`: an authenticated encryption (AES-256-GCM) of the offer snapshot under a key
 that lives only in the daemon process, valid for ten minutes, unreadable and unforgeable by the
-hub or the model. The flow reopens the product with the all-offers panel, finds the same offer (by
+hub or the model. The flow loads the product page, then navigates from inside that page to the all-offers panel (a
+direct jump to the panel URL draws a challenge; the in-page navigation must stay on the current
+origin), finds the same offer (by
 seller, condition and price), and refuses with `needs_choice` if it is gone, changed price or
 seller, is out of stock or carries a flag that was not acknowledged. It then clicks that offer's
 own Add to Cart control, answers any protection-plan or add-on prompt with its decline control,
@@ -226,7 +232,8 @@ and verifies the cart grew by exactly one unit. It never subscribes: Subscribe &
 
 `show_on_screen` is the hand-off. It builds the URL from a typed target, opens it in a normal tab
 of the configured profile (never the automation tab) and brings the browser forward, so the owner
-finishes something such as checkout by hand.
+finishes something such as checkout by hand. Each opened tab is visible, so the daemon allows at
+most 6 per 10 minutes and answers `throttled` after that.
 
 ## Wire protocol
 
@@ -424,7 +431,9 @@ docs/SECURITY.md).
 4. The tarball is unpacked to a staging directory, the new build's `selftest` runs, and only then
    the `current` pointer moves. The previous version is recorded as the rollback target.
 5. The daemon exits with a restart code; the service manager starts the new version through the
-   launcher.
+   launcher. On Windows the launcher itself supervises the daemon as a child process (Task
+   Scheduler does not relaunch a task that exits) and starts it again whenever it exits with the
+   restart code (75), giving up after 20 restarts in 10 minutes.
 6. The new version has 60 seconds to connect to the hub. If it does not, the previous version is
    restored and the new one is marked bad. If the new version cannot even start, the launcher
    counts starts and after three unconfirmed ones restores the previous version and marks the new

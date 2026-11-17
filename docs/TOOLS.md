@@ -10,27 +10,27 @@ heading form for tools only.
 
 ## Status
 
-The registry describes 35 tools. Four are answered by the hub, 25 are implemented in the daemon
-(exactly the keys of `FLOWS` in `packages/daemon/src/flows/index.ts`) and 6 are planned. This table
-is the one place that records which; check `FLOWS` for the current set.
+The registry describes 35 tools. Four are answered by the hub and 31 are implemented in the daemon
+(exactly the keys of `FLOWS` in `packages/daemon/src/flows/index.ts`); no tool is planned as a
+whole. This table is the one place that records which options are still planned; check `FLOWS` for
+the current set.
 
-| Where it runs      | Tools                                                                                                                                                                                                                                                                                     | State                                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented                                                                                                                      |
-| Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                                                                      |
-| Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                          | Implemented                                                                                                                      |
-| Daemon, writes     | `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`                                                                                                                                                         | Implemented                                                                                                                      |
-| Planned            | `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`; coupon clipping (the `clip_coupon` option of `add_to_cart`)                                                                                                                             | Planned: the daemon answers `unsupported` ("is not available in this daemon version yet"); `clip_coupon` is accepted and ignored |
+| Where it runs      | Tools                                                                                                                                                                                                                                                                                     | State                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented                                                                        |
+| Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                        |
+| Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                          | Implemented                                                                        |
+| Daemon, writes     | `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, `remove_from_list`                                                       | Implemented                                                                        |
+| Planned            | coupon clipping (the `clip_coupon` option of `add_to_cart`); the copy mode of `move_list_item`                                                                                                                                                                                            | Planned: `clip_coupon` is accepted and ignored; `copy: true` answers `unsupported` |
 
-The sections of planned tools below restate the registry's intent, not behavior you can rely on,
-and their error lists are labeled "Expected errors". Every other section describes what the code
-does. `get_search_history` is best effort. Archived orders are reported `unsupported`; cancelled
-orders appear inline in the order list.
+Every section below describes what the code does. `get_search_history` is best effort. Archived
+orders are reported `unsupported`; cancelled orders appear inline in the order list.
 
-The hub validates arguments for every registered tool, so a planned tool fails at the daemon with
-`unsupported`, or earlier with a routing error from the hub (`invalid_arguments`,
-`no_browser_online`, `browser_offline`, `not_found` for an unknown browser name,
-`daemon_outdated`, `timeout`).
+The hub validates arguments for every registered tool before it reaches a computer, so a bad call
+fails early with a routing error from the hub (`invalid_arguments`, `no_browser_online`,
+`browser_offline`, `not_found` for an unknown browser name, `daemon_outdated`, `timeout`). A
+registered tool with no flow in the daemon would fail there with `unsupported`; today every
+non-hub tool has one.
 
 ## Conventions
 
@@ -180,7 +180,7 @@ The full taxonomy, from `packages/core/src/errors.ts`. `needs_human` carries a `
 | `daemon_outdated`     | The computer's daemon is older than the hub requires and is updating; retry in about 60 seconds                                                            |
 | `hub_outdated`        | Defined, and used as a WebSocket close reason when a daemon speaks a newer protocol than the hub                                                           |
 | `invalid_arguments`   | The arguments do not match the tool schema, or the tool name is unknown                                                                                    |
-| `unsupported`         | The tool is planned and not implemented, or Amazon does not offer the page (archived orders, search history)                                               |
+| `unsupported`         | The request asks for something not implemented (`move_list_item` with `copy: true`) or Amazon does not offer the page (archived orders, search history)    |
 | `timeout`             | The 225 second call deadline or the 45 second page load limit passed                                                                                       |
 | `internal`            | Anything else; the message never carries the underlying error text                                                                                         |
 
@@ -246,12 +246,13 @@ Kind: runs on a computer; changes state; pacing: none.
 **Result.** `{ changed: true, opened, note }`, where `opened` is the amazon.com URL that was
 opened.
 
-**Errors.** `invalid_arguments` (the daemon re-validates the target), `browser_offline`.
+**Errors.** `invalid_arguments` (the daemon re-validates the target), `throttled` (the tab cap),
+`browser_offline`.
 
 **Notes.** The hand-off is how a purchase gets finished: the daemon builds the URL itself from the
 typed `target` (never from a caller-supplied URL), starts the configured Chrome profile on that
 URL in a normal tab and brings it forward. The automation session never attaches to that tab, and
-it does not count against any pacing budget. The URL policy and network guard cover only the
+it does not count against any pacing budget; at most 6 tabs are opened in any 10 minutes per computer, after which the call fails with `throttled` and `retry_after_s`. The URL policy and network guard cover only the
 automation tab, so they do not apply to this one: it is your own browsing from there. `target` is
 one of: `{type: product, asin}`, `{type: cart}`, `{type: list, list_id}`, `{type: order,
 order_id}`, `{type: orders}`. Registered as a write tool, so the Worker records its arguments in
@@ -791,7 +792,7 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
 - **`clip_coupon` is planned.** It is accepted and ignored.
 
 The flow first checks that three page loads fit the pacing budget (otherwise `throttled`). It then
-reads the cart, opens the product with the all-offers panel, re-reads the offers from that panel,
+reads the cart, loads the product page, then navigates from inside that page to the all-offers panel (a direct jump to the panel URL draws a challenge), re-reads the offers from that panel,
 finds the one the token was made for (by seller, condition and price), and refuses with
 `needs_choice` when it is gone (`offer_gone`), its price or seller changed (`price_changed`,
 `seller_changed`), it is out of stock (`out_of_stock`), or it carries flags that were not
@@ -930,7 +931,8 @@ checked against `^[A-Za-z0-9-]{8,64}$`.
 
 ### `create_list`
 
-> Create a list. Not implemented yet in this version; answers unsupported.
+> Create a list (privacy defaults to private). Returns {changed, list, before, after}: the new list and
+> the lists page read back before and after.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -940,15 +942,23 @@ Kind: runs on a computer; changes state; pacing: list.
 | `name`    | string (min 1, max 100 chars) | yes      |                                                  |
 | `privacy` | `private`, `shared`, `public` | no       | Default private                                  |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, list, before, after }`: `list` is `{ list_id, name, privacy }`
+of the new list; `before` and `after` are the lists page read back before and after, each an array
+of `{ list_id, name, privacy }`.
 
-**Expected errors.** `needs_human`, `throttled`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments` (empty name), `blocked_by_policy`, `needs_human`, `throttled`,
+`layout_unrecognized`, `internal` (the new list did not appear; the observed lists are attached),
+`timeout`.
 
-**Notes.** `privacy` defaults to `private`.
+**Notes.** `privacy` defaults to `private`. The flow checks that two page loads fit the `list`
+budget (four when `privacy` is not private), reads the lists page, creates the list through the
+site's own dialog and reads the lists page again. For a `shared` or `public` list the privacy is set afterwards, through the
+manage-list dialog of the new list.
 
 ### `update_list`
 
-> Rename a list and/or change its privacy. Not implemented yet in this version; answers unsupported.
+> Rename a list and/or set its privacy (private, shared or public). Returns {changed, before, after}
+> read back from the list page.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -959,16 +969,21 @@ Kind: runs on a computer; changes state; pacing: list.
 | `name`    | string (min 1, max 100 chars) | no       |                                                  |
 | `privacy` | `private`, `shared`, `public` | no       |                                                  |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, before, after }`: `before` and `after` are
+`{ list_id, name, privacy }` read from the list page.
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments` (not a list id, nothing to change, empty name), `blocked_by_policy`,
+`needs_human`, `throttled`, `layout_unrecognized`, `internal` (the settings did not change as
+intended; the observed state is attached), `timeout`.
 
-**Notes.** Changing `privacy` to `public` or `shared` exposes the list to other people; the tool
+**Notes.** Give a `name`, a `privacy` or both. The flow changes them through the list's manage-list
+dialog and reads the list back. Changing `privacy` to `public` or `shared` exposes the list to other people; the tool
 does not ask for confirmation, the model should.
 
 ### `delete_list`
 
-> Delete a list. Not implemented yet in this version; answers unsupported.
+> Delete a whole list with all its items; this cannot be undone. Returns {changed, before, after, list}:
+> the lists page read back before and after.
 
 Kind: runs on a computer; destructive; pacing: list.
 
@@ -977,15 +992,22 @@ Kind: runs on a computer; destructive; pacing: list.
 | `browser` | string (max 64 chars) | no       | Browser id, name or alias; see Browser selection |
 | `list_id` | string                | yes      | 8 to 16 characters from list_lists               |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, before, after, list }`: `before` and `after` are the lists
+page read back before and after (arrays of `{ list_id, name, privacy }`) and `list` is
+`{ list_id, name }` of the deleted list.
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments`, `not_found` (no such list; the lists are attached),
+`blocked_by_policy`, `needs_human`, `throttled`, `layout_unrecognized`, `internal` (the list is
+still there; the observed lists are attached), `timeout`.
 
-**Notes.** Marked destructive in the MCP annotations.
+**Notes.** Deletes the whole list with all its items and cannot be undone. The flow opens the
+list's manage-list dialog, clicks its Delete list control and then the confirmation the site asks
+for, each through the click guard. Marked destructive in the MCP annotations.
 
 ### `add_to_list`
 
-> Add a product to a list. Not implemented yet in this version; answers unsupported.
+> Add a product to a list. Returns {changed, added, before_count, after_count}, or {changed: false} when
+> the product is already on the list.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -995,9 +1017,18 @@ Kind: runs on a computer; changes state; pacing: list.
 | `list_id` | string                | yes      | 8 to 16 characters from list_lists               |
 | `asin`    | string                | yes      | 10 characters, A-Z and 0-9                       |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, added, before_count, after_count }`: `added` is the new
+item as read back from the list (`item_id`, `asin`, `title`, `quantity_wanted`, `priority`,
+`comment`). When the product is already on the list nothing is clicked and the result is
+`{ changed: false, note, list }` with the compact list state.
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments`, `blocked_by_policy`, `needs_human`, `throttled`,
+`layout_unrecognized`, `internal` (the product did not appear on the list; the observed list is
+attached), `timeout`.
+
+**Notes.** The flow checks that three page loads fit the `list` budget, reads the list, opens the
+product page, opens the Add to List chooser and clicks that list's own row, each through the click
+guard, then reads the list again.
 
 ### `remove_from_list`
 
@@ -1025,8 +1056,8 @@ still there. Marked destructive in the MCP annotations.
 
 ### `update_list_item`
 
-> Set quantity wanted, priority and/or comment on a list item. Not implemented yet in this version;
-> answers unsupported.
+> Set quantity wanted, priority and/or comment on a list item. Returns {changed, before, after}: the item
+> read back before and after.
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -1039,16 +1070,23 @@ Kind: runs on a computer; changes state; pacing: list.
 | `priority`        | `lowest`, `low`, `medium`, `high`, `highest` | no       |                                                  |
 | `comment`         | string (max 500 chars)                       | no       |                                                  |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, before, after }`: `before` and `after` are the item as read
+from the list before and after (`item_id`, `asin`, `title`, `quantity_wanted`, `priority`,
+`comment`).
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments` (not a list or item id, or none of the three fields given),
+`not_found` (no such item on that list; the state is attached), `blocked_by_policy`, `needs_human`,
+`throttled`, `layout_unrecognized`, `internal` (the item did not change as intended; the observed
+item is attached), `timeout`.
 
-**Notes.** Any of `quantity_wanted`, `priority` and `comment` may be given.
+**Notes.** Any of `quantity_wanted`, `priority` and `comment` may be given. The flow opens the
+item's edit dialog through its own edit link, fills the fields, clicks Save and reads the list
+again; every field that was given must match.
 
 ### `move_list_item`
 
-> Move (or with copy: true, copy) an item to another list. Not implemented yet in this version;
-> answers unsupported.
+> Move an item to another list. Returns {changed, item, source_after, destination_has_item}. Only moving
+> is implemented: copy: true answers unsupported (use add_to_list for the other list instead).
 
 Kind: runs on a computer; changes state; pacing: list.
 
@@ -1060,11 +1098,19 @@ Kind: runs on a computer; changes state; pacing: list.
 | `to_list_id` | string                                | yes      | 8 to 16 characters from list_lists               |
 | `copy`       | boolean                               | no       |                                                  |
 
-**Result.** Planned, not implemented (the daemon answers `unsupported`). Intended: `{ changed, before, after }`.
+**Result.** Implemented. `{ changed: true, item, source_after, destination_has_item }`: `item` is the
+item as it was on the source list, `source_after` is the number of items left on it and
+`destination_has_item` is true when the destination list shows the same product.
 
-**Expected errors.** `needs_human`, `throttled`, `not_found`, `layout_unrecognized`, `timeout`.
+**Errors.** `invalid_arguments` (not list or item ids, or both lists are the same), `unsupported`
+(`copy: true`), `not_found` (no such item on that list; the state is attached),
+`blocked_by_policy`, `needs_human`, `throttled`, `layout_unrecognized`, `internal` (the item did
+not move as intended; the observed state is attached), `timeout`.
 
-**Notes.** With `copy: true` the item stays on the source list.
+**Notes.** Only moving is implemented: the site offers Move only, so `copy: true` is refused with
+`unsupported` before any page is loaded (to copy, use `add_to_list` on the other list). The flow
+checks that three page loads fit the `list` budget, clicks the item's Move control and then the
+destination in the move menu, each through the click guard, and reads both lists back.
 
 ## Diagnostics
 
