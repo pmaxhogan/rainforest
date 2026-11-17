@@ -8,7 +8,8 @@ recent Amazon change cannot defeat the URL policy: the policy is a set of patter
 
 A connected client can read your Amazon account pages (orders with the shipping address and card
 brand and last four digits shown on them, invoices, subscriptions, lists, browsing history, cart)
-and, once the write flows exist, change your cart and lists. The goal is that the worst a client,
+and change your cart (add an offer, remove, save for later, move back, delete a saved item) and
+remove items from your lists. The goal is that the worst a client,
 a stolen token, a compromised hub or a hostile web page can do is limited to that. In particular,
 nothing in the system is meant to be able to spend money, change an address or payment method,
 change account settings or sign in as you somewhere else.
@@ -40,10 +41,11 @@ There is no static bearer token and no bypass. When the owner configuration is m
 refuses everything except `/healthz` (it fails closed).
 
 What a token holder can do: call every tool until the token expires (an hour; refresh tokens last a
-year). The tools are the ones in docs/TOOLS.md: no tool places an order. There is no admin-page
-control to revoke a client's grant yet; the available controls are revoking the device (which stops
-all browser work) and clearing the Worker's `OAUTH_KV` namespace in the Cloudflare dashboard
-(unverified as a procedure). Treat that as a known gap.
+year). The tools are the ones in docs/TOOLS.md: no tool places an order. The `/admin` page lists
+the connected clients (the OAuth grants) and has a Disconnect button for each, which revokes that
+grant; revoking a device instead stops all browser work on that computer. Clearing the Worker's
+`OAUTH_KV` namespace in the Cloudflare dashboard remains the blunt option (unverified as a
+procedure).
 
 ### What a compromised hub could and could not do
 
@@ -55,7 +57,9 @@ It could:
 
 - see tool arguments and results in transit (the hub relays everything), and the audit log;
 - send calls for any tool in the registry with schema-valid arguments, to any paired computer, and
-  have them run, within the daemon's pacing budget;
+  have them run, within the daemon's pacing budget. That includes the write tools, but
+  `add_to_cart` needs an offer id that only the daemon process holds the key for (the hub cannot
+  mint one), and every write acts on one named cart line or list item behind the click guard;
 - return false results to the client, or omit the untrusted-content wrapper (the Worker applies
   it, so the wrapper protects against a hostile page, not a hostile hub);
 - refuse service, or tell daemons to check for updates.
@@ -106,16 +110,16 @@ first:
    with a per-call random id, so page text cannot close it. This reduces the chance that a model
    follows injected text. It does not guarantee it; models can still be fooled.
 2. **Typed flows only.** A page cannot make the daemon do anything: the daemon runs fixed flows
-   that read and parse, and (planned) click specific controls. There is no tool that executes
-   page-supplied selectors, scripts or URLs.
+   that read and parse, and click specific controls. There is no tool that executes page-supplied
+   selectors, scripts or URLs.
 3. **The URL policy** (below), enforced at the network layer of the automation tab, so even a page
    that navigates, posts a form or runs script cannot reach a refused URL.
-4. **Click guard.** `isPurchaseControl` (described under the URL policy) is meant to gate every
-   click the write flows make. No flow calls it yet because no write flow exists.
+4. **Click guard** (below). Every click a write flow makes goes through one function that refuses
+   anything that is not the specific control the flow expects, or that looks like a purchase.
 5. **Limits on blast radius.** Even a fully successful injection can only invoke the tools of the
-   registry, at the pacing rate, with their schema limits, through the signed-in session. The
-   realistic worst cases are reading more of your account than you intended and, once writes
-   exist, editing the cart or lists. It cannot buy.
+   registry, at the pacing rate (per computer), with their schema limits, through the signed-in
+   session. The realistic worst cases are reading more of your account than you intended and
+   editing the cart or lists. It cannot buy.
 
 The page content the model reads is also sent to the connected client (claude.ai or Claude Code).
 That is the purpose of the tool; treat the connector as having read access to your order history.
@@ -154,14 +158,14 @@ host is a denial. Three checks on requests, plus a separate guard for clicks:
 3. **Fragment allowlist.** Same-origin documents fetched from inside a loaded page (not
    navigations) must pass the hard-deny layer and match a short fragment list, currently the
    all-offers document.
-4. **Purchase-control patterns (for clicks).** `isPurchaseControl` refuses to treat a control as
+4. **Purchase-control patterns (for clicks).** `isPurchaseControl` (used by the click guard,
+   below) refuses to treat a control as
    safe when its text, id, name, aria label or value matches a list of purchase-like wording: buy
    now, place order, proceed to checkout, 1-click or turbo, pay now, use this payment or address,
    subscribe now or set up now, start a trial or membership, join or try Prime, confirm a purchase,
    order or subscription, cancel items, order or subscription, return or replace, pre-order or
    rent now. It also refuses a control whose link or form action the URL policy would deny, and
-   fails closed on missing input. Nothing calls it yet, because no write flow exists; it is
-   specified as the gate for every click a write flow makes.
+   fails closed on missing input.
 
 Non-HTTPS main-frame documents are refused except `about:blank`; non-HTTPS sub-resources are
 refused except `data:`, `blob:` and extension URLs.
@@ -174,13 +178,66 @@ cannot be removed or loosened without a test change.
 Playwright's request interception does not see redirect hops. So the guard installs a listener on
 the page's raw Chrome DevTools session, ahead of Playwright's own handler, for every paused
 request, and a catch-all route keeps interception enabled. For each request, including every hop
-of a redirect chain, the listener runs the policy and, on a denial, fails the request before it
-leaves the browser. The request body is read where Chrome exposes it. After navigation, the flow
-also checks the URL the tab ended on, and a refused main-frame redirect sends the tab to
-`about:blank` and returns `blocked_by_policy` (or `needs_human` with kind `sign_in` when Amazon
-bounced to sign-in). Blocks are logged (reason, rule, host and a truncated path) at debug level.
+of a redirect chain, the listener runs the policy and, on a denial, fails the request at the Fetch
+level (`Fetch.failRequest`) before it leaves the browser. The request body is read where Chrome
+exposes it. Blocks are logged (reason, rule, host and a truncated path) at debug level.
 
-The guard covers the automation tab. It does not cover tabs you open yourself in the same profile.
+Two more properties keep it from being bypassed:
+
+- **Service workers are bypassed** for the automation tab. A site's service worker can otherwise
+  fetch top-level pages itself, outside page-level interception, and the guard would never see
+  those navigations.
+- **It fails closed when it saw nothing.** The guard counts the main-frame documents it inspected.
+  If a navigation finished without the guard having seen a main-frame document, nothing after it
+  can be trusted: the tab goes to `about:blank`, the browser session is closed and the call fails
+  with `internal`.
+
+The guard covers the automation tab. It does not cover tabs you open yourself in the same profile
+(including the tab `show_on_screen` opens for you).
+
+### The navigation guard
+
+A third layer watches the tab itself. A `framenavigated` listener on the page checks every
+main-frame URL the tab commits, whatever caused it (a click, a script, a redirect). If the URL is
+one the policy refuses, the tab is sent to `about:blank` immediately, the session is marked
+violated and the call fails with `blocked_by_policy` (`details.landed` holds the path, without the
+query string). After every navigation the flow also checks the URL the tab ended on. A refused
+main-frame redirect sends the tab to `about:blank` and returns `blocked_by_policy`
+(`details.refused_path` and `from_path` name the paths), or `needs_human` when Amazon bounced to
+sign-in or a challenge page. Tabs the automation page opens by itself are closed at once.
+
+### The click guard
+
+`packages/daemon/src/flows/click-guard.ts` is the only way a write flow clicks. Before every click
+it requires that:
+
+1. the tab is currently on an allowlisted page (the main-frame check of the URL policy);
+2. the locator matches exactly one element, and that element is the specific control the flow
+   expects: its `name`, `id` or label must match the pattern the flow gave (a flow that names none
+   is refused);
+3. the element is not a credential field (password or email input) and does not look like a
+   purchase control (`isPurchaseControl`: its text, id, name, aria label and value against the
+   purchase wording above, and its link or form action against the URL policy).
+
+Any doubt is a refusal (`blocked_by_policy`, or `layout_unrecognized` when the control is not
+found exactly once); the click does not happen. The element is described by a real function run in
+the page, so the check sees the real element. Flows never retry a click, and they read the cart or
+list back afterwards to prove the change.
+
+### Friction: sign-in, captcha and checkpoint pages
+
+The daemon never solves a captcha, never types credentials and never tries to get past a
+checkpoint. Pages that mean "prove you are a person" are recognized in three places: by URL (a
+captcha validation path, a checkpoint or challenge path, the sign-in portal, including on a
+redirect hop the guard refused), by the content classifier after capture, and by a landed URL the
+policy refuses as sign-in. The call stops with `needs_human` (`kind`: `captcha`, `sign_in`,
+`soft_challenge` or `interstitial`) and the computer starts a 60 minute cool-down. While it lasts,
+nothing attaches or loads: every call, from every client, fails with `throttled` and
+`retry_after_s`. A person has to resolve the page in that Chrome. An Amazon throttle page starts a
+10 minute cool-down and returns `throttled`.
+
+Pacing is per computer, and Amazon counts the account. An account driven from two computers gets
+the sum of both budgets, which is why the per-computer caps are conservative (docs/TOOLS.md).
 
 ## Updates
 
@@ -253,6 +310,10 @@ or on `/admin`.
 - **The debugging banner.** While the extension is attached, Chrome shows its "started debugging
   this browser" banner in that window. That is Chrome telling you that an extension holds the
   debugger on a tab. It is expected, and the quiet fork does not remove it.
+- **Write flows depend on page markup.** A write flow finds its control by `name`, `id` or label
+  and checks the outcome by reading the page back. If Amazon changes the markup the flow fails
+  (`layout_unrecognized` or `internal`) rather than clicking something else, but a change that
+  keeps the same control names and changes what they do would not be noticed beforehand.
 - **A debugger-based extension is powerful.** The extension has Chrome's `debugger` capability and
   runs inside the profile that holds your Amazon session. You are trusting that extension's code
   (the fork's source is in a separate repository, and you install it from the Chrome Web Store).
@@ -265,11 +326,11 @@ or on `/admin`.
   two-layer design limits the damage (a new path must also be on the main-frame allowlist to be
   navigated to, and purchase controls are guarded separately), but it is not a proof.
 - **Prompt injection is mitigated, not solved.** See "What a hostile page could do".
-- **No grant revocation UI.** See "Who can get a token".
 - **Results touch the hub.** Tool results and write arguments pass through the Durable Object's
   storage until collected. A compromised hub sees them. See docs/PRIVACY.md.
 - **Third-party price-history sites.** CamelCamelCamel and Keepa have their own terms of service,
-  which may forbid automated access. The tool is rate limited hard (12 per hour) but it is your
+  which may forbid automated access. The tool is rate limited hard (6 per hour, 30 per day per
+  computer) but it is your
   responsibility to decide whether to use it.
 - **Amazon's terms.** Automating a retail account may be against Amazon's conditions of use, and
   Amazon may challenge or lock an account that behaves unusually. The conservative pacing is a

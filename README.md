@@ -9,12 +9,14 @@ shared service, no Amazon credentials stored anywhere, and no scraping from a da
 
 ## What it can and cannot do
 
-It can read the pages of your own account and the public catalog, and it is designed to make small,
-reversible edits to your cart and lists:
+It can read the pages of your own account and the public catalog, and it makes small, reversible
+edits to your cart and lists:
 
 - Search, product pages, variants, buying options, media, reviews and price history.
-- Your cart, orders, invoices, Subscribe & Save, lists and browsing history.
-- Cart and list edits, with cart adds always done in two steps.
+- Your cart, orders, invoices, Subscribe & Save, lists, browsing history and recent searches.
+- Cart edits (add, remove, save for later, move back, delete a saved item) and removing an item
+  from a list, with cart adds always done in two steps. Other list edits and changing a cart
+  quantity are planned.
 
 It deliberately cannot:
 
@@ -22,36 +24,40 @@ It deliberately cannot:
   pages are hard-blocked by a URL policy that the daemon enforces on every request of the
   automation tab, including redirects.
 - Type credentials, solve a captcha, or open a page the typed flows do not need. There is no
-  generic "navigate" or "click" tool.
-- Go fast. Pacing is conservative on purpose: one page at a time per computer, jittered gaps,
-  hourly and daily caps per page type, and a 30 minute cool-down after any captcha or sign-in
-  prompt.
+  generic "navigate" or "click" tool. A sign-in, captcha or checkpoint page stops the queue,
+  starts a cool-down and comes back as `needs_human`; a person has to deal with it.
+- Start a Subscribe & Save subscription. That is a recurring order, so `add_to_cart` refuses it and
+  points to `show_on_screen`.
+- Go fast. Pacing is conservative on purpose and is per computer: one page at a time, jittered
+  gaps of 5 to 11 seconds, hourly and daily caps per page type and across all of them, a burst cap,
+  and a 60 minute cool-down after any captcha, sign-in or checkpoint page. An account driven from
+  two computers gets the sum of both, which is why the per-computer caps are low.
 
 Cart adds are two-step: `get_buying_options` returns short-lived offer ids and flags, and
-`add_to_cart` takes exactly one offer id and refuses flagged offers unless every flag is
-acknowledged. The only route to checkout is `show_on_screen`, which opens a normal tab for you to
-finish by hand.
+`add_to_cart` takes exactly one offer id, re-reads the offer, refuses flagged or changed offers
+unless every flag is acknowledged, and proves the result by reading the cart again. The only route
+to checkout is `show_on_screen`, which opens a normal tab for you to finish by hand.
 
 ## Status
 
-Early and incomplete (version 0.1). The hub is the most complete part; the daemon implements only
-part of the tool registry. This section is the one place in the repository documentation that
-tracks it; it describes the commit that introduced these docs.
+Early (version 0.1), but most of the registry is built. This section is the one place in the
+repository documentation that tracks it, together with the Status table in docs/TOOLS.md; check
+`FLOWS` in `packages/daemon/src/flows/index.ts` for the tools the daemon implements today.
 
-| Area                                              | State                                           |
-| ------------------------------------------------- | ----------------------------------------------- |
-| Worker: OAuth, consent, MCP endpoint, pairing     | Implemented                                     |
-| Worker: Hub Durable Object, admin page, audit log | Implemented                                     |
-| Daemon: hub client, supervisor, presence, audit   | Implemented                                     |
-| Daemon: autostart (LaunchAgent / Scheduled Task)  | Implemented                                     |
-| Daemon: signed self-update with rollback          | Implemented                                     |
-| Daemon: browser attach, URL policy, network guard | Implemented                                     |
-| Tools `get_cart`, `list_subscriptions`            | Implemented                                     |
-| Tool `get_browsing_history`                       | Implemented                                     |
-| Every other daemon tool, including all writes     | Planned (the daemon answers `unsupported`)      |
-| `rainforestd doctor`, `rainforestd capture`       | Planned (the commands exist but exit 1)         |
-| First install from a release tarball              | Not implemented as a command; see docs/SETUP.md |
-| Windows autostart                                 | Written; the hidden launch is unverified        |
+| Area                                                                                                                                                 | State                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker: OAuth, consent, MCP endpoint, pairing                                                                                                        | Implemented                                                                                                                                                                        |
+| Worker: Hub Durable Object, admin page (pairings, devices, clients), audit                                                                           | Implemented                                                                                                                                                                        |
+| Daemon: hub client, supervisor, presence, audit                                                                                                      | Implemented                                                                                                                                                                        |
+| Daemon: autostart (LaunchAgent / Scheduled Task)                                                                                                     | Implemented; the Windows hidden launch is unverified                                                                                                                               |
+| Daemon: signed self-update with rollback, install from an unpacked release                                                                           | Implemented                                                                                                                                                                        |
+| Rails: URL policy, network guard, navigation guard, click guard, pacing                                                                              | Implemented                                                                                                                                                                        |
+| Read tools (17), including search, orders, lists, reviews and price history                                                                          | Implemented                                                                                                                                                                        |
+| Write tools: `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `remove_from_list`; hand-off `show_on_screen` | Implemented                                                                                                                                                                        |
+| Planned tools and options                                                                                                                            | Planned: `set_cart_quantity`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, coupon clipping (the daemon answers `unsupported`) |
+| `rainforestd doctor`                                                                                                                                 | Implemented                                                                                                                                                                        |
+| `rainforestd capture`                                                                                                                                | Placeholder: the command exists but exits 1                                                                                                                                        |
+| Mock storefront and end-to-end suite                                                                                                                 | Implemented (`npm run test:e2e`); informational in CI                                                                                                                              |
 
 Nothing here has been security audited. Read docs/SECURITY.md before connecting an account you
 care about.
@@ -141,10 +147,10 @@ arguments, results and errors are in docs/TOOLS.md.
 
 **Writes**
 
-- `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`,
-  `delete_saved_item` - cart edits.
-- `create_list`, `update_list`, `delete_list`, `add_to_list`, `remove_from_list`,
-  `update_list_item`, `move_list_item` - list edits.
+- `add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item` - cart
+  edits (implemented). `set_cart_quantity` is planned.
+- `remove_from_list` - list edits (implemented). `create_list`, `update_list`, `delete_list`,
+  `add_to_list`, `update_list_item`, `move_list_item` are planned.
 
 **Diagnostics**
 
@@ -154,9 +160,11 @@ arguments, results and errors are in docs/TOOLS.md.
 ## Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - components, the life of one tool call, the wire
-  protocol, browser resolution, capture and parsing, pacing, results and budgets.
-- [docs/SECURITY.md](docs/SECURITY.md) - threat model, the two consent gates, the URL policy,
-  updates, known limitations, and how to report a vulnerability.
+  protocol, browser resolution, the rails, write flows, capture and parsing, pacing, results and
+  budgets, testing.
+- [docs/SECURITY.md](docs/SECURITY.md) - threat model, the two consent gates, the URL policy, the
+  network, navigation and click guards, friction handling, updates, known limitations, and how to
+  report a vulnerability.
 - [docs/SETUP.md](docs/SETUP.md) - self-hosting step by step on macOS and Windows.
 - [docs/PRIVACY.md](docs/PRIVACY.md) - what each side stores, and the fixture policy for
   contributors.
@@ -170,10 +178,19 @@ Node 22 or newer and npm.
 npm ci                 install
 npm run check          everything CI runs: typecheck, eslint, prettier, ASCII check,
                        fixture gate, tests with coverage, worker tests
-npm test               vitest with coverage
+npm test               vitest with coverage (everything but the Worker)
+npm run test:worker    the Worker suite, which runs inside workerd
+npm run test:e2e       end-to-end suite against the mock storefront (needs Chromium and the
+                       extension build; it skips itself when they are missing)
 npm run format         prettier --write
 node scripts/setup-hooks.mjs   enable the git hooks (do this before committing)
 ```
+
+`packages/mock-site` is a deterministic fake storefront with real cart and list state and trap
+pages (checkout, sign-in, captcha, checkpoint). The end-to-end suite drives the real browser
+session and the real flows against it in a real Chromium with the extension; the test browser maps
+the storefront hostname to loopback and fails every other name, so the real site is never
+contacted. See docs/ARCHITECTURE.md (Testing).
 
 The repository is public and identity-free: no account ids, hostnames, emails or real data, in code,
 docs, tests, fixtures or commit messages. See docs/PRIVACY.md for the fixture rules.

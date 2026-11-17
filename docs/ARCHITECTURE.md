@@ -19,14 +19,15 @@ README and in docs/TOOLS.md, not repeated here.
                                                                                     automation tab
 ```
 
-| Package             | Role                                                                              |
-| ------------------- | --------------------------------------------------------------------------------- |
-| `packages/core`     | Tool registry, wire protocol, error taxonomy, result wrapper, capture contracts   |
-| `packages/worker`   | The hub: OAuth, consent, stateless MCP endpoint, the `Hub` Durable Object, admin  |
-| `packages/daemon`   | `rainforestd`: hub client, supervisor, browser controller, flows, updater, CLI    |
-| `packages/browser`  | Broker clients, extension-mode attach, URL policy, network guard, pacing, session |
-| `packages/parsers`  | Pure `(capture) -> data` functions and the framework they share                   |
-| `packages/scrubber` | Capture to synthetic fixture, and the shared privacy rules                        |
+| Package              | Role                                                                              |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `packages/core`      | Tool registry, wire protocol, error taxonomy, result wrapper, capture contracts   |
+| `packages/worker`    | The hub: OAuth, consent, stateless MCP endpoint, the `Hub` Durable Object, admin  |
+| `packages/daemon`    | `rainforestd`: hub client, supervisor, browser controller, flows, updater, CLI    |
+| `packages/browser`   | Broker clients, extension-mode attach, URL policy, network guard, pacing, session |
+| `packages/parsers`   | Pure `(capture) -> data` functions and the framework they share                   |
+| `packages/scrubber`  | Capture to synthetic fixture, and the shared privacy rules                        |
+| `packages/mock-site` | Test-only fake storefront with real cart and list state, and the E2E suite        |
 
 `packages/core` is compiled into both the Worker and the daemon, so the two cannot disagree about a
 tool's name, schema, description or the shape of a wire message.
@@ -88,13 +89,14 @@ the daemon can update itself while the launcher never changes. The pieces:
 - **Supervisor.** Receives calls, validates the arguments a second time with the same schema,
   enforces a deadline, hands the call to the router, audits it locally, and returns a result
   frame. Sends presence every 45 seconds.
-- **Router and flows.** Each tool name maps to one typed flow. There is no generic "navigate" or
-  "click" primitive reachable from the hub. A tool with no flow in this daemon returns
-  `unsupported`.
+- **Router and flows.** Each tool name maps to one typed flow (`FLOWS` in
+  `packages/daemon/src/flows/index.ts`: reads, the hand-off and the cart and list writes). There is
+  no generic "navigate" or "click" primitive reachable from the hub. A registered tool with no flow
+  in this daemon (the planned ones) returns `unsupported`.
 - **Browser controller.** Owns the broker connection, the pacer, and the single browser session.
 - **Updater.** Polls signed GitHub releases; see below.
-- **Operator commands.** `setup`, `pair`, `install`, `uninstall`, `status`, `update`, `selftest`,
-  `version`, `run`.
+- **Operator commands.** `setup`, `pair`, `install`, `uninstall`, `status`, `doctor`, `update`,
+  `selftest`, `version`, `run`; `capture` is a placeholder that exits 1.
 
 ### The browser stack
 
@@ -118,6 +120,35 @@ extension mode:
 If the profile is not connected when a call arrives, the controller starts Chrome quietly (macOS:
 `open -g -j -n`; Windows: `start /min`) with the configured profile and waits up to 45 seconds
 for the extension to connect.
+
+### The rails
+
+Every page the automation tab loads passes through the same layers, outermost first. Each one
+assumes the others can fail (what each refuses is detailed in docs/SECURITY.md):
+
+1. **Typed flows.** Flows build their own URLs from validated arguments; the hub never supplies a
+   URL or a selector.
+2. **URL policy** (`packages/browser/src/policy.ts`). A pure function over a request: a hard deny
+   list for every request on Amazon hosts, a main-frame allowlist for documents, a fragment
+   allowlist for same-origin fetches. Fails closed.
+3. **Network guard** (`guard.ts`). Enforces the policy at the network layer of the automation tab,
+   including every hop of a redirect chain, by failing refused requests at Chrome's Fetch level
+   before they leave the browser. It bypasses the site's service worker for the tab, so no
+   navigation can be served from outside the guard's view, and it counts the main-frame documents
+   it inspected: a navigation it did not see makes the session fail closed.
+4. **Navigation guard** (`session.ts`). A `framenavigated` listener: if the tab ever commits a
+   main-frame URL the policy refuses (a click, a script, anything), it is sent to `about:blank`
+   at once and the call fails with `blocked_by_policy`. After every navigation the URL the tab
+   landed on is checked again, and tabs the page opens by itself are closed.
+5. **Click guard** (`flows/click-guard.ts`). The only way a write flow clicks. Before each click it
+   asserts the tab is on an allowlisted page, the target is exactly one specific control the flow
+   expects (by `name`, `id` or label) and the control does not look like a purchase control.
+6. **Friction handling.** Amazon pages that mean "prove you are a person" (sign-in, captcha,
+   checkpoint, challenge) are recognized by URL (also on a refused redirect hop) and by a content
+   classifier. The call stops with `needs_human` (`kind`: `captcha`, `sign_in`, `soft_challenge`
+   or `interstitial`) and the computer cools down, so every later call fails with `throttled`
+   until it ends. The daemon never tries to get past such a page. A throttle page cools down for
+   a shorter time and returns `throttled`.
 
 Two caveats are worth knowing. The attach path uses Playwright's private APIs (the page's raw CDP
 session and the core bundle's extension entry point), so a Playwright upgrade can break it; the
@@ -145,14 +176,18 @@ extension is implemented: the connect step goes through the fork's broker protoc
    arguments again, and starts a timer for the deadline.
 7. **Flow.** The router runs the tool's flow inside `session.run`, which serializes work (one page
    at a time; at most 4 calls may be running or waiting on a computer, the fifth fails with
-   `busy`). If not attached, the session
-   attaches (see above) and installs the network guard. The flow then:
+   `busy`). If not attached, the session attaches (see above) and installs the network guard. The
+   flow then:
    1. asks `goto(url, pageType)`, which checks the URL policy, asks the pacer for permission and a
       wait, records the load, and navigates (45 second limit);
-   2. re-checks the URL the tab landed on;
+   2. checks that the network guard saw the navigation, and re-checks the URL the tab landed on;
    3. waits for the load event and a short settle delay, optionally scrolls;
    4. captures the page (see Capture and parsing);
    5. runs the pure parser, then fits the result into the size budget.
+
+   Several read tools that parse the same product page share one capture, kept in memory for two
+   minutes (cleared after any write). Write flows follow the steps under Write flows instead.
+
 8. **Result.** The supervisor audits the call locally and sends a `result` frame. The Hub checks
    the sender is the device the call went to, that the call is still pending, and the size caps,
    stores the result, writes the audit row and wakes the waiter.
@@ -163,6 +198,35 @@ extension is implemented: the connect step goes through the fork's broker protoc
 
 If the computer disconnects mid-call, the Hub fails its pending calls with `browser_offline`. If
 the deadline passes, the Worker abandons the call and records a `timeout`.
+
+## Write flows
+
+The six implemented writes (`add_to_cart`, `remove_from_cart`, `save_for_later`, `move_to_cart`,
+`delete_saved_item`, `remove_from_list`) share one shape, so a change is never trusted without
+being read back:
+
+1. check that every page load the flow needs fits the pacing budget right now, and refuse with
+   `throttled` before touching anything if not (a write that cannot read its result back is worse
+   than one that never starts);
+2. read the cart or list, and find the exact line the caller named (otherwise `not_found` with the
+   observed state);
+3. click that line's own control through the click guard, once, never retrying;
+4. read the cart or list again and compare with the intent; if it does not match, fail with
+   `internal` and attach the observed state.
+
+`add_to_cart` adds an offer re-check. The caller holds an opaque offer id minted by
+`get_buying_options`: an authenticated encryption (AES-256-GCM) of the offer snapshot under a key
+that lives only in the daemon process, valid for ten minutes, unreadable and unforgeable by the
+hub or the model. The flow reopens the product with the all-offers panel, finds the same offer (by
+seller, condition and price), and refuses with `needs_choice` if it is gone, changed price or
+seller, is out of stock or carries a flag that was not acknowledged. It then clicks that offer's
+own Add to Cart control, answers any protection-plan or add-on prompt with its decline control,
+and verifies the cart grew by exactly one unit. It never subscribes: Subscribe & Save is refused
+(a subscription is a recurring order) and the caller is pointed at `show_on_screen`.
+
+`show_on_screen` is the hand-off. It builds the URL from a typed target, opens it in a normal tab
+of the configured profile (never the automation tab) and brings the browser forward, so the owner
+finishes something such as checkout by hand.
 
 ## Wire protocol
 
@@ -224,8 +288,7 @@ The protocol is versioned on both sides:
 
 Which computer serves a call is decided in the Hub, in this order:
 
-1. An explicit `browser` argument (id, then name, then alias, case-insensitive; no alias can be set
-   yet, see below). An unknown name is `not_found`; an offline match is `browser_offline`. Neither
+1. An explicit `browser` argument (id, then name, then alias, case-insensitive). An unknown name is `not_found`; an offline match is `browser_offline`. Neither
    falls back.
 2. The selection set by `select_browser` for this connection. If that computer is offline, the call
    falls back to the most recently active online computer and `browser.note` says so.
@@ -235,10 +298,11 @@ With nothing online the error is `no_browser_online`. The selection belongs to t
 two connected clients can use different computers, and it survives token refresh. Revoking a device
 deletes any selection that points at it.
 
-Aliases are not usable yet. The hub can match them, but nothing writes them: `setup --alias` stores
-them in the computer's `config.json` only, pairing sends just the key, name and OS, and the hub has
-no code path that renames a device or sets its aliases (the admin page can approve, reject and
-revoke only). A device's name is whatever it sent when it paired.
+Aliases are extra names a computer gives itself: `setup --alias` stores them in that computer's
+`config.json`, the daemon reports them in every presence frame, and the hub keeps them (at most 8,
+letters, digits, space and `.()'-`). A new alias therefore works once that daemon has connected.
+The admin page shows them but does not edit them. A device's name is whatever it sent when it
+paired.
 
 ## Why the Worker is thin
 
@@ -264,10 +328,12 @@ scripts, styles, templates and the head are skipped). The page is then serialize
 documents fetched on purpose from inside the loaded page, for example the all-offers list; only
 URLs on a short fragment allowlist are accepted, and the final URL after redirects is checked too.
 
-Right after capture, an interstitial classifier looks at the page. A captcha, sign-in wall, soft
-challenge or other interstitial becomes `needs_human` and starts a cool-down; an Amazon throttle
-page becomes `throttled`; a "not found" page becomes `not_found`; any other error page becomes
-`layout_unrecognized`.
+Right after capture, an interstitial classifier looks at the page (several independent signals,
+each weighted; a kind needs at least two points, so one stray phrase never trips it). A captcha,
+sign-in wall, soft challenge or other interstitial becomes `needs_human` and starts a cool-down; an
+Amazon throttle page becomes `throttled`; a "not found" page becomes `not_found`; any other error
+page becomes `layout_unrecognized`. Landing on a captcha or checkpoint URL is recognized even
+before capture.
 
 **Parse** (pure functions in `packages/parsers`). A parser is `(capture) -> { data, other_sections,
 meta }` with no I/O, no clock and no randomness, so the same bytes drive tests and production.
@@ -291,15 +357,22 @@ The flow adds `meta` (`url`, `retrieved_at`, `warnings`, `unparsed_text_chars`) 
 
 ## Pacing and cool-down
 
-Implemented in `packages/browser/src/pacing.ts` as a pure state machine with an injected clock.
+Implemented in `packages/browser/src/pacing.ts` as a pure state machine with an injected clock. All
+of it is per computer: the daemon knows nothing of what another computer has loaded. Amazon counts
+the account, and one account is often driven from two computers, so an account driven from two
+computers gets the sum of both budgets. That is why the caps are deliberately low (each computer
+gets half of what one browser was seen to tolerate).
 
 - One page load at a time per computer (the session queue).
-- A random gap of 1.5 to 4 seconds between loads.
-- Per page-type caps per rolling hour and per rolling day (the table is in docs/TOOLS.md).
-  Fragments count as loads.
-- A cool-down of 30 minutes after any captcha, sign-in prompt or other human-only page, and of 10
-  minutes when Amazon throttles. While cooling down, the browser refuses to attach or load and
-  returns `throttled` with `retry_after_s`; `list_browsers` shows `cooling_down_until`.
+- A random gap of 5 to 11 seconds between loads.
+- Per page-type caps per rolling hour and per rolling day, and a cap across all types together
+  (15 per hour, 100 per day); the per-type table is in docs/TOOLS.md. Fragments count as loads.
+- A burst cap: at most 6 loads in any 10 minutes, across all types.
+- A cool-down of 60 minutes after any captcha, sign-in prompt, checkpoint or other human-only
+  page, and of 10 minutes when Amazon throttles. While cooling down, the browser refuses to attach
+  or load and returns `throttled` with `retry_after_s`; `list_browsers` shows `cooling_down_until`
+  and the remaining budget (`pacing_budget`).
+- Multi-step write flows ask for headroom first (see Write flows).
 - The state (timestamps of loads, cool-down) is persisted to `pacing.json` after every change, so a
   restart does not reset the budget.
 
@@ -357,11 +430,39 @@ docs/SECURITY.md).
    counts starts and after three unconfirmed ones restores the previous version and marks the new
    one bad.
 
-Releases are built by `.github/workflows/release.yml` on every push to the main branch (version =
-`VERSION` file plus commit count): `build` runs with a read-only token and no secrets; `publish`
+Releases are built by `.github/workflows/release.yml` on every push to the main branch and once a
+day (version = `VERSION` file plus commit count; a commit that already has a release is skipped):
+`build` runs `npm run check` and packages with a read-only token and no secrets; `publish`
 holds the signing key, signs, verifies, creates the release as a draft, publishes it once every
 asset is attached, re-verifies what clients would download, and keeps the 20 newest releases.
-Without the signing secret (forks) it only packages and verifies.
+Without the signing secret (forks) it only packages and verifies. The tarball holds the bundled
+daemon (`rainforestd.mjs`), the stable launcher (`launcher.mjs`), `playwright-core`, `package.json`
+and `VERSION`; running `install` from an unpacked release copies it into `versions/<version>/` and
+makes it current. `.github/workflows/daemon-smoke.yml` (manual and weekly) packages, extracts and
+runs the bundle on Linux, macOS and Windows.
+
+## Testing
+
+- **Unit tests** per package (`packages/<name>/test`, vitest with coverage; the coverage workflow
+  fails a pull request that loses more than half a percentage point). Parsers are tested by
+  replaying synthetic fixtures; the rails by hardcoded expected lists (docs/SECURITY.md).
+- **Worker tests** (`npm run test:worker`) run inside workerd with the Cloudflare vitest plugin.
+- **Mock storefront** (`packages/mock-site`). A deterministic fake storefront served over HTTP, with
+  real cart and list state (adds, removes, save for later, list deletes), a range of
+  buy-box states, a protection-plan upsell, and trap pages for checkout, proceed to checkout,
+  buy now, sign-in, checkpoint and captcha that count every hit. Flags such as `captcha`,
+  `checkpoint`, `signin`, `redirect-checkout`, `throttle` and `notfound` make a page misbehave on
+  purpose. All content is invented. Test-only; never shipped.
+- **End-to-end suite** (`npm run test:e2e`, `.github/workflows/e2e.yml`). A real Chromium with the
+  quiet extension fork, the daemon's embedded broker, the real `BrowserSession` and the real flows,
+  pointed at the mock storefront. The test browser maps the storefront hostname to the loopback
+  mock over an ephemeral self-signed certificate and fails every other name, so the real site is
+  never contacted; the production URL policy is untouched. It checks reads, writes against the
+  mock's state, and the rails (checkout navigation refused before any request, a redirect into
+  checkout blocked at the network layer with zero hits on the trap, friction pages returning
+  `needs_human` with a cool-down, the service-worker bypass, pacing gaps). It skips when no
+  extension build or no free broker port is available, unless `RAINFOREST_E2E_REQUIRE=1`; it is
+  informational in CI, not part of `npm run check` and not a release gate.
 
 ## Files on the computer
 
