@@ -15,9 +15,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "ascii": "node scripts/check-ascii.mjs",
+    "fixtures:check": "node scripts/check-fixtures.mjs",
     "test": "vitest run --coverage",
     "test:worker": "npm -w @rainforest/worker test",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run ascii && npm test && npm run test:worker"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run ascii && npm run fixtures:check && npm test && npm run test:worker"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
