@@ -208,14 +208,17 @@ export const setCartQuantity: Flow = async (args, ctx) => {
       `${line} button[data-action="${up ? "a-stepper-increment" : "a-stepper-decrement"}"]:visible`,
     );
     clearCaptureCache();
-    for (let i = 0; i < Math.abs(steps); i++) {
-      const expectedNow = current + (up ? i : -i);
+    // `known` is the quantity the cart is known to show. A step counts when the line records
+    // the new value; when it does not, the cart is read again and the loop goes on only if
+    // that read shows progress. It never clicks again blind.
+    let known = current;
+    for (let clicks = 0; known !== target && clicks < MAX_QUANTITY_STEPS; clicks++) {
       await guardedClick(page, button, {
         what: up ? "the line's increase-quantity control" : "the line's decrease-quantity control",
         label: up ? /\bIncrease quantity by one\b/i : /\bDecrease quantity by one\b/i,
       });
       // The stepper records the applied value on the line; wait for it before the next click.
-      const wanted = String(expectedNow + (up ? 1 : -1));
+      const wanted = String(known + (up ? 1 : -1));
       const applied = await page.page
         .waitForFunction(
           ([selector, value]) => {
@@ -235,10 +238,15 @@ export const setCartQuantity: Flow = async (args, ctx) => {
           () => true,
           () => false,
         );
-      // Never click again blind: when a step did not register, stop and report what the
-      // cart shows.
-      if (!applied) break;
-      await new Promise((r) => setTimeout(r, 900));
+      if (applied) {
+        known += up ? 1 : -1;
+        await new Promise((r) => setTimeout(r, 900));
+        continue;
+      }
+      const seen = (await loadCart(page)).active_items.find((i) => i.item_id === itemId)?.quantity;
+      if (typeof seen !== "number" || seen === known) break;
+      known = seen;
+      clearCaptureCache();
     }
     await new Promise((r) => setTimeout(r, 1500));
     const after = await loadCart(page);

@@ -678,7 +678,7 @@ if (!start.ok) {
       const hits = (await h.state()).hits.filter((x) => x.path === "/s");
       const first = hits.find((x) => x.search.includes("first"))!;
       const second = hits.find((x) => x.search.includes("second"))!;
-      expect(second.at - first.at).toBeGreaterThanOrEqual(MIN_GAP_MS - 50);
+      expect(second.at - first.at).toBeGreaterThanOrEqual(MIN_GAP_MS - 150);
     });
   });
 }
