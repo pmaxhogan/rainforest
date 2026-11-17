@@ -838,6 +838,11 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
 - **One unit per call.** `quantity` is used when computing the quantity-related flags, but one unit
   is added; the result says so in `quantity_note`. Changing the quantity afterwards needs
   `set_cart_quantity`.
+- **Offers Amazon keeps folded away.** The panel shows the featured offer and the first few
+  others; on a product with many sellers the rest sit in a collapsed "other offers" block.
+  `get_buying_options` lists those too (it reads the whole panel), but `add_to_cart` clicks the
+  offer's own control in the open panel and does not expand that block, so adding one of them is
+  expected to fail with nothing added (**unverified**: seen in one saved page, not yet tried).
 - **Four page loads, all or nothing.** The flow reads the cart, loads the product page, opens its
   offers panel and reads the cart again. If the four do not fit the pacing budget it adds nothing
   and fails with `throttled`; `retry_after_s` is the time until all four fit, and the message says

@@ -236,7 +236,11 @@ export const addToCart: Flow = async (args, ctx) => {
       await page.follow(`${AMAZON}/dp/${snapshot.asin}?aod=1&th=1`, "product");
       await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
       await page.page
-        .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
+        // Any VISIBLE add control means the panel is open. Not "the first control": on a
+        // product with a featured offer the first one in the document belongs to the sticky
+        // copy of that offer, which is not rendered until the panel is scrolled, so a wait
+        // on the first match never ends.
+        .waitForSelector("span[data-action='aod-atc-action']:visible", { timeout: 20_000 })
         .catch(async () => {
           // Counts and flags only, so the refusal says what the page looked like: was the
           // tab visible, did the panel exist at all, was there a way into it.

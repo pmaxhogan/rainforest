@@ -11,6 +11,7 @@ export const HIDDEN = 'class="aok-hidden" data-rf-hidden="1"';
 const CSS = `
 body{font-family:sans-serif;margin:0}
 .aok-hidden,.a-hidden,.a-popover-preload,.aod-hide,.aod-visibility-hidden,.aod-oas-other-offers-hide{display:none!important}
+#aod-sticky-pinned-offer>.aod-information-block{display:none}
 #a-popover-root,#mock-modal-root{display:none}
 header,footer{background:#eee;padding:4px}
 `;

@@ -73,9 +73,12 @@ export function renderAod(p: Product, now: Date): string {
     ? `<div id="aod-pinned-offer" class="a-section a-spacing-none aod-pinned-offer"><div class="a-section asin-container-padding aod-clear-float"><div class="a-fixed-left-grid pinned-offer-inner"><div class="a-fixed-left-grid-inner">${productBlock(p)}<div id="pinned-de-id" class="pinned-offer-block a-col-right">${cardInner(p, o, 0, now, false)}</div></div></div>
 <div id="aod-pinned-offer-additional-content" class="a-section aod-hide" role="list">${rows(o)}<div class="a-section aod-offer-divider"></div></div></div></div>`
     : `<div id="aod-pinned-offer" class="a-section aod-pinned-offer"><div class="a-section asin-container-padding">${productBlock(p)}<div class="a-row"><span>No featured offers available</span></div></div></div>`;
-  // The sticky duplicate of the pinned offer: a flow must never target this one.
+  // The sticky duplicate of the pinned offer: a flow must never target this one. As on the
+  // real site it comes FIRST in the panel and is not rendered until the panel is scrolled
+  // (the stylesheet hides its content), so the first add control in document order is one
+  // that never becomes visible. A flow that waits on "the first control" waits forever.
   const sticky = o
-    ? `<div id="aod-sticky-pinned-container" class="a-section aod-sticky-pinned-container"><div id="aod-sticky-pinned-offer" class="a-section aod-sticky-pinned-offer"><div class="a-section aod-information-block">${cardInner(p, o, 0, now, true)}</div></div></div>`
+    ? `<div id="aod-sticky-pinned-container" class="a-section aod-sticky-pinned-container"><div id="aod-sticky-pinned-offer" class="a-section aod-sticky-pinned-offer" style="top: -200px;"><div class="a-section aod-information-block">${cardInner(p, o, 0, now, true)}</div></div></div>`
     : "";
   const cards = p.others.map((x, i) => card(p, x, i + 1, now)).join("");
   return `<span class="a-declarative" data-action="aod-close-on-esc-action"><div id="all-offers-display-scroller" class="a-scroller"><div id="aod-container" class="a-section a-spacing-none a-padding-none">${sticky}${pinned}
