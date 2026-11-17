@@ -15,7 +15,9 @@ and the quiet Playwright extension fork.
 - `npm run test:e2e` - end-to-end suite: the real browser session and flows against the mock
   storefront in a real Chromium with the quiet extension. Not part of `npm run check`; it skips
   itself unless the extension build and a free broker port exist (`RAINFOREST_E2E_REQUIRE=1` makes
-  that an error, as CI does; see `.github/workflows/e2e.yml`)
+  that an error, as CI does; see `.github/workflows/e2e.yml`). About 30 s: the flows' fixed waits
+  are scaled to a tenth against the local storefront (`RAINFOREST_E2E_SETTLE_SCALE=1` runs them at
+  full length; `RAINFOREST_E2E_PATCHED_EXTENSION=1` when another broker already holds the port)
 - `npm run format` - prettier --write
 - Shipping is a push to `main`, nothing else: `.github/workflows/release.yml` signs and publishes
   the daemon, and Cloudflare Workers Builds deploys the hub (build command `npm run check`, deploy

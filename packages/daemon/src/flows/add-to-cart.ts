@@ -10,7 +10,7 @@ import {
 } from "@rainforest/parsers";
 import { cartState, loadCart } from "./cart-writes.ts";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, runWithBudget, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, runWithBudget, settle, type Flow } from "./common.ts";
 import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
 
 /**
@@ -251,7 +251,7 @@ export const addToCart: Flow = async (args, ctx) => {
             { details: { page: state, refused } },
           );
         });
-      await new Promise((r) => setTimeout(r, 1000));
+      await settle(1000);
       const data = parseOffers(await page.capture("offers")).data;
       const all = [data.pinned_offer, ...data.offers].filter((o): o is Offer => o !== null);
       const current = matchOffer(all, snapshot);
@@ -287,7 +287,7 @@ export const addToCart: Flow = async (args, ctx) => {
         what: "the offer's Add to Cart control",
         name: /^submit\.addToCart$/,
       });
-      await new Promise((r) => setTimeout(r, 3000));
+      await settle(3000);
       // What the rails refused between the click and now (paths only), for diagnosis.
       const refusedAfterClick = page.guard
         .blocked()

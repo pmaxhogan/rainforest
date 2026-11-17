@@ -20,6 +20,7 @@ import {
   readPage,
   rememberCapture,
   requireBudget,
+  settle,
   type Flow,
 } from "./common.ts";
 import { mintOfferToken } from "./offer-token.ts";
@@ -188,7 +189,7 @@ export const getBuyingOptions: Flow = async (args, ctx) => {
     } else {
       await p.goto(url, "product");
       await p.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 1200));
+      await settle(1200);
       capture = await p.capture("offers");
       // The same page serves get_product and the other product reads for two minutes.
       rememberCapture(url, { ...capture });

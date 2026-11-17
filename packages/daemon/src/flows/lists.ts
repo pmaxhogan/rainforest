@@ -7,6 +7,7 @@ import {
   maxCharsOf,
   pageBody,
   readPage,
+  settle,
   type Flow,
 } from "./common.ts";
 
@@ -40,7 +41,7 @@ export const getList: Flow = async (args, ctx) => {
           const done = await page.page.evaluate(
             "(() => { window.scrollTo(0, document.body.scrollHeight); const e = document.querySelector('#endOfListMarker'); return !!e; })()",
           );
-          await new Promise((r) => setTimeout(r, 900));
+          await settle(900);
           if (done) break;
         }
         await page.page.evaluate("window.scrollTo(0, 0)");

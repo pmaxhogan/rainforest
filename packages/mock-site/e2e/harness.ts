@@ -26,6 +26,7 @@ import {
 import { RfError, TOOLS, type ToolDef } from "@rainforest/core";
 import { classifyInterstitial } from "@rainforest/parsers";
 import type { SessionProvider } from "../../daemon/src/browser-controller.ts";
+import { setSettleScaleForTests } from "../../daemon/src/flows/common.ts";
 import { createRouter } from "../../daemon/src/flows/index.ts";
 import type { ToolRouter } from "../../daemon/src/interfaces.ts";
 import { createMockSite, type MockSite } from "../src/index.ts";
@@ -356,6 +357,12 @@ function controlRequest(
 export interface HarnessOptions {
   /** Pacer to drive the session with (default: a FastPacer). */
   pacer?: Pacer;
+  /**
+   * Factor for the flows' fixed waits (default 0.1, or RAINFOREST_E2E_SETTLE_SCALE). They
+   * are sized for the real site; the local storefront answers in milliseconds. Use 1 to
+   * run with the production waits.
+   */
+  settleScale?: number;
   seed?: number;
 }
 
@@ -492,6 +499,10 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
     watchdog.unref();
     cleanups.push(() => clearTimeout(watchdog));
     const pacer = options.pacer ?? new FastPacer();
+    setSettleScaleForTests(
+      options.settleScale ?? Number(process.env.RAINFOREST_E2E_SETTLE_SCALE ?? "0.1"),
+    );
+    cleanups.push(() => setSettleScaleForTests(1));
     const pages: SeenPage[] = [];
     const session = new BrowserSession({
       onPage: (seen) => {

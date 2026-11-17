@@ -14,6 +14,7 @@ import {
   maxCharsOf,
   pageBody,
   readPage,
+  settle,
   type Flow,
 } from "./common.ts";
 
@@ -79,7 +80,7 @@ export const getBrowsingHistory: Flow = async (args, ctx) => {
         beforeCapture: async (p) => {
           for (let i = 0; i < 6; i++) {
             await p.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-            await new Promise((r) => setTimeout(r, 700));
+            await settle(700);
           }
           await p.page.evaluate("window.scrollTo(0, 0)");
         },
@@ -113,7 +114,7 @@ export const getSearchHistory: Flow = async (_args, ctx) => {
               { timeout: 5000 },
             )
             .catch(() => {});
-          await new Promise((r) => setTimeout(r, 600));
+          await settle(600);
         },
       },
     );

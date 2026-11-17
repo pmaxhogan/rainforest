@@ -2,7 +2,13 @@ import { describe, expect, test } from "vitest";
 import { RfError } from "@rainforest/core";
 import { DEFAULT_COOLDOWN_MS, Pacer, type PageContext } from "@rainforest/browser";
 import { createBrowserController, type SessionProvider } from "../src/browser-controller.ts";
-import { requireBudget, runWithBudget, type FlowContext } from "../src/flows/common.ts";
+import {
+  requireBudget,
+  runWithBudget,
+  setSettleScaleForTests,
+  settle,
+  type FlowContext,
+} from "../src/flows/common.ts";
 import { OFFER_TOKEN_TTL_MS } from "../src/flows/offer-token.ts";
 import { nullLogger } from "../src/log.ts";
 import { sampleConfig } from "./fakes.ts";
@@ -244,4 +250,32 @@ test("when one page type's own cap is what binds, the refusal does not claim roo
   expect(error.payload.message).toBe(
     "this action needs 4 page loads and only 2 fit the pacing budget right now (the product page cap is what limits it); all 4 fit in 800 s",
   );
+});
+
+describe("settle", () => {
+  const timed = async (ms: number): Promise<number> => {
+    const started = performance.now();
+    await settle(ms);
+    return performance.now() - started;
+  };
+
+  test("waits the full time unless the end-to-end suite scaled it down", async () => {
+    expect(await timed(120)).toBeGreaterThanOrEqual(110);
+    setSettleScaleForTests(0.1);
+    try {
+      expect(await timed(600)).toBeLessThan(300);
+    } finally {
+      setSettleScaleForTests(1);
+    }
+    expect(await timed(120)).toBeGreaterThanOrEqual(110);
+  });
+
+  test("the scale can only shorten a wait: anything else resets it to the full time", async () => {
+    for (const bad of [0, -1, 2, 50, Number.NaN, Number.POSITIVE_INFINITY]) {
+      setSettleScaleForTests(0.1);
+      setSettleScaleForTests(bad);
+      expect(await timed(100), String(bad)).toBeGreaterThanOrEqual(90);
+    }
+    setSettleScaleForTests(1);
+  });
 });

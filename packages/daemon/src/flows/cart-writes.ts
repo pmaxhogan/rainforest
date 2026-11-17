@@ -7,6 +7,7 @@ import {
   clearCaptureCache,
   readPage,
   runWithBudget,
+  settle,
   type Flow,
   type FlowContext,
 } from "./common.ts";
@@ -105,7 +106,7 @@ async function lineAction(
       what: spec.what,
       name: new RegExp(`^submit\\.${spec.control}\\.${itemId}$`),
     });
-    await new Promise((r) => setTimeout(r, 2500));
+    await settle(2500);
     const after = await loadCart(page);
     const result = {
       before: cartState(before),
@@ -236,7 +237,7 @@ export const setCartQuantity: Flow = async (args, ctx) => {
         );
       if (applied) {
         known += up ? 1 : -1;
-        await new Promise((r) => setTimeout(r, 900));
+        await settle(900);
         continue;
       }
       const seen = (await loadCart(page)).active_items.find((i) => i.item_id === itemId)?.quantity;
@@ -244,7 +245,7 @@ export const setCartQuantity: Flow = async (args, ctx) => {
       known = seen;
       clearCaptureCache();
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    await settle(1500);
     const after = await loadCart(page);
     const now = after.active_items.find((i) => i.item_id === itemId)?.quantity ?? null;
     const result = { before: cartState(before), after: cartState(after), item: describe };

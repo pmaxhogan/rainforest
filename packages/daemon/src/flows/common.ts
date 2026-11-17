@@ -23,6 +23,24 @@ export type Flow = (args: Record<string, unknown>, ctx: FlowContext) => Promise<
 const SETTLE_MS = 1200;
 
 /**
+ * Every fixed wait in a flow goes through here: time for the real site to finish rendering
+ * after a load, or to finish the round trip after a click. They are sized for the real
+ * site. The end-to-end suite drives a local storefront that answers in milliseconds, so it
+ * scales them down; nothing else does, and the scale can only shorten a wait. Pacing gaps
+ * between page loads are a different thing (the pacer) and are not affected.
+ */
+let settleScale = 1;
+
+export function settle(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.round(ms * settleScale))));
+}
+
+/** For the end-to-end suite only. Anything that is not a factor in (0, 1] resets to 1. */
+export function setSettleScaleForTests(scale: number): void {
+  settleScale = Number.isFinite(scale) && scale > 0 && scale <= 1 ? scale : 1;
+}
+
+/**
  * Recent captures, so several tools that read the same page (product, variants, media,
  * review summary, price history) share one page load instead of five. Short-lived and
  * in memory. (The pages themselves are also kept on disk, bounded, by the local page
@@ -76,7 +94,7 @@ export async function readPage<T>(
   }
   await page.goto(url, type);
   await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, options.settleMs ?? SETTLE_MS));
+  await settle(options.settleMs ?? SETTLE_MS);
   await options.beforeCapture?.(page);
   const capture = await page.capture(kind);
   if (options.shareCapture) captureCache.set(url, { at: Date.now(), capture });

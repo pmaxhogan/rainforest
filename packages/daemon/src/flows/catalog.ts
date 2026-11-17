@@ -15,6 +15,7 @@ import {
   maxCharsOf,
   pageBody,
   readPage,
+  settle,
   type Flow,
 } from "./common.ts";
 
@@ -148,7 +149,7 @@ export const getReviews: Flow = async (args, ctx) => {
             ctx.browser.pacer().record("reviews");
             await guardedClick(pc, more, { what: "the show-more-reviews control" });
             clicks++;
-            await new Promise((r) => setTimeout(r, 1500));
+            await settle(1500);
           }
         },
       },

@@ -8,7 +8,7 @@ import {
   type ListsIndexPage,
 } from "@rainforest/parsers";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, readPage, runWithBudget, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, readPage, runWithBudget, settle, type Flow } from "./common.ts";
 
 /** Compact list state for before/after comparison in list writes. */
 export interface ListState {
@@ -94,7 +94,7 @@ export const removeFromList: Flow = async (args, ctx) => {
       what: "the list item's Delete control",
       name: /^submit\.deleteItem$/,
     });
-    await new Promise((r) => setTimeout(r, 2500));
+    await settle(2500);
     const after = listState(await loadList(page, listId));
     const result = { before, after, item };
     if (after.items.some((i) => i.item_id === itemId)) {
@@ -108,7 +108,7 @@ export const removeFromList: Flow = async (args, ctx) => {
   });
 };
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const sleep = settle;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
