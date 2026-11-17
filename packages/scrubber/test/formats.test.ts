@@ -95,7 +95,8 @@ describe("date formats keep their style", () => {
 describe("tokens and numbers", () => {
   test("ordinals, phones, ASIN keys and mixed tokens", () => {
     // An ordinal inside free text goes with it.
-    expect(text("the 21st time")).toMatch(/^[A-Za-z]+(?: [a-z]+)* time$/);
+    expect(text("the 21st time")).toMatch(/^[A-Za-z]+(?: [a-z]+)*$/);
+    expect(text("the 21st time")).not.toMatch(/\d/);
     expect(text("+1 999-555-1234")).toBe("+1 555-555-0100");
     expect(text("ASIN: 0123456789")).toBe("ASIN: B0FAKE0000");
     const mixed = text("Model Ab12cD34");
@@ -196,7 +197,7 @@ describe("json corner cases", () => {
 
   test("booleans and nulls pass, script-breaking and non-ASCII text is escaped", () => {
     const out = scrub(
-      '<script type="application/json">{"a":true,"b":null,"c":"<\\/script><b>\\u00e9"}</script>',
+      '<script type="application/json">{"a":true,"b":null,"c":"$5 <\\/script><b>\\u00e9"}</script>',
     );
     expect(out).toContain('"a":true,"b":null');
     expect(out).not.toContain("</script><b>");

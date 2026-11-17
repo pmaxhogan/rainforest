@@ -15,6 +15,7 @@ export declare const SYNTHETIC: Readonly<{
   state: string;
   street: string;
   cardLast4: string;
+  cardExpiry: Readonly<{ year: number; month: number }>;
   idPrefix: string;
   tokenPrefix: string;
   uuidPrefix: string;

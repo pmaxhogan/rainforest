@@ -116,6 +116,8 @@ export interface ScrubContext {
   readonly memo: Map<string, string>;
   /** Account-scoped id values seen in ID_PARAMS anywhere in the capture (see scrub.ts). */
   readonly knownIds: Set<string>;
+  /** Real list names (lower case) -> "List One", "List Two", ... in order of appearance. */
+  readonly listNames: Map<string, string>;
 }
 
 /** sfc32 seeded from a SHA-256 digest: tiny, fast and fully deterministic. */
@@ -292,6 +294,7 @@ export function createContext(material: string, capturedAt: string): ScrubContex
     fakeDigits,
     memo: new Map(),
     knownIds: new Set(),
+    listNames: new Map(),
   };
 }
 

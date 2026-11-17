@@ -12,6 +12,7 @@ import {
 } from "../src/context.ts";
 import { AOD_HTML, PAGE_HTML, PLANTED, sampleCapture } from "./samples.ts";
 import { shift } from "../src/dates.ts";
+import { SYNTHETIC } from "../src/rules.mjs";
 
 const DAY_MS = 86_400_000;
 
@@ -1131,6 +1132,44 @@ describe("blind review 2 findings (invented values)", () => {
         expect(fake.m === real.m && fake.d === real.d, `seed ${i} ${m}/${d}`).toBe(false);
       }
     }
+  });
+});
+
+describe("blind review 3 findings (invented values)", () => {
+  test("every list name becomes List One, List Two, ... everywhere it appears", () => {
+    const out = body(
+      '<h2 id="profile-list-name">Zorbo Picks</h2>' +
+        '<span id="wl-list-entry-title-LST1">Zorbo Picks</span><span id="wl-list-entry-title-LST2">Alexa List</span>' +
+        '<a aria-label="Alexa List">x</a><script type="application/json">{"listName":"Zorbo Picks"}</script>',
+    );
+    expect(out).not.toMatch(/Zorbo|Alexa List/);
+    expect(out).toContain('<h2 id="profile-list-name">List One</h2>');
+    expect(out).toContain(">List Two</span>");
+    expect(out).toContain('aria-label="List Two"');
+    expect(out).toContain('"listName":"List One"');
+  });
+
+  test("no all-caps token survives in titles or slugs unless it is a UI label", () => {
+    const out = body(
+      '<p>Widget EST Pro XLR Cable</p><a href="/Widget-EST-XLR-Cable/dp/B0ABCD1234">x</a><p>at 10:30 AM EST</p>',
+    );
+    const stripped = out.replace(/UTC|[AP]M|B0FAKE[0-9A-Z]{4}|FAKE\w+/g, "");
+    expect(stripped).not.toMatch(/(?<![A-Za-z])[A-Z]{2,}(?![A-Za-z])/);
+    expect(out).toMatch(/\d{1,2}:\d{2} [AP]M UTC/);
+  });
+
+  test("a title keeps none of its numbers, quotes, pipes or brackets", () => {
+    const out = body('<p>Zorbo "Max" Widget | 51-Year Gizmo (Teal) 47 Day Pack</p>');
+    expect(out).toMatch(/^<p>[A-Z][a-z]+(?: [a-z]+)*(?: \([a-z]+\))?<\/p>$/);
+  });
+
+  test("the card expiry is the documented synthetic constant", () => {
+    const out = body(
+      '<script type="application/json">{"expirationDate":{"year":2027,"month":5}}</script>',
+    );
+    expect(out).toContain(
+      `"expirationDate":{"year":${SYNTHETIC.cardExpiry.year},"month":${SYNTHETIC.cardExpiry.month}}`,
+    );
   });
 });
 

@@ -28,6 +28,12 @@ export const SYNTHETIC = Object.freeze({
   state: "ZZ",
   street: "100 Example St",
   cardLast4: "0000",
+  /**
+   * Card expiry the scrubber writes for EVERY card (json.ts): a fixed fake, not a shifted
+   * real date, so identical across fixtures on purpose. Gate 2 has no expiry rule; this
+   * constant is the documented allowance.
+   */
+  cardExpiry: Object.freeze({ year: 2030, month: 1 }),
   idPrefix: "FAKEID",
   tokenPrefix: "FAKETOKEN",
   uuidPrefix: "00000000-0000-4000-8000-",

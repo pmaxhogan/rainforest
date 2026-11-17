@@ -295,7 +295,6 @@ Your Friends
 Create a List
 Default List
 Private | whole
-Alexa List
 Add item
 Invite | whole
 Show: | whole

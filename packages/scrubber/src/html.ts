@@ -410,6 +410,26 @@ function stripAccountClasses(root: DomNode): void {
   }
 }
 
+const LIST_NAME_SELECTORS =
+  "#profile-list-name, [id^='wl-list-entry-title-'], .wl-list-entry-title";
+const ORDINALS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+
+/**
+ * Every list name the page shows (the list header and the list rail) becomes "List One",
+ * "List Two", ... by first appearance; scrubText applies the same mapping wherever the name
+ * appears again (attributes, JSON), so the page stays consistent.
+ */
+function collectListNames(root: DomNode, ctx: ScrubContext): void {
+  for (const el of Array.from(
+    (root as unknown as Queryable).querySelectorAll(LIST_NAME_SELECTORS),
+  )) {
+    const name = (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (name === "" || ctx.listNames.has(name)) continue;
+    const n = ctx.listNames.size;
+    ctx.listNames.set(name, `List ${ORDINALS[n] ?? ORDINALS[ORDINALS.length - 1]}`);
+  }
+}
+
 function trimYearOptions(root: DomNode, ctx: ScrubContext): void {
   for (const sel of Array.from((root as unknown as Queryable).querySelectorAll("select"))) {
     const opts = Array.from(
@@ -641,6 +661,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
   const reduce = opts.reduce === true;
   stripInjected(root, ctx);
+  collectListNames(root, ctx);
   if (opts.kind !== undefined) trimCollections(root, opts.kind, ctx);
   if (reduce) reduceTree(root, ctx);
   trimYearOptions(root, ctx);

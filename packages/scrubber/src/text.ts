@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex -- \u0001-\u0003 mark free words and numbers in this module's own intermediate output; they never reach a fixture. */
 /**
  * Text scrubbing. Every word outside the label allowlist becomes synthetic, so the safety
  * property does not depend on recognizing what a value IS: an unrecognized name or address
@@ -178,7 +179,6 @@ const FREE_VOCAB: readonly string[] = [...VOCAB.short, ...VOCAB.mid, ...VOCAB.lo
 // Brackets end a run: "Brand (Toy)" keeps its parenthetical slot for parsers.
 // Numbers touching the run on either side (model numbers, sizes, "74th") belong to it too.
 const FREE_RUN =
-  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
   /(?:\u0002[^\u0003]*\u0003[^\u0001-\u0003\p{L}\p{N}()[\]]*)*\u0001(?:(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0001)*(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*/gu;
 
 /**
@@ -187,8 +187,9 @@ const FREE_RUN =
  * sentence case at the start of the value and lower case elsewhere.
  */
 function synthFree(out: string, ctx: ScrubContext): string {
-  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
   if (!out.includes(FREE)) return out.replace(/[\u0002\u0003]/g, "");
+  const whole = wholeFree(out, ctx);
+  if (whole !== null) return whole;
   const runs = out.replace(FREE_RUN, (run: string, offset: number) => {
     const before = out.slice(Math.max(0, offset - 1), offset);
     const after = out.slice(offset + run.length, offset + run.length + 1);
@@ -214,15 +215,49 @@ function synthFree(out: string, ctx: ScrubContext): string {
   const dropped = runs.replace(STRAY_NUM, (m: string, at: number) =>
     runs[at - 1] === "(" && runs[at + m.length] === ")" && BARE_NUM.test(m) ? m : "",
   );
-  // eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
   const clean = dropped.replace(/[\u0002\u0003]/g, "");
   return dropped === runs ? clean : clean.replace(/(\S) {2,}(?=\S)/g, "$1 ");
 }
 
-// eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
+/**
+ * A value that is free text and nothing structural (a title, a seller, a description):
+ * no price, date, id, URL or label survives in it, only free words, numbers, unit words
+ * and punctuation. It is replaced WHOLE by plain filler words, so its numbers ("51-Year",
+ * "47 Day"), quotes, pipes and parentheses do not survive. A closing "(Word)" becomes a
+ * filler "(word)", because lists parse a byline qualifier from it. Unit-bearing numbers
+ * stay only in values with no free word, which is where parsers read them: subscription
+ * frequency ("1 unit every 3 months"), purchased_count ("Purchased 2 times"), order-list
+ * subscription notices ("Every 3 weeks") and price-history window_days ("90-day").
+ */
+function wholeFree(out: string, ctx: ScrubContext): string | null {
+  const freeWords = out.split(FREE).length - 1;
+  const rest = out
+    .replace(/\u0002[^\u0003]*\u0003/g, " ")
+    // A model number mapped to an id inside prose is title material too.
+    .replace(/FAKEID\d{4,}/g, (t) => (freeWords >= 2 ? " " : t))
+    // A number before a word is title material, except "N-day" in lower case: Amazon's
+    // basis-price copy ("the 90-day median"), which price history reads as window_days.
+    .replace(/\d[\d.,]*(?=[\s-]?[A-Za-z])(?!-day\b)/g, (d) => d.replace(/[\d.,]/g, " "))
+    .replace(/[A-Za-z]+/g, (w) => (WORDS.has(w.toLowerCase()) ? " " : w))
+    .replace(/[\u0001\s]+/g, " ");
+  if (/[\p{L}\p{N}]/u.test(rest)) return null;
+  if (/\(\s*\u0002[\d,]+\u0003\s*\)/.test(out)) return null;
+  const lead = /^\s*/.exec(out)?.[0] ?? "";
+  const trail = /\s*$/.exec(out)?.[0] ?? "";
+  const tokens = out.split(/[\s\u0001\u0002]+/).filter((t) => /[\p{L}\p{N}\u0003]/u.test(t)).length;
+  const n = Math.max(1, out.split(FREE).length - 1 + (out.split(NUM_OPEN).length - 1) || tokens);
+  const k = Math.max(1, Math.round(n * (0.6 + ctx.rand())));
+  const words: string[] = [];
+  for (let j = 0; j < k; j++) words.push(ctx.pick(FREE_VOCAB));
+  ctx.count("word", k);
+  const first = words[0] ?? "lorem";
+  words[0] = first[0]?.toUpperCase() + first.slice(1);
+  const qualifier = /\)\s*$/.test(out) ? ` (${ctx.pick(FREE_VOCAB)})` : "";
+  return lead + words.join(" ") + qualifier + trail;
+}
+
 const BARE_NUM = /^\u0002[\d,]+\u0003$/;
 const STRAY_NUM =
-  // eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
   /[^\s\p{L}\p{N}()[\]\u0001-\u0003]*\u0002[^\u0003]*\u0003[^\s\p{L}\p{N}()[\]\u0001-\u0003]*/gu;
 
 /**
@@ -429,7 +464,6 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
   const keepWords = opts.words !== false;
   // A UUID glued to a word ("checkbox<uuid>") is still a UUID to the audit, whose hex-only
   // boundary does not see the word, while the scan below would consume it inside the word.
-  // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
   const s = input.replace(/[\u0001-\u0003]/g, "").replace(new RegExp(PATTERNS.uuid, "g"), (u) => {
     if (isFakeUuid(u)) return u;
     ctx.count("uuid");
@@ -578,13 +612,15 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
         i += m[0].length;
         continue;
       }
-      if ((m = at(R.zone, s, i))) {
+      // A zone only right after a time ("10:30 AM EST"); elsewhere "EST" is a word of the text.
+      if (/\d(?::\d{2})?\s?(?:[AaPp]\.?[Mm]\.?)?\s*$/.test(out) && (m = at(R.zone, s, i))) {
         out += "UTC";
         ctx.count("timezone");
         i += m[0].length;
         continue;
       }
-      if ((m = at(R.street, s, i))) {
+      // Street lines only in address blocks (words off): in a title, "3 Way Adapter" is text.
+      if (!keepWords && (m = at(R.street, s, i))) {
         out += SYNTHETIC.street;
         ctx.count("address");
         i += m[0].length;
@@ -711,11 +747,10 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
         // "90-day", "3 months": a number with its unit is structure, never folded away.
         const unit = /^[\s-]?([A-Za-z]+)/.exec(s.slice(i + text.length))?.[1];
         const withUnit = unit !== undefined && keepWords && WORDS.has(unit.toLowerCase());
-        out += itemCount
-          ? text
-          : withUnit
-            ? digitsOf(ctx, text, standalone)
-            : NUM_OPEN + digitsOf(ctx, text, standalone) + NUM_CLOSE;
+        // In a node with free words a unit number ("51-Year") goes with them (NUM marker,
+        // see synthFree); only the lower-case "N-day" of price-history copy stays raw.
+        const dayCopy = withUnit && /^-day\b/.test(s.slice(i + text.length));
+        out += itemCount || dayCopy ? text : NUM_OPEN + digitsOf(ctx, text, standalone) + NUM_CLOSE;
         i += text.length;
       }
       continue;
@@ -959,6 +994,13 @@ export function scrubText(s: string, ctx: ScrubContext, mode: TextMode = "text")
   const core = s.trim();
   const trail = core === "" ? "" : (/\s*$/.exec(s)?.[0] ?? "");
   let out: string;
+  const listName = ctx.listNames.get(core.replace(/\s+/g, " ").toLowerCase());
+  if (listName !== undefined) {
+    ctx.count("name");
+    out = lead + listName + trail;
+    ctx.memo.set(key, out);
+    return out;
+  }
   if (core === "") {
     out = s;
   } else {

@@ -5,6 +5,7 @@
 import { JSON_KEPT_KEYS } from "./allowlists.ts";
 import type { ScrubContext } from "./context.ts";
 import { scrubText, scrubTokens } from "./text.ts";
+import { SYNTHETIC } from "./rules.mjs";
 import { scrubUrl } from "./url.ts";
 
 const KEPT = new Set(JSON_KEPT_KEYS);
@@ -96,7 +97,8 @@ function scrubString(v: string, key: string | null, ctx: ScrubContext): string {
 const CARD_DIGITS_KEY = /^(?:last(?:4|four|digits|fourdigits)|tail|cardtail|panlast4)$/i;
 /** Card expiry under these keys is always one fixed fake date. */
 const EXPIRY_KEY = /expir|^exp(?:month|year|date)?$/i;
-const FAKE_EXPIRY = { year: 2030, month: 1 } as const;
+// Synthetic on purpose (SYNTHETIC.cardExpiry): the same fake expiry for every card.
+const FAKE_EXPIRY = SYNTHETIC.cardExpiry;
 /** A long number under an id-like key is an account id: an obvious placeholder instead. */
 const ID_KEY = /(?:id|Id|ID)$/;
 
