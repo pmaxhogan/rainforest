@@ -10,9 +10,15 @@ import { createHash } from "node:crypto";
 import { FAKE_RANGES, SYNTHETIC } from "./rules.mjs";
 
 const DAY_MS = 86_400_000;
-/** Synthetic epoch the capture date is moved near (2020-07-01). */
+/** Synthetic epoch (2020-07-01). Every fixture's captured_at is this day at 12:00 UTC. */
 export const EPOCH_DAY = Date.UTC(2020, 6, 1) / DAY_MS;
-/** Capture dates land within +-JITTER_DAYS of the epoch, so commit dates do not reveal D. */
+export const SYNTHETIC_CAPTURED_AT = new Date(EPOCH_DAY * DAY_MS + 12 * 3_600_000).toISOString();
+/**
+ * Page dates move to EPOCH plus a secret jitter in +-JITTER_DAYS (from the input hash).
+ * Intervals BETWEEN page dates are kept; the interval to the capture is blurred by the
+ * jitter. captured_at is constant on purpose: emitting capture + shift would cancel the
+ * jitter, and the real capture day is roughly public (it is near the commit date).
+ */
 export const JITTER_DAYS = 180;
 
 export type Category =

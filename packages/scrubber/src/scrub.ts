@@ -4,7 +4,7 @@
  */
 import type { Capture } from "@rainforest/core";
 import { auditScrubbed } from "./audit.ts";
-import { createContext, DAY_MS, type Category } from "./context.ts";
+import { createContext, SYNTHETIC_CAPTURED_AT, type Category } from "./context.ts";
 import { scrubHtml } from "./html.ts";
 import { scrubUrl } from "./url.ts";
 
@@ -59,14 +59,12 @@ export function scrubCapture(capture: Capture, opts: ScrubOptions = {}): ScrubRe
   const html = scrubHtml(capture.html, ctx);
   const fragments: Record<string, string> = {};
   for (const name of fragNames) fragments[name] = scrubHtml(capture.fragments?.[name] ?? "", ctx);
-  const capturedDay = Math.floor(Date.parse(capture.captured_at) / DAY_MS) + ctx.shiftDays;
-  const capturedAt = new Date(capturedDay * DAY_MS + 12 * 3_600_000).toISOString();
 
   const out: Capture = {
     kind: capture.kind,
     url,
     final_url: finalUrl,
-    captured_at: capturedAt,
+    captured_at: SYNTHETIC_CAPTURED_AT,
     html,
   };
   if (capture.fragments !== undefined) out.fragments = fragments;

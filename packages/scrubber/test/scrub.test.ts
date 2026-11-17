@@ -2,7 +2,7 @@ import type { Capture } from "@rainforest/core";
 import { parseHTML } from "linkedom";
 import { describe, expect, test } from "vitest";
 import { auditScrubbed, scrubCapture, type ScrubResult } from "../src/index.ts";
-import { EPOCH_DAY, JITTER_DAYS } from "../src/context.ts";
+import { SYNTHETIC_CAPTURED_AT } from "../src/context.ts";
 import { AOD_HTML, PAGE_HTML, PLANTED, sampleCapture } from "./samples.ts";
 
 const DAY_MS = 86_400_000;
@@ -88,9 +88,9 @@ describe("planted values never survive", () => {
     expect(out.url.startsWith("https://www.example.com/")).toBe(true);
     expect(out.url).not.toContain("tag=");
     expect(out.final_url).toBe("https://www.example.com/dp/B0FAKE0000?th=1");
-    const day = Date.parse(out.captured_at) / DAY_MS;
-    expect(out.captured_at.endsWith("T12:00:00.000Z")).toBe(true);
-    expect(Math.abs(Math.floor(day) - EPOCH_DAY)).toBeLessThanOrEqual(JITTER_DAYS + 1);
+    expect(out.captured_at).toBe("2020-07-01T12:00:00.000Z");
+    expect(SYNTHETIC_CAPTURED_AT).toBe("2020-07-01T12:00:00.000Z");
+    expect(scrubCapture(sampleCapture(), { seed: "x" }).capture.captured_at).toBe(out.captured_at);
   });
 
   test("output is ASCII only", () => {
@@ -223,17 +223,19 @@ describe("labels survive and values are synthesized", () => {
   });
 
   test("dates move by one shift, weekdays follow the shifted date", () => {
+    const dayOf = (s: string) => Date.parse(`${s} UTC`) / DAY_MS;
     const placed = /Order placed ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(out.html)?.[1] ?? "";
-    const placedDay = Date.parse(`${placed} UTC`) / DAY_MS;
-    const capturedDay = Math.floor(Date.parse(out.captured_at) / DAY_MS);
-    // Real capture is 3 days after the real order date; the shift keeps that interval.
-    expect(Math.round(capturedDay - placedDay)).toBe(3);
+    const reviewed = /United States on ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(out.html)?.[1] ?? "";
+    // Real order and review are the same day; the real delivery promise is 2 days later.
+    expect(dayOf(reviewed) - dayOf(placed)).toBe(0);
     const free = /FREE delivery ([A-Z][a-z]+), ([A-Z][a-z]+ \d{1,2})</.exec(out.html);
     expect(free).not.toBeNull();
-    const y = new Date(out.captured_at).getUTCFullYear();
-    const wd = new Date(`${free?.[2]}, ${y} UTC`).getUTCDay();
+    const y = new Date(placed).getUTCFullYear();
+    const promised = dayOf(`${free?.[2]}, ${y}`);
+    const gap = promised - dayOf(placed);
+    expect(gap === 2 || gap === 2 - 365 || gap === 2 - 366).toBe(true);
     const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    expect(free?.[1]).toBe(names[wd]);
+    expect(free?.[1]).toBe(names[new Date(promised * DAY_MS).getUTCDay()]);
   });
 });
 
@@ -356,6 +358,42 @@ describe("location leaks", () => {
     );
     expect(r).not.toContain("99999");
     expect(auditScrubbed(r)).toEqual([]);
+  });
+});
+
+describe("labels never protect names or places", () => {
+  test("a surname or city word that is also a label is still replaced", () => {
+    const r = body(
+      '<span class="a-profile-name">Zed Price</span>' +
+        '<ul class="displayAddressUL"><li class="displayAddressFullName">Page Zed</li>' +
+        "<li>New Zedtown, ZZ 99999</li><li>Total Zedtown</li></ul>" +
+        "<p>Sold by Price Zed</p><p>Ships from Amazon.com</p>",
+    );
+    for (const w of ["Zed", "Price", "Page", "New Zedtown", "Total"]) expect(r, w).not.toContain(w);
+    expect(r).toContain("Sold by ");
+    expect(r).toContain(">Ships from Amazon.com<");
+  });
+
+  test("trailing labels only for the suffix kinds", () => {
+    expect(body("<p>Zed Sponsored</p>")).not.toContain("Sponsored");
+    expect(body('<span aria-label="4.5 out of 5 stars, rating details">x</span>')).toMatch(
+      /aria-label="\d\.\d out of 5 stars, rating details"/,
+    );
+    expect(body("<p>1-16 of over 3,000 results for</p>")).toMatch(
+      /^<p>\d-\d{2} [a-z]+ [a-z]+ \d,\d{3} results for<\/p>$/,
+    );
+  });
+
+  test("attributes on the root html element are scrubbed", () => {
+    const r = one(
+      '<!DOCTYPE html><html lang="en" class="a-js" style="x" data-zed="Zed Placeholder 2025-01-05" ' +
+        'onload="x()"><body><p>x</p></body></html>',
+    ).capture.html;
+    expect(r).toMatch(/^<!DOCTYPE html><html lang="en" class="a-js" data-zed="[^"]+">/);
+    expect(r).not.toContain("Zed");
+    expect(r).not.toContain("2025-01-05");
+    expect(r).not.toContain("style=");
+    expect(r).not.toContain("onload");
   });
 });
 

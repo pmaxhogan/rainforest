@@ -284,6 +284,12 @@ describe("cli main and fixture writing in-process", () => {
     expect(main([raw, dest])).toBe(1);
     expect(existsSync(dest)).toBe(false);
     expect(main([raw, raw])).toBe(4);
+    const clean = tmp();
+    writeFileSync(join(clean, "capture.json"), JSON.stringify(sampleCapture()));
+    expect(main([clean, dest, "--note", "from zed@mail.invalid order 123-1234567-1234567"])).toBe(
+      1,
+    );
+    expect(existsSync(dest)).toBe(false);
   });
 
   test("writeFixtureCase adds a trailing newline and writes fragments", () => {

@@ -638,6 +638,22 @@ function synthRating(ctx: ScrubContext, head: string): string {
   return lead + v + trail;
 }
 
+/**
+ * The value next to a label is data. Keep it only when it is itself a whole label
+ * ("Ships from Amazon.com"); never look for more labels inside it.
+ */
+function plainValue(ctx: ScrubContext, value: string, mode: TextMode): string {
+  const core = value.trim().replace(/^[:,.\s-]+/, "");
+  if (core !== "" && EXACT.has(normLabel(core))) return value;
+  if (mode === "name") return synthName(ctx, value);
+  if (mode === "address") {
+    const lead = /^\s*/.exec(value)?.[0] ?? "";
+    const trail = value.trim() === "" ? "" : (/\s*$/.exec(value)?.[0] ?? "");
+    return value.trim() === "" ? value : lead + addressLine(ctx, value.trim()) + trail;
+  }
+  return scrubValue(value, ctx);
+}
+
 function valueFor(
   ctx: ScrubContext,
   value: string,
@@ -656,11 +672,33 @@ function valueFor(
       return (
         (m[1] ?? "") +
         ctx.fakeAsin((m[2] ?? "").toUpperCase()) +
-        (rest ? scrubText(rest, ctx, mode) : "")
+        (rest ? plainValue(ctx, rest, mode) : "")
       );
     }
   }
-  return scrubText(value, ctx, mode);
+  return plainValue(ctx, value, mode);
+}
+
+const SUFFIX_KINDS: readonly (LabelKind | null)[] = ["suffix", "rating"];
+
+/** Trailing labels ("1,234 ratings", "4.5 out of 5 stars, rating details"). */
+function scrubSuffixes(core: string, ctx: ScrubContext): string | null {
+  for (const l of COMPILED) {
+    if (!SUFFIX_KINDS.includes(l.kind)) continue;
+    const sfx = l.suffix.exec(core);
+    if (sfx === null || sfx.index === 0) continue;
+    ctx.count("label_kept");
+    const head = core.slice(0, sfx.index);
+    if (l.kind === "rating" && /^\s*\d(?:\.\d)?\s*$/.test(head)) {
+      return synthRating(ctx, head) + sfx[0];
+    }
+    const lead = /^\s*/.exec(head)?.[0] ?? "";
+    const trail = /\s*$/.exec(head)?.[0] ?? "";
+    const inner = head.trim();
+    const rest = inner === "" ? "" : (scrubSuffixes(inner, ctx) ?? scrubValue(inner, ctx));
+    return lead + rest + trail + sfx[0];
+  }
+  return null;
 }
 
 /** In an address block, lines of capitalized words only are a city or a name. */
@@ -699,28 +737,19 @@ function scrubCore(core: string, ctx: ScrubContext, mode: TextMode): string {
     ctx.count("label_kept");
     return core;
   }
+  // In name and address blocks a bare label word may be a surname or a city: only labels
+  // that say what their value is ("Deliver to", "Hello,") apply there.
+  const restricted = mode !== "text";
   for (const l of COMPILED) {
-    if (l.kind === "whole") continue;
+    if (l.kind === "whole" || SUFFIX_KINDS.includes(l.kind)) continue;
+    if (restricted && l.kind === null) continue;
     const p = l.prefix.exec(core);
     if (p !== null && p[0].length < core.length) {
       ctx.count("label_kept");
       return p[0] + valueFor(ctx, core.slice(p[0].length), l.kind, mode);
     }
   }
-  for (const l of COMPILED) {
-    if (l.kind === "whole") continue;
-    const sfx = l.suffix.exec(core);
-    if (sfx !== null && sfx.index > 0) {
-      ctx.count("label_kept");
-      const head = core.slice(0, sfx.index);
-      const value =
-        l.kind === "rating" && /^\s*\d(?:\.\d)?\s*$/.test(head)
-          ? synthRating(ctx, head)
-          : valueFor(ctx, head, l.kind === "rating" ? null : l.kind, mode);
-      return value + sfx[0];
-    }
-  }
   if (mode === "name") return synthName(ctx, core);
   if (mode === "address") return addressLine(ctx, core);
-  return scrubValue(core, ctx);
+  return scrubSuffixes(core, ctx) ?? scrubValue(core, ctx);
 }

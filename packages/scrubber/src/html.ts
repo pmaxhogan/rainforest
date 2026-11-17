@@ -308,6 +308,8 @@ export function scrubHtml(html: string, ctx: ScrubContext): string {
     document: { documentElement: DomNode; body: DomNode };
   };
   const root = document.documentElement;
+  // The root element is not visited by walk(): its attributes need the same pass.
+  if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
   walk(root, "text", ctx);
   if (isDoc) return `<!DOCTYPE html>${serialize(root)}`;
   return children(document.body)

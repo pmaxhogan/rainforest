@@ -276,7 +276,7 @@ export const NAME_HINT =
 export const ADDRESS_HINT =
   /(address|glow-ingress|ship-?to|shipping-?addr|deliver-?to|delivery-?location|location-?(?:widget|label|name)|zip|postal|city|street|store-?(?:name|address)|pickup)/i;
 
-export type LabelKind = "name" | "place" | "name-or-place" | "rating" | "asin" | "whole";
+export type LabelKind = "name" | "place" | "name-or-place" | "rating" | "asin" | "suffix" | "whole";
 
 export interface Label {
   text: string;
@@ -289,6 +289,7 @@ const LABEL_KINDS: readonly string[] = [
   "name-or-place",
   "rating",
   "asin",
+  "suffix",
   "whole",
 ];
 

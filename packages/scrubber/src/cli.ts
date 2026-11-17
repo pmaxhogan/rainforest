@@ -7,7 +7,8 @@
  * Output never echoes a matched value (only rule, file and line), so it is safe to paste.
  */
 import { resolve } from "node:path";
-import { readRawCapture, writeFixtureCase } from "./fixture-io.ts";
+import { readRawCapture, toManifest, writeFixtureCase } from "./fixture-io.ts";
+import { auditText } from "./rules.mjs";
 import { scrubCapture } from "./scrub.ts";
 
 function usage(): never {
@@ -38,9 +39,16 @@ export function main(argv: string[]): number {
   const { capture, report } = scrubCapture(raw, seed === undefined ? {} : { seed });
   console.log("scrub report:");
   for (const [k, v] of Object.entries(report.counts)) console.log(`  ${k}: ${v}`);
-  if (report.findings.length > 0) {
-    console.error(`scrub: ${report.findings.length} residual-risk finding(s); nothing written:`);
-    for (const f of report.findings) console.error(`  ${f.where}:${f.line}: ${f.rule}`);
+  // The manifest carries the free-text --note, so it is audited like the pages.
+  const manifestFindings = auditText(JSON.stringify(toManifest(capture, note))).map((f) => ({
+    where: "capture.json",
+    rule: f.rule,
+    line: f.line,
+  }));
+  const findings = [...report.findings, ...manifestFindings];
+  if (findings.length > 0) {
+    console.error(`scrub: ${findings.length} residual-risk finding(s); nothing written:`);
+    for (const f of findings) console.error(`  ${f.where}:${f.line}: ${f.rule}`);
     return 1;
   }
   const written = writeFixtureCase(dest, capture, note);

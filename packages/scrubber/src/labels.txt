@@ -2,8 +2,10 @@
 #
 # One label per line. Matching is case-insensitive with whitespace collapsed and an
 # optional trailing ":" "," or ".". A label is kept when it is the whole trimmed text node,
-# when it LEADS the node (the rest is a value and is synthesized), or when it ENDS the node
-# (the head is a value and is synthesized).
+# or when it LEADS the node (the rest is a value and is synthesized). Only labels marked
+# "suffix" or "rating" may END a node instead. Inside name and address blocks only whole
+# labels and labels with a kind apply, so a surname or city word that happens to be a
+# label is still replaced.
 #
 # Optional "| kind" tells the scrubber what the value next to the label is:
 #   name           a person's name -> synthetic name list
@@ -12,6 +14,7 @@
 #   rating         the head is a star rating -> synthetic rating in 1.0..5.0
 #   asin           a 10-character ASIN or ISBN -> reserved fake ASIN
 #   whole          only kept as the entire text node, never as a prefix or suffix
+#   suffix         kept as the entire node or when it ENDS the node, never as a prefix
 #
 # Never add anything that could be personal: no names, places, product words or digits.
 
@@ -34,12 +37,12 @@ Amazon.com Services LLC
 Amazon Fresh
 out of 5 stars | rating
 out of 5 | rating
-ratings
-rating
-global ratings
-customer reviews
-rating details
-bought in past month
+ratings | suffix
+rating | suffix
+global ratings | suffix
+customer reviews | suffix
+rating details | suffix
+bought in past month | suffix
 Typical price
 Typical:
 List Price
@@ -84,8 +87,8 @@ Item model number
 Date First Available
 Best Sellers Rank
 ASIN | asin
-Results
-results for
+Results | suffix
+results for | suffix
 Sort by
 Featured
 Price: Low to High
