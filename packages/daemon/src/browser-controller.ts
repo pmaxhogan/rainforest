@@ -20,6 +20,34 @@ import type { Logger } from "./log.ts";
 import type { AppPaths } from "./paths.ts";
 import { loadSecrets } from "./secrets.ts";
 
+/** How many 1.5 s polls to give a running browser before launching it again. */
+const RUNNING_GRACE_POLLS = 12;
+
+/** Is the browser process running? Unknown counts as running (wait before launching). */
+export async function browserRunning(platform: NodeJS.Platform): Promise<boolean> {
+  const { execFile } = await import("node:child_process");
+  const run = (file: string, args: string[]): Promise<{ code: number; stdout: string }> =>
+    new Promise((resolve) => {
+      execFile(file, args, { windowsHide: true, timeout: 8000 }, (error, stdout) => {
+        const code = error ? (error as { code?: unknown }).code : 0;
+        resolve({ code: typeof code === "number" ? code : 127, stdout: String(stdout ?? "") });
+      });
+    });
+  try {
+    if (platform === "darwin") {
+      const result = await run("/usr/bin/pgrep", ["-x", "Google Chrome"]);
+      return result.code !== 1; // 1 = no match
+    }
+    if (platform === "win32") {
+      const result = await run("tasklist", ["/FI", "IMAGENAME eq chrome.exe", "/NH"]);
+      return result.code !== 0 || /chrome\.exe/i.test(result.stdout);
+    }
+    return (await run("pgrep", ["-f", "chrome"])).code !== 1;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Owns the broker connection, the pacer and the single browser session of this computer.
  * Attach is on demand; the session detaches after `idle_detach_s` without a call.
@@ -181,6 +209,16 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
 
   const ensureInstance = async (): Promise<void> => {
     if (await refreshConnected()) return;
+    // A browser that is already running usually just needs a moment for its extension
+    // to reconnect. Launching again can disturb other tools that share it, so wait first
+    // and only fall back to a launch (which opens the configured profile) after that.
+    if (await browserRunning(paths.platform)) {
+      log.info("the browser is running but its extension is not connected; waiting for it");
+      for (let i = 0; i < RUNNING_GRACE_POLLS; i++) {
+        await sleep(1500);
+        if (await refreshConnected()) return;
+      }
+    }
     const command = chromeLaunchCommand(paths.platform, config.chrome);
     log.info("the browser profile is not connected; starting the browser quietly");
     spawn(command.file, command.args, {
