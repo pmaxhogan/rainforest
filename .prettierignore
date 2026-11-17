@@ -1,0 +1,6 @@
+.claude/
+coverage/
+dist/
+.wrangler/
+package-lock.json
+fixtures/

@@ -77,13 +77,13 @@ export async function installGuard(
     let isMainDocument = false;
     try {
       isMainDocument = event.resourceType === "Document" && event.frameId === topFrame;
+      const postData = readBody(event.request);
       verdict = checkRequest({
         url: event.request.url,
         method: event.request.method,
         isMainFrameDocument: isMainDocument,
-        postData: event.request.postData,
-        hasUnreadPostData:
-          event.request.hasPostData === true && event.request.postData === undefined,
+        postData,
+        hasUnreadPostData: postData === undefined,
       });
     } catch {
       verdict = { allow: false, reason: "unparseable", rule: "exception" };
