@@ -22,6 +22,25 @@ export type Flow = (args: Record<string, unknown>, ctx: FlowContext) => Promise<
 
 const SETTLE_MS = 1200;
 
+/**
+ * Recent captures, so several tools that read the same page (product, variants, media,
+ * review summary, price history) share one page load instead of five. Short-lived and
+ * in memory only: raw pages are never written to disk by the daemon.
+ */
+const CAPTURE_CACHE_MS = 120_000;
+const captureCache = new Map<string, { at: number; capture: Capture }>();
+
+function cachedCapture(url: string, now: number): Capture | null {
+  for (const [key, entry] of captureCache)
+    if (now - entry.at > CAPTURE_CACHE_MS) captureCache.delete(key);
+  return captureCache.get(url)?.capture ?? null;
+}
+
+/** Forget cached captures (after any write, so reads never show a stale page). */
+export function clearCaptureCache(): void {
+  captureCache.clear();
+}
+
 /** Load one page through the rails and the pacer, capture it and parse it. */
 export async function readPage<T>(
   page: PageContext,
@@ -29,13 +48,23 @@ export async function readPage<T>(
   type: PageType,
   kind: PageKind,
   parser: Parser<T>,
-  options: { settleMs?: number; beforeCapture?: (page: PageContext) => Promise<void> } = {},
+  options: {
+    settleMs?: number;
+    beforeCapture?: (page: PageContext) => Promise<void>;
+    /** Reuse a capture of this exact URL taken in the last two minutes. */
+    shareCapture?: boolean;
+  } = {},
 ): Promise<{ result: ParseResult<T>; capture: Capture }> {
+  if (options.shareCapture) {
+    const hit = cachedCapture(url, Date.now());
+    if (hit) return { result: parser({ ...hit, kind }), capture: { ...hit, kind } };
+  }
   await page.goto(url, type);
   await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, options.settleMs ?? SETTLE_MS));
   await options.beforeCapture?.(page);
   const capture = await page.capture(kind);
+  if (options.shareCapture) captureCache.set(url, { at: Date.now(), capture });
   return { result: parser(capture), capture };
 }
 

@@ -2,7 +2,7 @@ import { RfError } from "@rainforest/core";
 import type { PageContext } from "@rainforest/browser";
 import { parseCart, type CartItem, type CartPage } from "@rainforest/parsers";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, readPage, type Flow, type FlowContext } from "./common.ts";
+import { AMAZON, clearCaptureCache, readPage, type Flow, type FlowContext } from "./common.ts";
 
 /** Compact cart state used for before/after comparison in every cart write. */
 export interface CartState {
@@ -93,6 +93,7 @@ async function lineAction(
     const item = find(before, itemId, spec.list);
     const name = `submit.${spec.control}.${itemId}`;
     const locator = page.page.locator(`input[name="${name}"]`);
+    clearCaptureCache();
     await guardedClick(page, locator, {
       what: spec.what,
       name: new RegExp(`^submit\\.${spec.control}\\.${itemId}$`),

@@ -48,6 +48,7 @@ export const getPriceHistory: Flow = async (args, ctx) => {
             "product",
             "price_history_amazon",
             parseAmazonPriceHistory,
+            { shareCapture: true },
           );
           return { ...(result.data as object), meta: resultMeta(result, capture) };
         });

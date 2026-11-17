@@ -30,6 +30,7 @@ export const getVariants: Flow = async (args, ctx) => {
       "product",
       "product",
       parseVariants,
+      { shareCapture: true },
     );
     const body = pageBody(result, capture);
     // Optional: load a few child pages for variants whose offer is not on this page.
@@ -39,7 +40,9 @@ export const getVariants: Flow = async (args, ctx) => {
     for (const asin of missing) {
       if (ctx.signal.aborted) break;
       try {
-        const child = await readPage(p, productUrl(asin), "product", "product", parseVariants);
+        const child = await readPage(p, productUrl(asin), "product", "product", parseVariants, {
+          shareCapture: true,
+        });
         const combo = child.result.data.combinations.find((c) => c.asin === asin);
         fetched.push(combo ? { ...combo } : { asin, error: "not_found" });
       } catch (error) {
@@ -65,6 +68,7 @@ export const getMedia: Flow = async (args, ctx) => {
       "product",
       "product",
       parseMedia,
+      { shareCapture: true },
     );
     const body = pageBody(result, capture);
     return fitToBudget(body, arrayKeys(body), undefined, ctx.now());
@@ -80,6 +84,7 @@ export const getReviewSummary: Flow = async (args, ctx) => {
       "product",
       "product",
       parseReviewSummary,
+      { shareCapture: true },
     );
     const body = pageBody(result, capture);
     return fitToBudget(body, arrayKeys(body), undefined, ctx.now());

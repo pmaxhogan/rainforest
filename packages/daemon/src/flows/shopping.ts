@@ -109,7 +109,9 @@ export const getProduct: Flow = async (args, ctx) => {
   const session = await ctx.browser.session();
   return await session.run(async (p) => {
     const url = `${AMAZON}/dp/${encodeURIComponent(String(args.asin))}`;
-    const { result, capture } = await readPage(p, url, "product", "product", parseProduct);
+    const { result, capture } = await readPage(p, url, "product", "product", parseProduct, {
+      shareCapture: true,
+    });
     const body = pageBody(result, capture);
     return fitToBudget(
       body,
