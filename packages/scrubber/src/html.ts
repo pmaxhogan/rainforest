@@ -322,6 +322,10 @@ function walk(parent: DomNode, mode: TextMode, ctx: ScrubContext, reduce = false
       continue;
     }
     const childMode = modeFor(el, mode);
+    if (scrubSplitToken(el, ctx, childMode)) {
+      scrubAttributes(el, tag, ctx);
+      continue;
+    }
     if (tag === "iframe" || tag === "frame") {
       el.removeAttribute("src");
       el.removeAttribute("srcdoc");
@@ -383,9 +387,91 @@ function trimYearOptions(root: DomNode, ctx: ScrubContext): void {
       if ((k < start || k >= start + 3) && o.parentNode !== null) {
         o.parentNode.removeChild(o);
         ctx.count("element_dropped");
+        return;
       }
+      // A filter year moves by its own offset (see filterYear), like timeFilter= in URLs.
+      const fy = (t: string) =>
+        t.replace(/(?:19|20)\d{2}/g, (y) => String(ctx.filterYear(Number(y))));
+      const v = o.getAttribute("value");
+      if (v !== null) o.setAttribute("value", fy(v));
+      for (const c of children(o)) if (c.nodeType === TEXT) c.data = fy(c.data ?? "");
     });
   }
+}
+
+/**
+ * Pagination shows how many pages (so how many orders) the account has. Keep Previous,
+ * Next and at most 3 numbered pages around the selected one; drop the rest and the "...".
+ */
+function trimPagination(root: DomNode, ctx: ScrubContext): void {
+  for (const ul of Array.from((root as unknown as Queryable).querySelectorAll(".a-pagination"))) {
+    const items = children(ul).filter((c) => c.nodeType === ELEMENT) as QEl[];
+    const numbered = items.filter((li) => /^\s*\d+\s*$/.test(li.textContent ?? ""));
+    const sel = Math.max(
+      0,
+      numbered.findIndex((li) => /\ba-selected\b/.test(li.getAttribute("class") ?? "")),
+    );
+    const start = Math.max(0, Math.min(sel - 1, numbered.length - 3));
+    const keep = new Set(numbered.slice(start, start + 3));
+    for (const li of items) {
+      const isNum = numbered.includes(li);
+      const isGap = /^\s*(?:\.{3}|\u2026)\s*$/.test(li.textContent ?? "");
+      if ((isNum && !keep.has(li)) || isGap) {
+        ul.removeChild(li);
+        ctx.count("element_dropped");
+      }
+    }
+  }
+}
+
+/** Numbered page labels read 1, 2, 3 in order again (lone digits are permuted). */
+function relabelPagination(root: DomNode): void {
+  for (const ul of Array.from((root as unknown as Queryable).querySelectorAll(".a-pagination"))) {
+    let n = 0;
+    for (const li of children(ul).filter((c) => c.nodeType === ELEMENT)) {
+      if (!/^\s*\d+\s*$/.test(li.textContent ?? "")) continue;
+      n++;
+      const holder = (li as unknown as Queryable).querySelectorAll("a")[0] ?? li;
+      const t = firstText(holder);
+      if (t !== undefined) t.data = String(n);
+    }
+  }
+}
+
+const INLINE = new Set(["span", "b", "i", "em", "strong", "small", "font"]);
+
+/**
+ * One token split over sibling inline elements ("<span>0123</span><span>4567</span>", a site
+ * that splits codes against scraping) is scrubbed as ONE token and handed back piece by
+ * piece, so the joined value equals the same token written whole elsewhere on the page.
+ * Returns true when it handled the children.
+ */
+function scrubSplitToken(el: DomNode, ctx: ScrubContext, mode: TextMode): boolean {
+  const kids = children(el).filter((c) => !(c.nodeType === TEXT && (c.data ?? "").trim() === ""));
+  if (kids.length < 2) return false;
+  const pieces: DomNode[] = [];
+  for (const k of kids) {
+    if (k.nodeType !== ELEMENT || !INLINE.has(asElement(k).localName.toLowerCase())) return false;
+    const inner = children(k);
+    if (inner.length !== 1 || inner[0]?.nodeType !== TEXT) return false;
+    pieces.push(inner[0]);
+  }
+  const parts = pieces.map((p) => (p.data ?? "").trim());
+  const joined = parts.join("");
+  // Codes only (a digit somewhere): split words and names keep the normal per-node rules.
+  if (!/^[A-Za-z0-9]{6,}$/.test(joined) || !/[0-9]/.test(joined) || parts.some((p) => p === "")) {
+    return false;
+  }
+  const out = scrubText(joined, ctx, mode);
+  let at = 0;
+  pieces.forEach((p, k) => {
+    const len = out.length === joined.length ? (parts[k] ?? "").length : k === 0 ? out.length : 0;
+    p.data = out.slice(at, at + len);
+    at += len;
+  });
+  for (const k of kids) scrubAttributes(asElement(k), asElement(k).localName.toLowerCase(), ctx);
+  ctx.count("text_node");
+  return true;
 }
 
 function firstText(el: DomNode | null | undefined): DomNode | undefined {
@@ -492,6 +578,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   const reduce = opts.reduce === true;
   if (reduce) reduceTree(root, ctx);
   trimYearOptions(root, ctx);
+  trimPagination(root, ctx);
   const outerIds = docIds;
   docIds = new Set(
     Array.from((root as unknown as Queryable).querySelectorAll("[id]"), (e) =>
@@ -504,6 +591,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
     docIds = outerIds;
   }
   alignPrices(root);
+  relabelPagination(root);
   alignStars(root, ctx);
   if (isDoc) return `<!DOCTYPE html>${serialize(root)}`;
   return children(document.body)

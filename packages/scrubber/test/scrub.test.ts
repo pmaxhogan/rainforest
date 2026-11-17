@@ -952,6 +952,107 @@ describe("dates, counts, amounts and ratings are re-drawn (invented values)", ()
   });
 });
 
+describe("blind review findings (invented values)", () => {
+  test("F1: card last digits and expiry in embedded JSON are fixed fakes", () => {
+    const json = JSON.stringify({
+      paymentMethodNumber: { prefix: "**", lastDigits: "4321" },
+      paymentMethodExpirationDate: { year: 2031, month: 7 },
+      card: { last4: 9876, expMonth: 4, expYear: 2029 },
+    });
+    const out = body(`<script type="application/json">${json}</script>`);
+    const data = JSON.parse(/<script[^>]*>(.*)<\/script>/.exec(out)?.[1] ?? "{}") as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(data["paymentMethodNumber"]?.["lastDigits"]).toBe("0000");
+    expect(data["paymentMethodExpirationDate"]).toEqual({ year: 2030, month: 1 });
+    expect(data["card"]).toEqual({ last4: 0, expMonth: 1, expYear: 2030 });
+  });
+
+  test("F2: a year-less weekday fits the year the page implies (nearest captured_at)", () => {
+    const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    for (let i = 0; i < 20; i++) {
+      const out = body("<p>Arriving Thu, Mar 9</p><p>Thursday, March 9, 2027</p>", `wd-${i}`);
+      const a = /Arriving ([A-Z][a-z]{2}), ([A-Z][a-z]{2}) (\d{1,2})/.exec(out);
+      expect(a).not.toBeNull();
+      const day = (y: number) => Date.parse(`${a?.[2]} ${a?.[3]}, ${y} UTC`);
+      const epoch = Date.parse(SYNTHETIC_CAPTURED_AT);
+      const y =
+        [2019, 2020, 2021].sort((p, q) => Math.abs(day(p) - epoch) - Math.abs(day(q) - epoch))[0] ??
+        2020;
+      expect(names[new Date(day(y)).getUTCDay()]?.slice(0, 3)).toBe(a?.[1]);
+      const full = /([A-Z][a-z]+day), ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(out);
+      expect(names[new Date(Date.parse(`${full?.[2]} UTC`)).getUTCDay()]).toBe(full?.[1]);
+    }
+  });
+
+  test("F3: per-render lower-case tokens after an underscore become a placeholder", () => {
+    const out = body(
+      '<div id="a-popover-feedback-popup_ab12cd34ef">x</div><div name="p13n-sc-shoveler_9zzq8wxv7u">y</div>' +
+        '<div data-csa-c-content-id="nav_cs_bestsellers">z</div>',
+    );
+    expect(out).toContain('id="a-popover-feedback-popup_rftoken"');
+    expect(out).toContain('name="p13n-sc-shoveler_rftoken"');
+    expect(out).toContain("nav_cs_bestsellers");
+    expect(out).not.toMatch(/ab12cd34ef|9zzq8wxv7u/);
+  });
+
+  test("F4: numeric path segments in links are replaced", () => {
+    const out = body('<a href="/gp/bestsellers/zorbo-gear/12345678/ref=zg_x">a</a>');
+    expect(out).toMatch(/href="\/gp\/bestsellers\/[A-Za-z-]+\/10000000\/ref=rf"/);
+  });
+
+  test("F5: long numeric ids under id-like JSON keys are obvious placeholders", () => {
+    const out = body(
+      '<script type="application/json">{"legacyId":1234567890123,"shipID":"7654321","count":5}</script>',
+    );
+    expect(out).toContain('"legacyId":9000000000001');
+    expect(out).toContain('"shipID":"9000001"');
+    expect(out).toContain('"count":5');
+  });
+
+  test("F6: pagination keeps 3 numbered pages, labelled in order, and no extent", () => {
+    const li = (n: number, sel = false) =>
+      `<li class="${sel ? "a-selected" : "a-normal"}"><a href="/your-orders/orders?page=${n - 1}">${n}</a></li>`;
+    const pages = [1, 2, 3, 4, 5, 6, 7].map((n) => li(n, n === 1)).join("");
+    const out = body(
+      `<ul class="a-pagination"><li class="a-disabled">Previous</li>${pages}<li class="a-disabled">...</li>${li(42)}<li class="a-last"><a href="/your-orders/orders?page=1">Next</a></li></ul>`,
+    );
+    expect([...out.matchAll(/<a href="[^"]*">(\d+)<\/a>/g)].map((m) => m[1])).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    expect(out).not.toContain("...");
+    expect(out).not.toContain("42");
+    expect(out).toContain(">Next<");
+  });
+
+  test("F7: a filter year agrees between URL and select and is 3+ years from the real one", () => {
+    for (let i = 0; i < 20; i++) {
+      const out = body(
+        '<select name="timeFilter"><option value="year-2016" selected>2016</option></select>' +
+          '<a href="/your-orders/orders?timeFilter=year-2016&page=1">n</a>',
+        `fy-${i}`,
+      );
+      const opt = /<option value="year-(\d{4})"[^>]*>(\d{4})</.exec(out);
+      const url = /timeFilter=year-(\d{4})/.exec(out);
+      expect(opt?.[1]).toBe(opt?.[2]);
+      expect(url?.[1]).toBe(opt?.[1]);
+      expect(Math.abs(Number(url?.[1]) - 2016)).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  test("F8: a code split over spans scrubs like the same code written whole", () => {
+    const out = body("<p>UPC: 01234567</p><div><span>0123</span><span>4567</span></div>");
+    const whole = /: (\d{8})</.exec(out)?.[1];
+    const split = /<div><span>(\d{4})<\/span><span>(\d{4})<\/span><\/div>/.exec(out);
+    expect(whole).toBeDefined();
+    expect(`${split?.[1]}${split?.[2]}`).toBe(whole);
+    expect(whole).not.toBe("01234567");
+  });
+});
+
 describe("audit reads attributes, not escaped markup inside them", () => {
   test("escaped markup in a value is not an attribute of the tag", () => {
     const esc =

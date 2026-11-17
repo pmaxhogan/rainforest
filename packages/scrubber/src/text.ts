@@ -8,7 +8,9 @@
  * output is closed under the audit: it never mints a token the audit would flag.
  */
 import { LABELS, type LabelKind } from "./allowlists.ts";
-import type { ScrubContext } from "./context.ts";
+import { EPOCH_DAY, type ScrubContext } from "./context.ts";
+
+const EPOCH_YEAR = new Date(EPOCH_DAY * 86_400_000).getUTCFullYear();
 import {
   MONTH_RE,
   WEEKDAY_RE,
@@ -211,6 +213,24 @@ function synthFree(out: string, ctx: ScrubContext): string {
   );
 }
 
+/**
+ * A date shown without a year ("Thu, Mar 9") is read against the fixture's captured_at, so
+ * its weekday must be the one of that month/day in the year nearest SYNTHETIC_CAPTURED_AT:
+ * then the shifted month/day plus weekday fit the year the page implies, not the real one.
+ */
+function shownWeekday(s: { m: number; d: number }): number {
+  let best = 0;
+  let dist = Infinity;
+  for (let y = EPOCH_YEAR - 1; y <= EPOCH_YEAR + 1; y++) {
+    const day = Date.UTC(y, s.m, s.d) / 86_400_000;
+    if (Math.abs(day - EPOCH_DAY) < dist) {
+      dist = Math.abs(day - EPOCH_DAY);
+      best = new Date(day * 86_400_000).getUTCDay();
+    }
+  }
+  return best;
+}
+
 function fakeDate(ctx: ScrubContext, y: number, m: number, d: number) {
   return shift(ctx, { y, m, d });
 }
@@ -284,7 +304,7 @@ function monthDate(ctx: ScrubContext, m: RegExpExecArray): string | null {
     2: styleMonth(m[2] ?? "", s.m),
     3: padLike(m[3] ?? "", s.d),
   };
-  if (m[1] !== undefined) repl[1] = styleWeekday(m[1], s.wd);
+  if (m[1] !== undefined) repl[1] = styleWeekday(m[1], m[7] === undefined ? shownWeekday(s) : s.wd);
   if (m[4] !== undefined) repl[4] = ordinal(s.d);
   if (m[6] !== undefined) {
     const mo2 = m[5] !== undefined ? monthIndex(m[5]) : mo;
@@ -312,7 +332,7 @@ function dayMonth(ctx: ScrubContext, m: RegExpExecArray): string | null {
     2: padLike(m[2] ?? "", s.d),
     3: styleMonth(m[3] ?? "", s.m),
   };
-  if (m[1] !== undefined) repl[1] = styleWeekday(m[1], s.wd);
+  if (m[1] !== undefined) repl[1] = styleWeekday(m[1], m[4] === undefined ? shownWeekday(s) : s.wd);
   if (m[4] !== undefined) repl[4] = String(s.y);
   ctx.count("date");
   return splice(m, repl);
@@ -704,9 +724,15 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
   }
 }
 
+// A per-render widget token after "_" ("..._0ab1cd2ef3"): lower case and digits, 9+.
+const RENDER_TOKEN = /_(?=[a-z0-9]*[0-9])(?=[a-z0-9]*[a-z])[a-z0-9]{9,}(?![A-Za-z0-9])/g;
+
 /** Identifier pass only, for structural values (ids, classes, JSON keys). */
 export function scrubTokens(s: string, ctx: ScrubContext): string {
-  return scrubValue(s, ctx, { tokensOnly: true });
+  return scrubValue(s, ctx, { tokensOnly: true }).replace(RENDER_TOKEN, () => {
+    ctx.count("token");
+    return "_rftoken";
+  });
 }
 
 // ---------------------------------------------------------------------------- labels
