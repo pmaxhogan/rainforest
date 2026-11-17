@@ -4,8 +4,10 @@ import {
   HARD_DENY_RULES,
   MAIN_FRAME_ALLOWLIST,
   PURCHASE_CONTROL_PATTERNS,
+  TELEMETRY_HOSTS,
   checkNavigation,
   checkRequest,
+  isAmazonHost,
   isPurchaseControl,
 } from "../src/policy.ts";
 
@@ -256,6 +258,26 @@ describe("main-frame allowlist", () => {
         isMainFrameDocument: false,
       }).allow,
     ).toBe(false);
+  });
+});
+
+describe("telemetry hosts", () => {
+  test("exemption list is exactly the expected list", () => {
+    const expected = [
+      "fls-na.amazon.com",
+      "unagi.amazon.com",
+      "unagi-na.amazon.com",
+      "completion.amazon.com",
+    ];
+    expect([...TELEMETRY_HOSTS].sort()).toEqual([...expected].sort());
+    expect(isAmazonHost("fls-na.amazon.com")).toBe(false);
+    expect(isAmazonHost("www.amazon.com")).toBe(true);
+    expect(isAmazonHost("anything.amazon.com")).toBe(true);
+    expect(isAmazonHost("amazon.com.example")).toBe(false);
+  });
+
+  test("telemetry hosts can never be a main-frame document", () => {
+    expect(checkNavigation("https://fls-na.amazon.com/gp/buy/spc").allow).toBe(false);
   });
 });
 

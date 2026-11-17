@@ -42,9 +42,22 @@ export type DenyReason =
 
 export const AMAZON_HOST = "www.amazon.com";
 
-/** Hosts treated as Amazon retail for the hard-deny layer (any subdomain of amazon.com). */
+/**
+ * Amazon hosts that only receive telemetry beacons or serve suggestions. Their paths are
+ * opaque encoded blobs that can contain any substring, so the path rules do not apply.
+ * Nothing on them can change an order, a payment or the account.
+ */
+export const TELEMETRY_HOSTS: readonly string[] = [
+  "fls-na.amazon.com",
+  "unagi.amazon.com",
+  "unagi-na.amazon.com",
+  "completion.amazon.com",
+];
+
+/** Hosts the hard-deny layer applies to: amazon.com and every subdomain but telemetry. */
 export function isAmazonHost(host: string): boolean {
   const h = host.toLowerCase();
+  if (TELEMETRY_HOSTS.includes(h)) return false;
   return h === "amazon.com" || h.endsWith(".amazon.com");
 }
 

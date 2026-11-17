@@ -175,8 +175,15 @@ export class BrowserSession {
         if (other !== page) void other.close().catch(() => {});
       });
       this.#guard = await installGuard(page, (blocked) => {
+        let where = "?";
+        try {
+          const u = new URL(blocked.url);
+          where = `${u.hostname}${u.pathname.slice(0, 120)}`;
+        } catch {
+          // unparseable URL: nothing more to log
+        }
         this.#options.log?.(
-          `blocked ${blocked.verdict.reason}/${blocked.verdict.rule} main=${blocked.mainFrameDocument}`,
+          `blocked ${blocked.verdict.reason}/${blocked.verdict.rule} main=${blocked.mainFrameDocument} ${blocked.method} ${where}`,
         );
       });
       this.#attachment = attachment;

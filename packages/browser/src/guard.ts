@@ -23,7 +23,13 @@ interface RequestPaused {
   requestId: string;
   frameId: string;
   resourceType: string;
-  request: { url: string; method: string; postData?: string; hasPostData?: boolean };
+  request: {
+    url: string;
+    method: string;
+    postData?: string;
+    hasPostData?: boolean;
+    postDataEntries?: { bytes?: string }[];
+  };
 }
 
 export interface Guard {
@@ -32,6 +38,21 @@ export interface Guard {
   /** Forget recorded blocks (call before a navigation to attribute blocks to it). */
   reset(): void;
   dispose(): Promise<void>;
+}
+
+/** The request body as text, from postData or the base64 postDataEntries. */
+function readBody(request: RequestPaused["request"]): string | undefined {
+  if (typeof request.postData === "string") return request.postData;
+  // The browser states explicitly that there is no body at all.
+  if (request.hasPostData === false) return "";
+  const entries = request.postDataEntries;
+  if (!Array.isArray(entries) || entries.length === 0) return undefined;
+  let out = "";
+  for (const entry of entries) {
+    if (typeof entry.bytes !== "string") return undefined;
+    out += Buffer.from(entry.bytes, "base64").toString("latin1");
+  }
+  return out;
 }
 
 async function mainFrameId(client: RawCdpClient): Promise<string> {
