@@ -163,3 +163,13 @@ describe("version resolution", () => {
     expect(readDaemonVersion()).toBe("0.0.0");
   });
 });
+
+test("the launcher allows restarts but not a tight restart loop", async () => {
+  const { RESTART_EXIT_CODE, restartAllowed } = await import("../src/launcher.ts");
+  expect(RESTART_EXIT_CODE).toBe(75);
+  const now = 10_000_000;
+  expect(restartAllowed([], now)).toBe(true);
+  expect(restartAllowed(new Array(19).fill(now - 1000), now)).toBe(true);
+  expect(restartAllowed(new Array(20).fill(now - 1000), now)).toBe(false);
+  expect(restartAllowed(new Array(20).fill(now - 11 * 60_000), now)).toBe(true);
+});

@@ -12,6 +12,7 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -115,8 +116,47 @@ function logLine(root: string, message: string): void {
   }
 }
 
+/** Exit code the daemon uses to ask for a restart (after an update). */
+export const RESTART_EXIT_CODE = 75;
+const CHILD_FLAG = "RAINFOREST_LAUNCHER_CHILD";
+
+/** Should another restart be allowed, given when the recent ones happened? */
+export function restartAllowed(recent: readonly number[], now: number): boolean {
+  return recent.filter((t) => now - t < 10 * 60_000).length < 20;
+}
+
+/**
+ * Windows only: Task Scheduler does not relaunch a task that exits, so the launcher keeps
+ * the daemon as a child process and starts it again whenever it asks for a restart. Other
+ * exit codes end the launcher with the same code. (launchd restarts the service itself.)
+ */
+async function superviseOnWindows(root: string): Promise<never> {
+  const restarts: number[] = [];
+  for (;;) {
+    const code = await new Promise<number>((resolve) => {
+      const child = spawn(process.execPath, process.argv.slice(1), {
+        stdio: "inherit",
+        windowsHide: true,
+        env: { ...process.env, [CHILD_FLAG]: "1" },
+      });
+      child.once("error", () => resolve(70));
+      child.once("exit", (exitCode) => resolve(exitCode ?? 1));
+    });
+    if (code !== RESTART_EXIT_CODE) process.exit(code);
+    const now = Date.now();
+    if (!restartAllowed(restarts, now)) {
+      logLine(root, "too many restarts in a short time; giving up");
+      process.exit(70);
+    }
+    restarts.push(now);
+  }
+}
+
 async function main(): Promise<void> {
   const root = launcherRoot(process.env, fileURLToPath(import.meta.url));
+  if (process.platform === "win32" && process.env[CHILD_FLAG] !== "1") {
+    await superviseOnWindows(root);
+  }
   try {
     const rolledBack = guardPendingUpdate(root);
     if (rolledBack) logLine(root, `rolled back version ${rolledBack}: it did not become healthy`);
