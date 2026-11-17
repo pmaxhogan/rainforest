@@ -80,6 +80,8 @@ export interface ScrubContext {
   fakeDigits(real: string): string;
   /** Memo for whole strings, so a repeated title scrubs the same way everywhere. */
   readonly memo: Map<string, string>;
+  /** Account-scoped id values seen in ID_PARAMS anywhere in the capture (see scrub.ts). */
+  readonly knownIds: Set<string>;
 }
 
 /** sfc32 seeded from a SHA-256 digest: tiny, fast and fully deterministic. */
@@ -176,6 +178,7 @@ export function createContext(material: string, capturedAt: string): ScrubContex
     fakeUuid: counterMap((n) => `${SYNTHETIC.uuidPrefix}${pad(n + 1, 12)}`),
     fakeDigits,
     memo: new Map(),
+    knownIds: new Set(),
   };
 }
 

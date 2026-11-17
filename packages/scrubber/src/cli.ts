@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * node packages/scrubber/src/cli.ts <capture-dir> <fixture-case-dir> [--seed <s>] [--note <text>]
+ * node packages/scrubber/src/cli.ts <capture-dir> <fixture-case-dir> [--seed <s>] [--note <text>] [--reduce]
  *
  * Reads a raw capture, scrubs it, self-audits the result and writes the fixture case.
  * Fails closed: when the audit has findings NOTHING is written and the exit code is 1.
@@ -13,7 +13,7 @@ import { scrubCapture } from "./scrub.ts";
 
 function usage(): never {
   console.error(
-    "usage: node packages/scrubber/src/cli.ts <capture-dir> <fixture-case-dir> [--seed <s>] [--note <text>]",
+    "usage: node packages/scrubber/src/cli.ts <capture-dir> <fixture-case-dir> [--seed <s>] [--note <text>] [--reduce]",
   );
   process.exit(4);
 }
@@ -22,10 +22,12 @@ export function main(argv: string[]): number {
   const positional: string[] = [];
   let seed: string | undefined;
   let note: string | undefined;
+  let reduce = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] ?? "";
     if (a === "--seed") seed = argv[++i] ?? usage();
     else if (a === "--note") note = argv[++i] ?? usage();
+    else if (a === "--reduce") reduce = true;
     else if (a.startsWith("--")) usage();
     else positional.push(a);
   }
@@ -36,7 +38,10 @@ export function main(argv: string[]): number {
     return 4;
   }
   const raw = readRawCapture(src);
-  const { capture, report } = scrubCapture(raw, seed === undefined ? {} : { seed });
+  const { capture, report } = scrubCapture(raw, {
+    ...(seed === undefined ? {} : { seed }),
+    reduce,
+  });
   console.log("scrub report:");
   for (const [k, v] of Object.entries(report.counts)) console.log(`  ${k}: ${v}`);
   // The manifest carries the free-text --note, so it is audited like the pages.

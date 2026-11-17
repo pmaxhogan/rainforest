@@ -3,11 +3,17 @@ import {
   DROPPED_ATTRS,
   DROPPED_ELEMENTS,
   IMAGE_URL_ATTRS,
+  ID_PARAMS,
+  ID_PREFIXES,
+  IDREF_ATTRS,
   JSON_KEPT_KEYS,
   KEPT_VALUE_ATTRS,
   LABELS,
   PATH_SEGMENTS,
   QUERY_PARAMS,
+  REDUCE_DROP_HIDDEN_SELECTORS,
+  REDUCE_DROP_SELECTORS,
+  REDUCE_KEEP_HIDDEN_SELECTORS,
   SAFE_LITERALS,
   URL_ATTRS,
   parseLabels,
@@ -32,6 +38,16 @@ const EXPECTED_KEPT_VALUE_ATTRS = [
   "data-action",
   "data-a-expander-name",
   "data-cy",
+  "data-component",
+  "data-browsing-history-status",
+  "data-csa-c-item-type",
+  "data-csa-c-owner",
+  "data-listtype",
+  "data-itemtype",
+  "data-csa-c-content-id",
+  "data-testid",
+  "data-id",
+  "data-hub-section",
   "method",
   "target",
   "rel",
@@ -160,9 +176,14 @@ const EXPECTED_URL_ATTRS = [
   "data-a-hires",
   "data-href",
   "data-url",
+  "data-edit-url",
+  "data-manageurl",
+  "data-next-url",
 ];
 
 const EXPECTED_JSON_KEPT_KEYS = [
+  "action",
+  "itemType",
   "key",
   "type",
   "@type",
@@ -203,8 +224,14 @@ const EXPECTED_QUERY_PARAMS: [string, "keep" | "scrub"][] = [
   ["smid", "scrub"],
   ["seller", "scrub"],
   ["me", "scrub"],
-  ["orderFilter", "scrub"],
+  ["orderFilter", "keep"],
   ["timeFilter", "scrub"],
+  ["rmaId", "scrub"],
+  ["subscriptionId", "scrub"],
+  ["subAsin", "scrub"],
+  ["shipId", "scrub"],
+  ["deliveryBundleId", "scrub"],
+  ["deliveryDate", "scrub"],
 ];
 
 const EXPECTED_PATH_SEGMENTS = [
@@ -266,6 +293,28 @@ const EXPECTED_PATH_SEGMENTS = [
   "g",
   "en_us",
   "placeholder.png",
+  "progress-tracker",
+  "package",
+  "ship-track",
+  "shiptrack",
+  "spr",
+  "prep",
+  "aag",
+  "main",
+  "buyagain",
+  "intro",
+  "rufus",
+  "cl",
+  "render",
+  "ajax",
+  "subscription",
+  "subscriptions",
+  "edit",
+  "api",
+  "marketplaces",
+  "replenishment",
+  "fulfillment",
+  "deliveries",
 ];
 
 function exactly(live: readonly string[], expected: readonly string[]) {
@@ -281,6 +330,51 @@ describe("security-relevant allowlists", () => {
   test("safe literal values", () => exactly(SAFE_LITERALS, EXPECTED_SAFE_LITERALS));
   test("URL attributes", () => exactly(URL_ATTRS, EXPECTED_URL_ATTRS));
   test("JSON keys with kept values", () => exactly(JSON_KEPT_KEYS, EXPECTED_JSON_KEPT_KEYS));
+  test("structural id prefixes", () => exactly(ID_PREFIXES, ["CardInstance"]));
+  test("id-reference attributes", () =>
+    exactly(IDREF_ATTRS, [
+      "for",
+      "headers",
+      "aria-controls",
+      "aria-labelledby",
+      "aria-describedby",
+      "aria-owns",
+    ]));
+  test("id-bearing query parameters", () =>
+    exactly(ID_PARAMS, [
+      "shipId",
+      "subscriptionId",
+      "deliveryBundleId",
+      "rmaId",
+      "orderId",
+      "orderID",
+      "itemId",
+      "lid",
+    ]));
+  test("reduction selectors", () => {
+    exactly(REDUCE_DROP_SELECTORS, [
+      "#navFooter",
+      "footer",
+      "#skiplink",
+      "#rhf",
+      "#nav-flyout-anchor",
+      "#nav-flyout-accountList",
+      "#nav-flyout-prime",
+      "[id^='ape_']",
+    ]);
+    exactly(REDUCE_DROP_HIDDEN_SELECTORS, [".right-rail", "#rhf"]);
+    exactly(REDUCE_KEEP_HIDDEN_SELECTORS, [
+      "input",
+      "select",
+      "option",
+      "textarea",
+      "form",
+      "script",
+      "[data-a-state]",
+      "[class*='popover']",
+      "[id*='popover']",
+    ]);
+  });
   test("path segments kept verbatim", () => exactly(PATH_SEGMENTS, EXPECTED_PATH_SEGMENTS));
   test("query parameters and their policies", () => {
     expect([...QUERY_PARAMS.entries()].sort()).toEqual([...EXPECTED_QUERY_PARAMS].sort());
@@ -339,9 +433,41 @@ describe("label allowlist", () => {
       "Sunday",
       "January",
       "December",
+      "Refund Total",
+      "Refunded",
+      "View return/refund status",
+      "Return or replace items: Eligible through",
+      "Return window closed on",
+      "Next delivery",
+      "Last day to edit",
+      "left in stock - order soon.",
+      "Manage people",
+      "Last checked",
+      "view data going back to",
     ]) {
       expect(texts).toContain(label);
     }
+  });
+
+  // Hardcoded: a "word" label is kept wherever it stands, so the set stays small and generic.
+  test("word labels are exactly the unit and frequency words", () => {
+    const words = LABELS.filter((l) => l.kind === "word").map((l) => l.text);
+    expect(words).toEqual([
+      "unit",
+      "units",
+      "every",
+      "day",
+      "days",
+      "week",
+      "weeks",
+      "month",
+      "months",
+      "year",
+      "years",
+      "time",
+      "times",
+      "off",
+    ]);
   });
 
   test("parser understands kinds and rejects bad lines", () => {
@@ -349,6 +475,7 @@ describe("label allowlist", () => {
       { text: "Sold by", kind: null },
       { text: "Deliver to", kind: "name-or-place" },
     ]);
+    expect(parseLabels("every | word\n")).toEqual([{ text: "every", kind: "word" }]);
     expect(() => parseLabels("Ship to | address\n")).toThrow(/unknown kind/);
     expect(() => parseLabels("Deliver to 99999\n")).toThrow(/numbers/);
   });

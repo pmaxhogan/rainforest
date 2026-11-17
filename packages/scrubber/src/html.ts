@@ -10,14 +10,19 @@ import {
   ADDRESS_HINT,
   DROPPED_ATTRS,
   DROPPED_ELEMENTS,
+  IDREF_ATTRS,
+  ID_PREFIXES,
   IMAGE_URL_ATTRS,
   KEPT_VALUE_ATTRS,
   NAME_HINT,
+  REDUCE_DROP_HIDDEN_SELECTORS,
+  REDUCE_DROP_SELECTORS,
+  REDUCE_KEEP_HIDDEN_SELECTORS,
   SAFE_LITERALS,
   URL_ATTRS,
 } from "./allowlists.ts";
 import type { ScrubContext } from "./context.ts";
-import { scrubJson, stringifySafe } from "./json.ts";
+import { registerHtmlScrubber, scrubJson, stringifySafe } from "./json.ts";
 import { SCRIPT_TYPES } from "./rules.mjs";
 import { scrubText, scrubTokens, type TextMode } from "./text.ts";
 import { scrubSrcset, scrubUrl } from "./url.ts";
@@ -76,6 +81,12 @@ const VOID = new Set([
 ]);
 const PIXEL_SRC = /(?:\/uedata|\/batch\/\d+\/op|\/pixel|beacon|\/1x1|\/gp\/log)/i;
 const STATE_KEY = /^[A-Za-z0-9:._-]{1,128}$/;
+// JSON, markup, an absolute or relative URL, or a query string: data, not structure.
+const IDREFS = new Set(IDREF_ATTRS);
+/** Ids of the document being scrubbed (raw values), for IDREF checks. */
+let docIds: ReadonlySet<string> = new Set();
+
+const DATA_IN_KEPT = /[{}<>"?=]|:\/\/|^\s*\//;
 const HINT_ATTRS = ["id", "class", "data-feature-name", "data-hook", "name", "data-csa-c-slot-id"];
 
 function asElement(n: DomNode): DomElement {
@@ -126,7 +137,22 @@ function scrubAttrValue(
   value: string,
   ctx: ScrubContext,
 ): string {
-  if (KEPT.has(name)) return scrubTokens(value, ctx);
+  // A kept attribute is structural only while it looks like one. JSON, a URL or markup in
+  // it (an ad iframe's name= carries a whole config blob) is data: generic path below.
+  if (name === "id") {
+    const prefix = ID_PREFIXES.find((p) => value.startsWith(p) && value.length > p.length);
+    if (prefix !== undefined) {
+      ctx.count("token");
+      return prefix + ctx.fakeToken(value.slice(prefix.length));
+    }
+  }
+  const idrefOk =
+    !IDREFS.has(name) ||
+    value
+      .trim()
+      .split(/\s+/)
+      .every((t) => t === "" || docIds.has(t));
+  if (KEPT.has(name) && idrefOk && !DATA_IN_KEPT.test(value)) return scrubTokens(value, ctx);
   if (URLS.has(name)) {
     if (name === "srcset" || name === "data-srcset") return scrubSrcset(value, ctx);
     const image = IMAGES.has(name) || (name === "href" && tag === "image");
@@ -136,7 +162,10 @@ function scrubAttrValue(
     return scrubUrl(value, ctx, image ? "image" : "auto");
   }
   const t = value.trim();
-  if ((name === "data-asin" || name.endsWith("-asin")) && /^[A-Za-z0-9]{10}$/.test(t)) {
+  // asin=, data-asin=, data-bookasin=, data-csa-c-asin=: a 10-character value here is an ASIN even when it
+  // is an all-digit ISBN.
+  const asinAttr = /asins?$/.test(name);
+  if (asinAttr && /^[A-Za-z0-9]{10}$/.test(t)) {
     ctx.count("asin");
     return ctx.fakeAsin(t.toUpperCase());
   }
@@ -144,7 +173,8 @@ function scrubAttrValue(
     try {
       const parsed: unknown = JSON.parse(t);
       ctx.count("json_blob");
-      return stringifySafe(scrubJson(parsed, ctx));
+      // data-asins='["0123456789", ...]': each element is judged under an asin key.
+      return stringifySafe(scrubJson(parsed, ctx, asinAttr ? "asin" : null));
     } catch {
       // Not JSON: fall through to text rules.
     }
@@ -214,11 +244,20 @@ function scrubScript(el: DomElement, ctx: ScrubContext): boolean {
   return true;
 }
 
-function walk(parent: DomNode, mode: TextMode, ctx: ScrubContext): void {
+const RAW_WS = new Set(["pre", "textarea", "listing"]);
+
+/** Collapse a whitespace run to one space, or one newline when it held a line break. */
+function collapseWs(s: string): string {
+  return s.replace(/\s+/g, (ws) => (ws.includes("\n") ? "\n" : " "));
+}
+
+function walk(parent: DomNode, mode: TextMode, ctx: ScrubContext, reduce = false): void {
   mergeText(parent);
+  const keepWs = !reduce || RAW_WS.has((parent.localName ?? "").toLowerCase());
   for (const node of children(parent)) {
     if (node.nodeType === TEXT) {
-      node.data = scrubText(node.data ?? "", ctx, mode);
+      const data = keepWs ? (node.data ?? "") : collapseWs(node.data ?? "");
+      node.data = scrubText(data, ctx, mode);
       continue;
     }
     if (node.nodeType !== ELEMENT) {
@@ -262,8 +301,37 @@ function walk(parent: DomNode, mode: TextMode, ctx: ScrubContext): void {
       for (const c of children(el)) el.removeChild(c);
     }
     scrubAttributes(el, tag, ctx);
-    walk(el, childMode, ctx);
+    walk(el, childMode, ctx, reduce);
   }
+}
+
+interface Queryable {
+  querySelectorAll(sel: string): ArrayLike<DomNode & { matches(sel: string): boolean }>;
+}
+
+/** Remove chrome and hidden recommendation rails (see REDUCE_* in allowlists.ts). */
+function reduceTree(root: DomNode, ctx: ScrubContext): void {
+  const q = root as unknown as Queryable;
+  const drop = (n: DomNode) => {
+    if (n.parentNode !== null) {
+      n.parentNode.removeChild(n);
+      ctx.count("element_dropped");
+    }
+  };
+  for (const n of Array.from(q.querySelectorAll(REDUCE_DROP_SELECTORS.join(", ")))) drop(n);
+  const keep = REDUCE_KEEP_HIDDEN_SELECTORS.join(", ");
+  const hidden = REDUCE_DROP_HIDDEN_SELECTORS.map((h) => `${h}[data-rf-hidden='1']`).join(", ");
+  for (const n of Array.from(q.querySelectorAll(hidden))) {
+    if (n.parentNode === null) continue;
+    // Keep a hidden subtree that is, or holds, something a parser reads on purpose.
+    if (n.matches(keep) || (n as unknown as Queryable).querySelectorAll(keep).length > 0) continue;
+    drop(n);
+  }
+}
+
+export interface HtmlOptions {
+  /** Drop chrome and hidden subtrees and collapse whitespace (structure-preserving). */
+  reduce?: boolean;
 }
 
 function escText(s: string): string {
@@ -301,7 +369,7 @@ function serialize(node: DomNode, inScript = false): string {
 const DOC_START = /^\s*(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\b|<html[\s>])/i;
 
 /** Scrub one HTML document or fragment and serialize it ASCII-only. */
-export function scrubHtml(html: string, ctx: ScrubContext): string {
+export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {}): string {
   const isDoc = DOC_START.test(html);
   const src = isDoc ? html : `<!DOCTYPE html><html><head></head><body>${html}</body></html>`;
   const { document } = parseHTML(src) as unknown as {
@@ -310,9 +378,23 @@ export function scrubHtml(html: string, ctx: ScrubContext): string {
   const root = document.documentElement;
   // The root element is not visited by walk(): its attributes need the same pass.
   if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
-  walk(root, "text", ctx);
+  const reduce = opts.reduce === true;
+  if (reduce) reduceTree(root, ctx);
+  const outerIds = docIds;
+  docIds = new Set(
+    Array.from((root as unknown as Queryable).querySelectorAll("[id]"), (e) =>
+      String((e as unknown as DomElement).getAttribute("id") ?? ""),
+    ),
+  );
+  try {
+    walk(root, "text", ctx, reduce);
+  } finally {
+    docIds = outerIds;
+  }
   if (isDoc) return `<!DOCTYPE html>${serialize(root)}`;
   return children(document.body)
     .map((c) => serialize(c))
     .join("");
 }
+
+registerHtmlScrubber((h, c) => scrubHtml(h, c));

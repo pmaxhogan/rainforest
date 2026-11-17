@@ -544,11 +544,274 @@ describe("closed under the audit", () => {
       "<p>Model ab12cd34ef56gh78ij90 x0abcdefgh q0abcd1234 4K60HZ1080P ABCDEFGHIJ12</p>" +
       "<p>Ref ghijklmn-1234-5678-9abc-def012345678 tel 999 555 1234 code 12345.67</p>" +
       "<p>US 12345 and ZZ 54321, zip:12345, 12345-6789 Deliver to x 13579</p>" +
-      "<p>abcd+1234+abcd+5678+efgh lorem_ipsum_dolor_sit_amet_123 1234567890</p>";
+      "<p>abcd+1234+abcd+5678+efgh lorem_ipsum_dolor_sit_amet_123 1234567890</p>" +
+      // Shapes first seen on real pages (all values invented here):
+      "<p>Item - ET4M8N2K6R1W5Q9 and 7PT3W8M2Q6Z4N1J ratio 2.7182818284590452E-4</p>" +
+      '<p data-x="a=b%7CQ42W7NZ8KD&amp;c=GhQ3%2Bk9Lm2Pq8%2FzW4xYt7Rv%3D&amp;rh=n%3A5550001234">x</p>' +
+      '<p>t 2019-03-04T05:06:07.000000000Z</p><label for="checkbox1f2e3d4c-5b6a-4789-8abc-0123456789ab">u</label>' +
+      "<p>\u30c6\u30b9\u30c8123\u30c7\u30fc\u30bf \uff21\uff22\uff23\uff24 1234</p>" +
+      '<p data-q="wxyzq9f8e7d6c-5555-6666-7777-888899990000 13.1a2b3c4d-1111-2222-3333-444455556666">v</p>';
     for (let i = 0; i < 25; i++) {
       const r = one(tricky, {}, `t-${i}`);
       expect(r.report.findings, `seed ${i}`).toEqual([]);
     }
+  });
+});
+
+describe("leak classes found on real captures (invented values)", () => {
+  test("a kept attribute holding JSON, a URL or markup is scrubbed as data", () => {
+    const blob = JSON.stringify({
+      pixelUrl: "https://ads.shop.invalid/x/px?t=1",
+      html: "<div>Pat Realname at 42 Main Street</div>",
+    });
+    const out = body(
+      `<iframe name='${blob}' id="ad_1"></iframe>` +
+        '<div class="https://tracker.invalid/q">x</div>',
+    );
+    expect(out).not.toContain("shop.invalid");
+    expect(out).not.toContain("tracker.invalid");
+    expect(out).not.toContain("Realname");
+    expect(out).toContain('id="ad_1"');
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("a URL under a kept JSON key is scrubbed as data", () => {
+    const out = body(
+      '<script type="application/json">{"type":"https://tracker.invalid/p","key":"ok"}</script>',
+    );
+    expect(out).not.toContain("tracker.invalid");
+    expect(out).toContain('"key":"ok"');
+  });
+
+  test("a time-zone word at the start of an id stays an id", () => {
+    const out = body("<p>Pack - ET4M8N2K6R1W5Q9</p><p>9PT3W8M2Q6Z4N1</p>");
+    expect(out).not.toContain("UTC");
+    expect(out).not.toContain("ET4M8N2K6R1W5Q9");
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("scientific notation keeps a lower-case exponent and fresh digits", () => {
+    const out = body("<p>ratio 2.7182818284590452E-4</p>");
+    expect(out).toMatch(/[a-z]+ \d\.\d{16}e-\d/);
+    expect(out).not.toContain("7182818284590452");
+  });
+
+  test("percent-encoded tokens and ids are judged decoded", () => {
+    const out = body(
+      '<p data-x="a=b%7CQ42W7NZ8KD&amp;t=GhQ3%2Bk9Lm2Pq8%2FzW4xYt7Rv%3D&amp;s=x%2FB0WXYZ9876">x</p>',
+    );
+    expect(out).not.toContain("Q42W7NZ8KD");
+    expect(out).not.toContain("k9Lm2Pq8");
+    expect(out).not.toContain("B0WXYZ9876");
+    expect(out).toContain("%7CFAKEID");
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("a UUID or order id right after a hyphen is still mapped (and still audited)", () => {
+    const raw =
+      '<div class="w pd_rd_r-abcdef01-2345-4678-9abc-def012345678 c-f">x</div>' +
+      '<div class="order-112-1234567-7654321">y</div>';
+    expect(auditScrubbed(raw).map((f) => f.rule)).toEqual(
+      expect.arrayContaining(["uuid", "order-id"]),
+    );
+    const out = body(raw);
+    expect(out).not.toContain("def012345678");
+    expect(out).not.toContain("7654321");
+    expect(out).toContain("pd_rd_r-00000000-0000-4000-8000-");
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("an id-reference attribute holding text is scrubbed; real id lists are kept", () => {
+    const out = body(
+      '<div id="lbl-1">a</div><div id="lbl-2">b</div>' +
+        '<ul aria-labelledby="lbl-1 lbl-2">x</ul>' +
+        '<ul aria-labelledby="Customers Who Bought Zorbo Widget Also Bought">y</ul>',
+    );
+    expect(out).toContain('aria-labelledby="lbl-1 lbl-2"');
+    expect(out).not.toContain("Zorbo");
+  });
+
+  test("an id seen in an id query parameter is replaced where it is echoed", () => {
+    const out = body(
+      '<a href="/auto-deliveries/?shipId=qwzrtplmnbvx">m</a>' +
+        '<script type="application/json">{"qwzrtplmnbvx":"2 items","k":"qwzrtplmnbvx"}</script>' +
+        '<div data-x="ship qwzrtplmnbvx">z</div>',
+    );
+    expect(out).not.toContain("qwzrtplmnbvx");
+    expect(out).toMatch(/\{"FAKETOKEN\d{4}":/);
+  });
+
+  test("short media and instance ids in kept values become tokens; camelCase names stay", () => {
+    const out = body(
+      '<div data-csa-c-content-id="42Ab3dE+fGL">a</div><div data-csa-c-content-id="19qR-tUvwXL">b</div>' +
+        '<div class="__xYz4kQ7mNp2W displayAddressLine1 acBadge_Desktop">c</div>',
+    );
+    expect(out).not.toContain("42Ab3dE");
+    expect(out).not.toContain("19qR-tUvwXL");
+    expect(out).not.toContain("xYz4kQ7mNp2W");
+    expect(out).toContain("displayAddressLine1 acBadge_Desktop");
+  });
+
+  test("a token that is only opaque once decoded is replaced whole", () => {
+    const out = body('<p data-x="t=k9Lm%41Pq8zW4xYt7Rv1a2b">x</p>');
+    expect(out).toContain("FAKETOKEN");
+    expect(out).not.toContain("zW4xYt7");
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("a non-punctuation escape is data and an id after it is still mapped", () => {
+    const out = body('<p data-x="q=%41Q42W7NZ8KD">x</p>');
+    expect(out).toContain("%5FFAKEID");
+    // The audit gives no exemption after an escape that decodes to a letter.
+    expect(auditScrubbed("<p>%41Q42W7NZ8KD</p>").map((f) => f.rule)).toContain("opaque-id");
+    expect(auditScrubbed("<p>%AB5550001234</p>").map((f) => f.rule)).toContain("opaque-id");
+    // A punctuation escape before digits is not an id ("%3A" is ":").
+    expect(auditScrubbed("<p>%3A5550001234</p>").map((f) => f.rule)).not.toContain("opaque-id");
+  });
+
+  test("a glued UUID is mapped and not re-randomized into a UUID shape", () => {
+    const out = body(
+      '<label for="checkbox1f2e3d4c-5b6a-4789-8abc-0123456789ab">u</label>' +
+        "<p>wxyzq9f8e7d6c-5555-6666-7777-888899990000 13.1a2b3c4d-1111-2222-3333-444455556666</p>",
+    );
+    expect(out).toMatch(/[a-z]{5}00000000-0000-4000-8000-0000000000\d\d /);
+    expect(out).not.toContain("1f2e3d4c");
+    expect(out).not.toContain("1a2b3c4d");
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+
+  test("a long ISO fraction is cut to 3 digits", () => {
+    expect(body("<p>2019-03-04T05:06:07.123456789Z</p>")).toMatch(/T\d\d:\d\d:\d\d\.000Z/);
+  });
+
+  test("caseless and full-width words become lower-case lorem", () => {
+    const out = body("<p>123\u30c6\u30b9\u30c8\u30c7\u30fc\u30bf \uff21\uff22\uff23\uff24 x</p>");
+    expect(out).toMatch(/^<p>\d{3}[a-z]+ [a-z]+ [a-z]<\/p>$/);
+  });
+
+  test("ISBN-shaped values in asin-named attributes become fake ASINs", () => {
+    const out = body(
+      '<div asin="0123456789" data-bookasin="0123456780" data-asins=\'["0123456781","B0ABCD1234"]\'>x</div>',
+    );
+    expect(out).toContain('asin="B0FAKE');
+    expect(out).toContain('data-bookasin="B0FAKE');
+    expect(out).not.toMatch(/012345678/);
+    expect(auditScrubbed(out)).toEqual([]);
+  });
+});
+
+describe("structure kept for parsers (invented values)", () => {
+  test("unit and frequency words survive, but not in address blocks", () => {
+    expect(body("<p>1 unit every 3 months</p>")).toBe("<p>1 unit every 3 months</p>");
+    expect(body("<p>Purchased 2 times</p>")).toBe("<p>Purchased 2 times</p>");
+    expect(body("<p>the 90-day median</p>")).toMatch(/^<p>[a-z]+ \d\d-day [a-z]+<\/p>$/);
+    const addr = body('<div class="shipping-address"><span>12 Every Day Rd</span></div>');
+    expect(addr).not.toContain("Every Day");
+  });
+
+  test("a trailing label is kept after a leading one", () => {
+    expect(body("<p>Only 3 left in stock - order soon.</p>")).toBe(
+      "<p>Only 3 left in stock - order soon.</p>",
+    );
+    expect(body("<p>Only 37 left in stock - order soon.</p>")).toMatch(
+      /^<p>Only \d\d left in stock - order soon\.<\/p>$/,
+    );
+  });
+
+  test("a label may lead a later ' - ' clause; a date range is not split", () => {
+    expect(body("<p>1 month - view data going back to Mar 3, 2019</p>")).toMatch(
+      /^<p>1 month - view data going back to [A-Z][a-z]{2} \d{1,2}, \d{4}<\/p>$/,
+    );
+    expect(body("<p>Feb 3 - 7</p>")).toMatch(
+      /^<p>[A-Z][a-z]{2} \d{1,2} - (?:[A-Z][a-z]{2} )?\d{1,2}<\/p>$/,
+    );
+  });
+
+  test("a card network next to card digits becomes one constant brand", () => {
+    expect(body("<p>Mastercard ending in 4321</p>")).toBe("<p>Visa ending in 0000</p>");
+    expect(body("<p>Prime Amex \u2022\u2022\u2022\u2022 4321</p>")).toBe(
+      "<p>Prime Visa &#x2022;&#x2022;&#x2022;&#x2022; 0000</p>",
+    );
+  });
+
+  test("long digit runs in kept values are replaced, short ones kept", () => {
+    const out = body('<div id="widget-123456789" class="a-col-12">x</div>');
+    expect(out).toMatch(/id="widget-\d{9}"/);
+    expect(out).not.toContain("123456789");
+    expect(out).toContain('class="a-col-12"');
+  });
+
+  test("a kept value holding a relative URL or a query string is data", () => {
+    const out = body('<div data-id="/Pat-Realname-Widget/dp/B0ABCD1234?ref=x">x</div>');
+    expect(out).not.toContain("Realname");
+    expect(out).not.toContain("B0ABCD1234");
+  });
+
+  test("HTML inside JSON is scrubbed as markup, structure kept", () => {
+    const pop = JSON.stringify({
+      inlineContent:
+        '<div class="a-row"><span>Refund subtotal</span><span>Pat Realname</span></div>',
+    });
+    const out = body(`<span data-a-popover='${pop}'>x</span>`);
+    const attr = /data-a-popover="([^"]*)"/.exec(out)?.[1] ?? "";
+    const json = JSON.parse(
+      attr
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">"),
+    ) as { inlineContent: string };
+    expect(json.inlineContent).toMatch(
+      /^<div class="a-row"><span>[A-Za-z ]+<\/span><span>[A-Za-z ]+<\/span><\/div>$/,
+    );
+    expect(json.inlineContent).not.toContain("Realname");
+  });
+
+  test("structural id prefixes keep the prefix, the rest becomes a token", () => {
+    const out = body('<div id="CardInstanceAbCdEfGhIjKlMnOpQr">x</div>');
+    expect(out).toMatch(/id="CardInstanceFAKETOKEN\d{4}"/);
+  });
+
+  test("'city' inside a word is not an address hint", () => {
+    expect(
+      body('<span class="sc-product-scarcity">Only 3 left in stock - order soon.</span>'),
+    ).toContain("Only 3 left in stock - order soon.");
+  });
+
+  test("reduce drops chrome and hidden rails, keeps hidden form state, collapses whitespace", () => {
+    const html =
+      '<!DOCTYPE html><html><body><div id="navFooter"><a>About Lorem</a></div>' +
+      '<div class="right-rail" data-rf-hidden="1"><p>Rail text</p></div>' +
+      '<div class="right-rail" data-rf-hidden="1"><input type="hidden" name="k" value="1"></div>' +
+      "<p>\n\n   Sold by    \n  </p></body></html>";
+    const full = scrubCapture({ ...sampleCapture(), html, fragments: undefined }).capture.html;
+    const small = scrubCapture({ ...sampleCapture(), html, fragments: undefined }, { reduce: true })
+      .capture.html;
+    expect(full).toContain('id="navFooter"');
+    expect(small).not.toContain('id="navFooter"');
+    expect(small.match(/right-rail/g)?.length).toBe(1);
+    expect(small).toContain('name="k"');
+    expect(small).toContain("<p>\nSold by\n</p>");
+    expect(small.length).toBeLessThan(full.length);
+  });
+});
+
+describe("audit reads attributes, not escaped markup inside them", () => {
+  test("escaped markup in a value is not an attribute of the tag", () => {
+    const esc =
+      '<iframe id="a" name="{&quot;h&quot;:&quot;&lt;img src=x style=y onclick=z&gt;&quot;}"></iframe>';
+    const rules = auditScrubbed(esc).map((f) => f.rule);
+    expect(rules).not.toContain("iframe-src");
+    expect(rules).not.toContain("style-attr");
+    expect(rules).not.toContain("event-handler");
+  });
+
+  test("real attributes are still caught, and an unbalanced quote is flagged", () => {
+    const rules = (h: string) => auditScrubbed(h).map((f) => f.rule);
+    expect(rules('<iframe title="x" src="/y"></iframe>')).toContain("iframe-src");
+    expect(rules('<div title="x"style="c">x</div>')).toContain("style-attr");
+    expect(rules('<a href="#" onclick="z">x</a>')).toContain("event-handler");
+    expect(rules('<div title="x style=c>x</div>')).toContain("unbalanced-quote");
   });
 });
 

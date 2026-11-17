@@ -26,6 +26,16 @@ export const KEPT_VALUE_ATTRS: readonly string[] = [
   "data-action",
   "data-a-expander-name",
   "data-cy",
+  "data-component",
+  "data-browsing-history-status",
+  "data-csa-c-item-type",
+  "data-csa-c-owner",
+  "data-listtype",
+  "data-itemtype",
+  "data-csa-c-content-id",
+  "data-testid",
+  "data-id",
+  "data-hub-section",
   "method",
   "target",
   "rel",
@@ -81,6 +91,36 @@ export const KEPT_VALUE_ATTRS: readonly string[] = [
   "transform",
 ];
 
+/**
+ * Kept attributes whose value is a list of element ids (IDREFS). The value is kept only
+ * when every token names an id in the same document; otherwise it is text (Amazon puts
+ * whole sentences, product titles included, into aria-labelledby).
+ */
+export const IDREF_ATTRS: readonly string[] = [
+  "for",
+  "headers",
+  "aria-controls",
+  "aria-labelledby",
+  "aria-describedby",
+  "aria-owns",
+];
+
+/**
+ * Query parameters whose values are account-scoped ids. Every such value seen anywhere in
+ * the capture is replaced wherever else it appears verbatim (a JSON key, a kept value),
+ * not only inside the URL that carried it.
+ */
+export const ID_PARAMS: readonly string[] = [
+  "shipId",
+  "subscriptionId",
+  "deliveryBundleId",
+  "rmaId",
+  "orderId",
+  "orderID",
+  "itemId",
+  "lid",
+];
+
 /** Attributes holding a URL. Rewritten to the placeholder host with the path shape kept. */
 export const URL_ATTRS: readonly string[] = [
   "href",
@@ -99,6 +139,9 @@ export const URL_ATTRS: readonly string[] = [
   "data-a-hires",
   "data-href",
   "data-url",
+  "data-edit-url",
+  "data-manageurl",
+  "data-next-url",
 ];
 
 /** URL attributes that always point at media: replaced by the placeholder image. */
@@ -138,6 +181,43 @@ export const DROPPED_ELEMENTS: readonly string[] = [
   "noembed",
   "noframes",
   "frameset",
+];
+
+/**
+ * Size reduction (ScrubOptions.reduce, off by default). Subtrees removed before scrubbing:
+ * site chrome no parser reads and recommendation rails. Removing more is always safe for
+ * privacy; whether parsers survive is checked per fixture by the staging comparison.
+ */
+export const REDUCE_DROP_SELECTORS: readonly string[] = [
+  "#navFooter",
+  "footer",
+  "#skiplink",
+  "#rhf",
+  "#nav-flyout-anchor",
+  "#nav-flyout-accountList",
+  "#nav-flyout-prime",
+  "[id^='ape_']",
+];
+
+/**
+ * With reduce on, a subtree the capture marked hidden is removed only when it matches one
+ * of these (large recommendation rails) AND holds nothing parsers read on purpose (see
+ * REDUCE_KEEP_HIDDEN_SELECTORS). Parsers read many hidden elements deliberately (form
+ * inputs, select options, popover preloads, state attributes), so hidden alone is not enough.
+ */
+export const REDUCE_DROP_HIDDEN_SELECTORS: readonly string[] = [".right-rail", "#rhf"];
+
+/** Hidden content parsers read on purpose; a hidden subtree holding any of it is kept. */
+export const REDUCE_KEEP_HIDDEN_SELECTORS: readonly string[] = [
+  "input",
+  "select",
+  "option",
+  "textarea",
+  "form",
+  "script",
+  "[data-a-state]",
+  "[class*='popover']",
+  "[id*='popover']",
 ];
 
 /** Generic attribute values kept verbatim because they are enumerated, not data. */
@@ -221,6 +301,28 @@ export const PATH_SEGMENTS: readonly string[] = [
   "g",
   "en_us",
   "placeholder.png",
+  "progress-tracker",
+  "package",
+  "ship-track",
+  "shiptrack",
+  "spr",
+  "prep",
+  "aag",
+  "main",
+  "buyagain",
+  "intro",
+  "rufus",
+  "cl",
+  "render",
+  "ajax",
+  "subscription",
+  "subscriptions",
+  "edit",
+  "api",
+  "marketplaces",
+  "replenishment",
+  "fulfillment",
+  "deliveries",
 ];
 
 /** Query parameter names kept: "keep" values get the token pass, "scrub" values are text. */
@@ -253,12 +355,26 @@ export const QUERY_PARAMS: ReadonlyMap<string, "keep" | "scrub"> = new Map([
   ["smid", "scrub"],
   ["seller", "scrub"],
   ["me", "scrub"],
-  ["orderFilter", "scrub"],
+  ["orderFilter", "keep"],
   ["timeFilter", "scrub"],
+  ["rmaId", "scrub"],
+  ["subscriptionId", "scrub"],
+  ["subAsin", "scrub"],
+  ["shipId", "scrub"],
+  ["deliveryBundleId", "scrub"],
+  ["deliveryDate", "scrub"],
 ]);
+
+/**
+ * Structural prefixes of generated element ids ("CardInstance" + an opaque instance id).
+ * An id that starts with one keeps the prefix; the rest is always replaced by a token.
+ */
+export const ID_PREFIXES: readonly string[] = ["CardInstance"];
 
 /** JSON keys whose string values are structural (token pass only, no word synthesis). */
 export const JSON_KEPT_KEYS: readonly string[] = [
+  "action",
+  "itemType",
   "key",
   "type",
   "@type",
@@ -270,13 +386,17 @@ export const JSON_KEPT_KEYS: readonly string[] = [
   "locale",
 ];
 
-/** Element context hints (matched against id, class and feature names). */
+/**
+ * Element context hints (matched against id, class and feature names). "city" must start a
+ * word: "sc-product-scarcity" is not an address block.
+ */
 export const NAME_HINT =
   /(profile-name|full-?name|recipient|addressee|buyer-?name|customer-?name|displayaddressfullname|nav-line-1)/i;
 export const ADDRESS_HINT =
-  /(address|glow-ingress|ship-?to|shipping-?addr|deliver-?to|delivery-?location|location-?(?:widget|label|name)|zip|postal|city|street|store-?(?:name|address)|pickup)/i;
+  /(address|glow-ingress|ship-?to|shipping-?addr|deliver-?to|delivery-?location|location-?(?:widget|label|name)|zip|postal|(?<![a-z])city|street|store-?(?:name|address)|pickup)/i;
 
-export type LabelKind = "name" | "place" | "name-or-place" | "rating" | "asin" | "suffix" | "whole";
+export type LabelKind =
+  "name" | "place" | "name-or-place" | "rating" | "asin" | "suffix" | "whole" | "word";
 
 export interface Label {
   text: string;
@@ -291,6 +411,7 @@ const LABEL_KINDS: readonly string[] = [
   "asin",
   "suffix",
   "whole",
+  "word",
 ];
 
 /** Parse the labels.txt format (exported for tests). */

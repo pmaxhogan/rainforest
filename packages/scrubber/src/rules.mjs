@@ -59,14 +59,18 @@ export const PATTERNS = Object.freeze({
   email: String.raw`(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])`,
   asin: String.raw`(?<![A-Za-z0-9])[BbXx]0[A-Za-z0-9]{8}(?![A-Za-z0-9])`,
   isbnAsinContext: String.raw`(?:\/(?:dp|gp\/product|product-reviews|gp\/aw\/d|offer-listing|exec\/obidos\/asin)\/|asin["']?\s*[:=]\s*["']?)(\d{9}[\dXx])(?![A-Za-z0-9])`,
-  orderId: String.raw`(?<![A-Za-z0-9-])[0-9Dd]\d{2}-\d{7}-\d{7}(?![0-9])`,
-  uuid: String.raw`(?<![0-9A-Fa-f-])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f-])`,
+  orderId: String.raw`(?<![A-Za-z0-9])[0-9Dd]\d{2}-\d{7}-\d{7}(?![0-9])`,
+  // A hyphen may touch a UUID on either side ("pd_rd_r-<uuid>" in a class name).
+  uuid: String.raw`(?<![0-9A-Fa-f])[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}(?![0-9A-Fa-f])`,
   phone: String.raw`(?<![\d-])(?:\+?1[ .-]?)?(?:\(\d{3}\)\s?|\d{3}[ .-])\d{3}[ .-]\d{4}(?![\d-])`,
   cardLast4: String.raw`(?:ending (?:in|with)|ends in|last (?:4|four)(?: digits)?:?)\s*(\d{4})(?!\d)|[*\u2022]{2,}\s?(\d{4})(?!\d)|(?<![A-Za-z])[xX]{4,}\s?(\d{4})(?!\d)`,
   zipPlus4: String.raw`(?<![\d.,$-])(\d{5})-(\d{4})(?![\d-])`,
   zip: String.raw`(?<![\d.,$-])\d{5}(?!\d|[.,]\d|%|-\d)`,
   opaqueRun: String.raw`(?<![A-Za-z0-9+/=_-])[A-Za-z0-9+/=_-]{20,}`,
-  upperId: String.raw`(?<![A-Za-z0-9])[A-Z0-9]{10,}(?![A-Za-z0-9])`,
+  // Not right after a "%" that starts an escape of ASCII punctuation: "%3A1234567890" is ":"
+  // plus digits, and the percent-decoded view (which every audit also scans) judges the tail
+  // on its own. Escapes of letters, digits or other bytes get no exemption.
+  upperId: String.raw`(?<![A-Za-z0-9])(?<!%(?=2[0-9A-Fa-f]|3[A-Fa-f]|40|5[B-Fb-f]|60|7[B-Eb-e]))[A-Z0-9]{10,}(?![A-Za-z0-9])`,
 });
 
 /** Address-like contexts in which a 5-digit token must be a reserved fake ZIP. */
@@ -274,10 +278,22 @@ function htmlFindings(text, push) {
       push("element", "meta", m.index);
   }
   for (const m of text.matchAll(/<!--/g)) push("comment", "<!--", m.index);
-  for (const m of text.matchAll(/<[a-z][^>]*?\s(on[a-z]+)\s*=/gi))
-    push("event-handler", m[1], m.index);
-  for (const m of text.matchAll(/<[a-z][^>]*?\sstyle\s*=/gi)) push("style-attr", "style", m.index);
-  for (const m of text.matchAll(/<(?:iframe|frame)\b[^>]*?\s(?:src|srcdoc)\s*=/gi)) {
+  // Attribute names are matched OUTSIDE quoted values: a quoted value is skipped whole, so
+  // escaped markup inside an attribute (a JSON blob holding an HTML string) is not read as
+  // attributes of the outer tag. A tag with an unbalanced quote is flagged on its own.
+  const inTag = (names) =>
+    new RegExp(
+      String.raw`<[a-z][\w:-]*(?:"[^"]*"|'[^']*'|[^>"'])*?(?<=[\s"'/])(${names})\s*=`,
+      "gi",
+    );
+  for (const m of text.matchAll(inTag("on[a-z]+"))) push("event-handler", m[1], m.index);
+  for (const m of text.matchAll(inTag("style"))) push("style-attr", "style", m.index);
+  for (const m of text.matchAll(/<[a-z][\w:-]*\b(?:"[^"]*"|'[^']*'|[^>"'])*["'][^"'>]*>/gi)) {
+    push("unbalanced-quote", "tag", m.index);
+  }
+  for (const m of text.matchAll(
+    /<(?:iframe|frame)\b(?:"[^"]*"|'[^']*'|[^>"'])*?(?<=[\s"'/])(?:src|srcdoc)\s*=/gi,
+  )) {
     push("iframe-src", "iframe", m.index);
   }
 }
