@@ -839,10 +839,12 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
   is added; the result says so in `quantity_note`. Changing the quantity afterwards needs
   `set_cart_quantity`.
 - **Offers Amazon keeps folded away.** The panel shows the featured offer and the first few
-  others; on a product with many sellers the rest sit in a collapsed "other offers" block.
-  `get_buying_options` lists those too (it reads the whole panel), but `add_to_cart` clicks the
-  offer's own control in the open panel and does not expand that block, so adding one of them is
-  expected to fail with nothing added (**unverified**: seen in one saved page, not yet tried).
+  others; on a product with many sellers the rest sit in a folded block ("See N more options")
+  whose add controls are in the page but not rendered. `get_buying_options` lists those offers
+  too. When the chosen offer is one of them, `add_to_cart` opens the block with the panel's own
+  control, through the click guard, and then clicks the offer's control. Opening it loads
+  nothing new. Covered against the mock storefront; on the real site the control was checked
+  against the click guard from a saved page but an add of a folded offer is **unverified**.
 - **Four page loads, all or nothing.** The flow reads the cart, loads the product page, opens its
   offers panel and reads the cart again. If the four do not fit the pacing budget it adds nothing
   and fails with `throttled`; `retry_after_s` is the time until all four fit, and the message says

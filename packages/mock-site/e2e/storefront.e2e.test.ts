@@ -346,6 +346,27 @@ if (!start.ok) {
       expect(lines.length).toBe(2);
     });
 
+    it("add_to_cart opens the folded other offers to reach an offer inside them", async () => {
+      const o = await options("B0FAKE0001");
+      // The second of the other offers: the panel shows one and folds the rest away.
+      const folded = o.offers[1]!;
+      const mark = h.pages.length;
+      const r = (await h.call("add_to_cart", {
+        offer_id: folded.offer_id,
+        acknowledge: folded.flags,
+      })) as { changed: boolean; added: { asin: string } | null };
+      expect(r.changed).toBe(true);
+      expect(r.added?.asin).toBe("B0FAKE0001");
+      const lines = (await h.state()).session!.cart.active.filter((l) => l.asin === "B0FAKE0001");
+      expect(lines.length).toBe(2);
+      expect((await h.state()).traps).toEqual([]);
+      // The panel the flow read really had that block folded: this was not the easy path.
+      const panel = h.pages.slice(mark).find((p) => p.kind === "offers");
+      expect(panel?.html).toMatch(
+        /id="aod-retail-other-offers-content"[^>]*aod-oas-other-offers-hide/,
+      );
+    });
+
     it("add_to_cart never subscribes, even when Subscribe & Save is the default row", async () => {
       const o = await options("B0FAKE0007");
       await expectRefusal(

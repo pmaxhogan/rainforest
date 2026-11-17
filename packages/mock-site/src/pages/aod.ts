@@ -67,6 +67,9 @@ function productBlock(p: Product): string {
   return `<div id="pinned-image-id" class="offer-image-block"><img id="aod-asin-image-id" alt="" src="https://images.example.com/placeholder.png"></div><div id="aod-asin-block-asin" class="a-section"><div id="aod-asin-title" class="a-row"><h5 id="aod-asin-title-text">${esc(p.title)}</h5></div></div>`;
 }
 
+/** How many of the other offers the panel shows before folding the rest away. */
+const SHOWN_OTHER_OFFERS = 1;
+
 export function renderAod(p: Product, now: Date): string {
   const o = p.featured;
   const pinned = o
@@ -80,7 +83,20 @@ export function renderAod(p: Product, now: Date): string {
   const sticky = o
     ? `<div id="aod-sticky-pinned-container" class="a-section aod-sticky-pinned-container"><div id="aod-sticky-pinned-offer" class="a-section aod-sticky-pinned-offer" style="top: -200px;"><div class="a-section aod-information-block">${cardInner(p, o, 0, now, true)}</div></div></div>`
     : "";
-  const cards = p.others.map((x, i) => card(p, x, i + 1, now)).join("");
+  // Like the real panel, only the first of the other offers is shown; the rest sit in a
+  // block that is not rendered until the shopper asks for more. Their add controls are in
+  // the page but cannot be clicked until that block is opened.
+  const shown = p.others
+    .slice(0, SHOWN_OTHER_OFFERS)
+    .map((x, i) => card(p, x, i + 1, now))
+    .join("");
+  const folded = p.others.slice(SHOWN_OTHER_OFFERS);
+  const more =
+    folded.length > 0
+      ? `<div id="aod-see-more-options-link" class="a-section"><span class="a-declarative" data-action="aod-show-other-offers" data-aod-show-other-offers="{}"><span class="a-button a-button-base aod-see-more-button"><span class="a-button-inner"><button title="See more options" aria-label="See ${folded.length} more options on Example storefront" class="a-button-text" type="button">See ${folded.length} more options on Example storefront</button></span></span></span></div>
+<div id="aod-retail-other-offers-content" class="a-section a-spacing-none aod-oas-other-offers-hide">${folded.map((x, i) => card(p, x, SHOWN_OTHER_OFFERS + i + 1, now)).join("")}</div>`
+      : "";
+  const cards = shown + more;
   return `<span class="a-declarative" data-action="aod-close-on-esc-action"><div id="all-offers-display-scroller" class="a-scroller"><div id="aod-container" class="a-section a-spacing-none a-padding-none">${sticky}${pinned}
 <div id="aod-filter" class="a-section aod-filter-block-container"><div class="a-row"><div id="aod-message-component" class="a-column a-span9"><h2 id="aod-filter-offer-count-string">${p.others.length > 0 ? "Other sellers on Example storefront" : "No other sellers"}</h2></div></div></div>
 <div id="aod-offer-list" class="a-section"><input type="hidden" id="aod-total-offer-count" name="" value="${p.others.length}"><input type="hidden" id="aod-total-offer-count-string" name="" value="${p.others.length} other options">${cards}</div>

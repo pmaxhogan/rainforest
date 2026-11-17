@@ -1,5 +1,6 @@
 import { OFFER_FLAGS, RfError, type OfferFlag } from "@rainforest/core";
 import type { PageContext } from "@rainforest/browser";
+import type { Locator } from "playwright-core";
 import {
   computeOfferFlags,
   isOfferOutOfStock,
@@ -174,6 +175,33 @@ const PANEL_STATE = `(async () => {
   };
 })()`;
 
+/**
+ * The panel shows the featured offer and its first few other offers, and folds the rest
+ * into a block that is not rendered until the shopper asks for more. An offer in that
+ * block has its add control in the page, but it cannot be clicked. Open the block with
+ * the panel's own control (it only shows what the page already holds) and wait for this
+ * offer's control to appear.
+ */
+async function revealFoldedOffer(page: PageContext, button: Locator): Promise<void> {
+  const more = page.page.locator("[data-action='aod-show-other-offers'] button:visible");
+  if ((await more.count()) !== 1) {
+    throw new RfError(
+      "layout_unrecognized",
+      "that offer's Add to Cart control is not shown in the panel and there is no control to show more offers; nothing was added",
+    );
+  }
+  await guardedClick(page, more, {
+    what: "the panel's see-more-options control",
+    label: /^see (\d+ )?more options\b/i,
+  });
+  await button.waitFor({ state: "visible", timeout: 8000 }).catch(() => {
+    throw new RfError(
+      "layout_unrecognized",
+      "that offer's Add to Cart control did not appear after showing more offers; nothing was added",
+    );
+  });
+}
+
 async function declineUpsells(page: PageContext): Promise<string[]> {
   const declined: string[] = [];
   // Protection plan and add-on prompts: always the "no" control, never the offer.
@@ -286,6 +314,7 @@ export const addToCart: Flow = async (args, ctx) => {
         );
       }
       const button = page.page.locator("span[data-rf-target='1'] input[name='submit.addToCart']");
+      if (!(await button.isVisible().catch(() => false))) await revealFoldedOffer(page, button);
       clearCaptureCache();
       await guardedClick(page, button, {
         what: "the offer's Add to Cart control",

@@ -75,6 +75,14 @@ const CLIENT_JS = `(function () {
       post("/cart/ref=ox_sc_update_quantity", body).then(after);
       return;
     }
+    var more = e.target.closest && e.target.closest("[data-action='aod-show-other-offers']");
+    if (more) {
+      e.preventDefault();
+      var folded = document.getElementById("aod-retail-other-offers-content");
+      if (folded) folded.classList.remove("aod-oas-other-offers-hide");
+      more.style.display = "none";
+      return;
+    }
     var t = e.target.closest && e.target.closest("[data-mock-popover]");
     if (t) {
       e.preventDefault();
