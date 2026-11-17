@@ -23,6 +23,8 @@ export declare const SYNTHETIC: Readonly<{
 
 export declare const ALLOWED_HOSTS: readonly string[];
 export declare const SCRIPT_TYPES: readonly string[];
+export declare const EXTENSION_SIGNATURE: RegExp;
+export declare const EXTENSION_URL: RegExp;
 
 export type PatternName =
   | "url"

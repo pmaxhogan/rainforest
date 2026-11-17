@@ -30,6 +30,18 @@ export function registerHtmlScrubber(fn: HtmlScrubber): void {
 
 function scrubNumber(n: number, ctx: ScrubContext): number {
   if (!Number.isFinite(n)) return n;
+  const txt = String(Math.abs(n));
+  if (Number.isInteger(n) && txt.length >= 9 && !/e/i.test(txt)) {
+    // An id-sized integer: an obvious placeholder of the same length.
+    ctx.count("id");
+    return Number(ctx.placeholderDigits(txt)) * Math.sign(n);
+  }
+  const frac = /\.(\d+)$/.exec(txt)?.[1];
+  if (frac !== undefined && frac.length >= 10) {
+    // A full-precision score or rate: a short placeholder value in the same range.
+    ctx.count("number");
+    return Math.sign(n) * (Math.floor(Math.abs(n)) + 0.5);
+  }
   const dec = /^-?\d+\.(\d{1,2})$/.exec(String(n));
   if (dec !== null) {
     // A decimal with cents is an amount: scaled in magnitude like amounts in text.
@@ -93,7 +105,12 @@ function placeholderNumber(digits: number, ctx: ScrubContext): number {
   return Number(`9${"0".repeat(Math.max(0, digits - 2))}1`);
 }
 
+/** Booleans describing the account or its feature cohorts are always false. */
+const ACCOUNT_FLAG_KEY =
+  /^(?:is|has)[A-Z]\w*(?:Customer|Prime|Pinnacle|Business|Addresses|Member|Enabled|Eligible|Profile|Fresh|OutOfArea)\w*$/;
+
 export function scrubJson(value: unknown, ctx: ScrubContext, key: string | null = null): unknown {
+  if (key !== null && typeof value === "boolean" && ACCOUNT_FLAG_KEY.test(key)) return false;
   if (
     key !== null &&
     CARD_DIGITS_KEY.test(key) &&

@@ -176,9 +176,10 @@ const NUM_CLOSE = "\u0003";
 const FREE_VOCAB: readonly string[] = [...VOCAB.short, ...VOCAB.mid, ...VOCAB.long];
 // A run starts and ends with a free word; numbers between free words belong to it.
 // Brackets end a run: "Brand (Toy)" keeps its parenthetical slot for parsers.
+// Numbers touching the run on either side (model numbers, sizes, "74th") belong to it too.
 const FREE_RUN =
   // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
-  /\u0001(?:(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0001)*/gu;
+  /(?:\u0002[^\u0003]*\u0003[^\u0001-\u0003\p{L}\p{N}()[\]]*)*\u0001(?:(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0001)*(?:[^\u0001-\u0003\p{L}\p{N}()[\]]*\u0002[^\u0003]*\u0003)*/gu;
 
 /**
  * Free text keeps nothing of its shape: a run of free words (with the spaces and
@@ -188,30 +189,41 @@ const FREE_RUN =
 function synthFree(out: string, ctx: ScrubContext): string {
   // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
   if (!out.includes(FREE)) return out.replace(/[\u0002\u0003]/g, "");
-  return (
-    out
-      .replace(FREE_RUN, (run: string, offset: number) => {
-        const before = out.slice(Math.max(0, offset - 1), offset);
-        const after = out.slice(offset + run.length, offset + run.length + 1);
-        if (/[\p{L}\p{N}]/u.test(before + after)) {
-          // Glued to a token ("ab<uuid>"): one short word, so no long opaque-looking run forms.
-          ctx.count("word");
-          return ctx.pick(VOCAB.short);
-        }
-        const n = run.split(FREE).length - 1 + (run.split(NUM_OPEN).length - 1);
-        const k = Math.max(1, Math.round(n * (0.6 + ctx.rand())));
-        const words: string[] = [];
-        for (let j = 0; j < k; j++) words.push(ctx.pick(FREE_VOCAB));
-        ctx.count("word", k);
-        const first = words[0] ?? "lorem";
-        if (!/[\p{L}\p{N}]/u.test(out.slice(0, offset)))
-          words[0] = first[0]?.toUpperCase() + first.slice(1);
-        return words.join(" ");
-      })
-      // eslint-disable-next-line no-control-regex -- sentinels marking free words in our own output
-      .replace(/[\u0002\u0003]/g, "")
+  const runs = out.replace(FREE_RUN, (run: string, offset: number) => {
+    const before = out.slice(Math.max(0, offset - 1), offset);
+    const after = out.slice(offset + run.length, offset + run.length + 1);
+    if (/[\p{L}\p{N}]/u.test(before + after)) {
+      // Glued to a token ("ab<uuid>"): one short word, so no long opaque-looking run forms.
+      ctx.count("word");
+      return ctx.pick(VOCAB.short);
+    }
+    const n = run.split(FREE).length - 1 + (run.split(NUM_OPEN).length - 1);
+    const k = Math.max(1, Math.round(n * (0.6 + ctx.rand())));
+    const words: string[] = [];
+    for (let j = 0; j < k; j++) words.push(ctx.pick(FREE_VOCAB));
+    ctx.count("word", k);
+    const first = words[0] ?? "lorem";
+    if (!/[\p{L}\p{N}]/u.test(out.slice(0, offset))) {
+      words[0] = first[0]?.toUpperCase() + first.slice(1);
+    }
+    return words.join(" ");
+  });
+  // Free text: a number left outside every run (behind a bracket, say) is a model number or
+  // a size of the real item; it goes, with the punctuation glued to it.
+  // A bare bracketed number ("Category (9)") is a count the page structure needs: it stays.
+  const dropped = runs.replace(STRAY_NUM, (m: string, at: number) =>
+    runs[at - 1] === "(" && runs[at + m.length] === ")" && BARE_NUM.test(m) ? m : "",
   );
+  // eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
+  const clean = dropped.replace(/[\u0002\u0003]/g, "");
+  return dropped === runs ? clean : clean.replace(/(\S) {2,}(?=\S)/g, "$1 ");
 }
+
+// eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
+const BARE_NUM = /^\u0002[\d,]+\u0003$/;
+const STRAY_NUM =
+  // eslint-disable-next-line no-control-regex -- sentinels marking numbers in our own output
+  /[^\s\p{L}\p{N}()[\]\u0001-\u0003]*\u0002[^\u0003]*\u0003[^\s\p{L}\p{N}()[\]\u0001-\u0003]*/gu;
 
 /**
  * A date shown without a year ("Thu, Mar 9") is read against the fixture's captured_at, so
@@ -366,7 +378,12 @@ function digitsOf(ctx: ScrubContext, numberText: string, standalone: boolean): s
   if (standalone && /^\d$/.test(numberText)) return ctx.permDigit(numberText);
   ctx.count("number");
   // A lower-case exponent letter: "1E" next to a digit run would read as an upper-case id.
-  return numberText.replace(/\d+/g, (run) => ctx.fakeDigits(run)).replace(/E/g, "e");
+  // A run of 9+ digits is an id or a full-precision score: an obvious placeholder.
+  return numberText
+    .replace(/\d+/g, (run) =>
+      run.length >= LONG_RUN ? ctx.placeholderDigits(run) : ctx.fakeDigits(run),
+    )
+    .replace(/E/g, "e");
 }
 
 /** Offset of the first UUID that starts inside s[i, i+len) after i, else len. */
@@ -519,7 +536,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
     }
     if (!tokensOnly && (m = at(R.cardBrand, s, i))) {
       // The owner's card network is account data; one constant brand keeps the shape.
-      out += "Visa";
+      out += "Card";
       ctx.count("card");
       i += m[0].length;
       continue;
@@ -615,7 +632,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
       if ((m = at(R.alnum, s, i))) {
         // A long all-digit run in a structural value is a number id (a customer, session
         // or request id), not structure: same digit count, fresh digits.
-        out += /^\d{7,}$/.test(m[0]) ? ctx.fakeDigits(m[0]) : m[0];
+        out += /^\d{6,}$/.test(m[0]) ? ctx.placeholderDigits(m[0]) : m[0];
         i += m[0].length;
       } else {
         out += s[i];
@@ -641,7 +658,7 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
     }
     if ((m = at(R.ordinal, s, i))) {
       const digits = ctx.fakeDigits(m[1] ?? "");
-      out += digits + ordinal(Number(digits));
+      out += NUM_OPEN + digits + ordinal(Number(digits)) + NUM_CLOSE;
       ctx.count("number");
       i += m[0].length;
       continue;
@@ -691,7 +708,14 @@ export function scrubValue(input: string, ctx: ScrubContext, opts: ValueOptions 
         // present, so it stays. Any other number is marked so one standing between free
         // words is folded into the free run.
         const itemCount = /^\s+items?\b/i.test(s.slice(i + text.length));
-        out += itemCount ? text : NUM_OPEN + digitsOf(ctx, text, standalone) + NUM_CLOSE;
+        // "90-day", "3 months": a number with its unit is structure, never folded away.
+        const unit = /^[\s-]?([A-Za-z]+)/.exec(s.slice(i + text.length))?.[1];
+        const withUnit = unit !== undefined && keepWords && WORDS.has(unit.toLowerCase());
+        out += itemCount
+          ? text
+          : withUnit
+            ? digitsOf(ctx, text, standalone)
+            : NUM_OPEN + digitsOf(ctx, text, standalone) + NUM_CLOSE;
         i += text.length;
       }
       continue;
@@ -865,6 +889,8 @@ function valueFor(
 }
 
 const SUFFIX_KINDS: readonly (LabelKind | null)[] = ["suffix", "rating"];
+/** Digit runs this long are ids or full-precision floats: placeholders, not random digits. */
+const LONG_RUN = 9;
 const COUNT_SUFFIXES = new Set([
   "ratings",
   "rating",
@@ -886,6 +912,14 @@ function scrubSuffixes(core: string, ctx: ScrubContext): string | null {
     const head = core.slice(0, sfx.index);
     if (l.kind === "rating" && /^\s*\d(?:\.\d)?\s*$/.test(head)) {
       return synthRating(ctx, head) + sfx[0];
+    }
+    const range = /^(\s*)(\d+)-(\d+)( of (?:over )?)(\d{1,3}(?:,\d{3})+|\d+)(\s*)$/.exec(head);
+    if (range !== null && COUNT_SUFFIXES.has(l.norm)) {
+      // "1-16 of over 3,000 results": the page range keeps its shape, the total moves.
+      const a = ctx.fakeDigits(range[2] ?? "");
+      const b = ctx.fakeDigits(range[3] ?? "");
+      const total = ctx.scaleAmount(range[5] ?? "", undefined);
+      return `${range[1] ?? ""}${a}-${b}${range[4] ?? ""}${total}${range[6] ?? ""}${sfx[0]}`;
     }
     const count = /^(\s*)(\d{1,3}(?:,\d{3})+|\d+)(\+?\s*)$/.exec(head);
     if (count !== null && COUNT_SUFFIXES.has(l.norm)) {

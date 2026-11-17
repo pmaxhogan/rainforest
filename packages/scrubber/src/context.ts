@@ -102,6 +102,11 @@ export interface ScrubContext {
   /** A lone digit: 0 and 1 unchanged, 2..9 through one random permutation per fixture. */
   permDigit(d: string): string;
   /**
+   * A long digit run (an ad, campaign, log, browse-node or other id): "9" then zeros then a
+   * counter, same length, one per distinct real value. Obviously not data.
+   */
+  placeholderDigits(real: string): string;
+  /**
    * A year used as a FILTER value (order-history "year-NNNN"): moved by its own seeded
    * offset of 3..9 years either way, independent of the date shift, before the normal year
    * shift applies, so the filter year has no fixed relation to the page dates or real years.
@@ -239,9 +244,23 @@ export function createContext(material: string, capturedAt: string): ScrubContex
   }
   if (Math.abs(filterOffset + shiftYears) < 3) filterOffset = shiftYears >= 0 ? 3 : -3;
 
+  const placeholderMaps = new Map<number, Map<string, string>>();
+  const placeholderDigits = (real: string): string => {
+    const len = real.length;
+    const m = placeholderMaps.get(len) ?? new Map<string, string>();
+    placeholderMaps.set(len, m);
+    let v = m.get(real);
+    if (v === undefined) {
+      v = `9${String(m.size + 1).padStart(len - 1, "0")}`;
+      m.set(real, v);
+    }
+    return v;
+  };
+
   return {
     rand,
     int,
+    placeholderDigits,
     filterYear: (y: number) => y + filterOffset,
     scaleAmount,
     permDigit,
@@ -265,7 +284,8 @@ export function createContext(material: string, capturedAt: string): ScrubContex
     fakeEmail: counterMap((n) => `user${n + 1}@${FAKE_RANGES.emailDomain}`),
     fakePhone: counterMap((n) => `555-555-01${pad(n % 100, 2)}`),
     fakeZip: counterMap((n) => FAKE_RANGES.zips[n % FAKE_RANGES.zips.length] as string),
-    fakeName: counterMap((n) => SYNTHETIC.names[n % SYNTHETIC.names.length] as string),
+    // Two names only: how many distinct people a page names is itself account structure.
+    fakeName: counterMap((n) => SYNTHETIC.names[n % 2] as string),
     fakeId: counterMap((n) => `${SYNTHETIC.idPrefix}${pad(n + 1, 4)}`),
     fakeToken: counterMap((n) => `${SYNTHETIC.tokenPrefix}${pad(n + 1, 4)}`),
     fakeUuid: counterMap((n) => `${SYNTHETIC.uuidPrefix}${pad(n + 1, 12)}`),

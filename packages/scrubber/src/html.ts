@@ -24,7 +24,7 @@ import {
 } from "./allowlists.ts";
 import type { ScrubContext } from "./context.ts";
 import { registerHtmlScrubber, scrubJson, stringifySafe } from "./json.ts";
-import { SCRIPT_TYPES } from "./rules.mjs";
+import { EXTENSION_SIGNATURE, EXTENSION_URL, SCRIPT_TYPES } from "./rules.mjs";
 import { scrubText, scrubTokens, type TextMode } from "./text.ts";
 import { scrubSrcset, scrubUrl } from "./url.ts";
 
@@ -133,6 +133,8 @@ function isPixel(el: DomElement): boolean {
 
 const CLASS_KEEP = new Set(PARSER_CLASS_TOKENS);
 const FAKE_IN_CLASS = /FAKE|00000000-0000-4000-8000-/;
+/** Per-request widget ids in class names ("pd_rd_w-Ab3cD"). */
+const WIDGET_ID_CLASS = /^(p[df]_rd_[a-z]+)-[A-Za-z0-9]{3,8}$/;
 const EXPERIMENT_RUN = /([_-])(?=[0-9a-f]*[0-9])[0-9a-f]{4,}(?![0-9a-z])|[0-9]{4,}/gi;
 
 /**
@@ -145,7 +147,9 @@ function placeholderClasses(value: string): string {
     .map((c) =>
       CLASS_KEEP.has(c) || FAKE_IN_CLASS.test(c)
         ? c
-        : c.replace(EXPERIMENT_RUN, (_m, sep: string | undefined) => `${sep ?? ""}0000`),
+        : WIDGET_ID_CLASS.test(c)
+          ? c.replace(WIDGET_ID_CLASS, "$1-rfwid")
+          : c.replace(EXPERIMENT_RUN, (_m, sep: string | undefined) => `${sep ?? ""}0000`),
     )
     .join("");
 }
@@ -369,6 +373,42 @@ const YEAR = /(?:^|\D)(?:19|20)\d{2}(?:\D|$)/;
  * says how long the account has existed. Keep at most 3 year options: the selected one and
  * its neighbours; their years then shift like every other date.
  */
+/**
+ * Remove DOM a browser extension injected (see EXTENSION_SIGNATURE): it describes the
+ * owner's browser, not the site. Always on.
+ */
+function stripInjected(root: DomNode, ctx: ScrubContext): void {
+  for (const el of Array.from((root as unknown as Queryable).querySelectorAll("*"))) {
+    const e = el as unknown as DomElement;
+    if (e.parentNode === null) continue;
+    const sig = `${e.localName} ${e.getAttribute("id") ?? ""} ${e.getAttribute("class") ?? ""}`;
+    const url = attrsOf(e).some((a) => EXTENSION_URL.test(a.value));
+    if (EXTENSION_SIGNATURE.test(sig) || url) {
+      e.parentNode.removeChild(e);
+      ctx.count("element_dropped");
+    }
+  }
+}
+
+const ACCOUNT_CLASS = /rufus|alexa|prime|business|pinnacle|weblab|aui_|bw_|dark_mode|cohort/i;
+
+/** Body and html classes that describe the account's features or cohorts. */
+function stripAccountClasses(root: DomNode): void {
+  const q = root as unknown as Queryable;
+  const els = [root, ...Array.from(q.querySelectorAll("body"))] as unknown as DomElement[];
+  for (const e of els) {
+    const c = e.getAttribute?.("class");
+    if (c === null || c === undefined) continue;
+    e.setAttribute(
+      "class",
+      c
+        .split(/\s+/)
+        .filter((t) => t !== "" && !ACCOUNT_CLASS.test(t))
+        .join(" "),
+    );
+  }
+}
+
 function trimYearOptions(root: DomNode, ctx: ScrubContext): void {
   for (const sel of Array.from((root as unknown as Queryable).querySelectorAll("select"))) {
     const opts = Array.from(
@@ -447,29 +487,50 @@ const INLINE = new Set(["span", "b", "i", "em", "strong", "small", "font"]);
  * Returns true when it handled the children.
  */
 function scrubSplitToken(el: DomNode, ctx: ScrubContext, mode: TextMode): boolean {
+  mergeText(el);
   const kids = children(el).filter((c) => !(c.nodeType === TEXT && (c.data ?? "").trim() === ""));
   if (kids.length < 2) return false;
+  // Pieces are the element's own text nodes and the single text of inline children; a
+  // <wbr> between them is only a break opportunity.
   const pieces: DomNode[] = [];
+  const inlines: DomElement[] = [];
   for (const k of kids) {
-    if (k.nodeType !== ELEMENT || !INLINE.has(asElement(k).localName.toLowerCase())) return false;
+    if (k.nodeType === TEXT) {
+      pieces.push(k);
+      continue;
+    }
+    if (k.nodeType !== ELEMENT) return false;
+    const tag = asElement(k).localName.toLowerCase();
+    if (tag === "wbr") continue;
+    if (!INLINE.has(tag)) return false;
     const inner = children(k);
     if (inner.length !== 1 || inner[0]?.nodeType !== TEXT) return false;
     pieces.push(inner[0]);
+    inlines.push(asElement(k));
   }
+  if (pieces.length < 2) return false;
   const parts = pieces.map((p) => (p.data ?? "").trim());
   const joined = parts.join("");
   // Codes only (a digit somewhere): split words and names keep the normal per-node rules.
-  if (!/^[A-Za-z0-9]{6,}$/.test(joined) || !/[0-9]/.test(joined) || parts.some((p) => p === "")) {
+  if (!/^[A-Za-z0-9]{4,}$/.test(joined) || !/[0-9]/.test(joined) || parts.some((p) => p === "")) {
     return false;
   }
   const out = scrubText(joined, ctx, mode);
   let at = 0;
   pieces.forEach((p, k) => {
     const len = out.length === joined.length ? (parts[k] ?? "").length : k === 0 ? out.length : 0;
-    p.data = out.slice(at, at + len);
+    const raw = p.data ?? "";
+    const lead = /^\s*/.exec(raw)?.[0] ?? "";
+    const trail = raw.trim() === "" ? "" : (/\s*$/.exec(raw)?.[0] ?? "");
+    p.data = lead + out.slice(at, at + len) + trail;
     at += len;
   });
-  for (const k of kids) scrubAttributes(asElement(k), asElement(k).localName.toLowerCase(), ctx);
+  for (const k of inlines) scrubAttributes(k, k.localName.toLowerCase(), ctx);
+  for (const k of kids) {
+    if (k.nodeType === ELEMENT && asElement(k).localName.toLowerCase() === "wbr") {
+      scrubAttributes(asElement(k), "wbr", ctx);
+    }
+  }
   ctx.count("text_node");
   return true;
 }
@@ -576,6 +637,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   // The root element is not visited by walk(): its attributes need the same pass.
   if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
   const reduce = opts.reduce === true;
+  stripInjected(root, ctx);
   if (reduce) reduceTree(root, ctx);
   trimYearOptions(root, ctx);
   trimPagination(root, ctx);
@@ -591,6 +653,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
     docIds = outerIds;
   }
   alignPrices(root);
+  stripAccountClasses(root);
   relabelPagination(root);
   alignStars(root, ctx);
   if (isDoc) return `<!DOCTYPE html>${serialize(root)}`;
