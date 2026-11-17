@@ -212,7 +212,7 @@ export const setCartQuantity: Flow = async (args, ctx) => {
       const expectedNow = current + (up ? i : -i);
       await guardedClick(page, button, {
         what: up ? "the line's increase-quantity control" : "the line's decrease-quantity control",
-        label: up ? /^Increase quantity by one\b/i : /^Decrease quantity by one\b/i,
+        label: up ? /\bIncrease quantity by one\b/i : /\bDecrease quantity by one\b/i,
       });
       // The stepper records the applied value on the line; wait for it before the next click.
       const wanted = String(expectedNow + (up ? 1 : -1));
