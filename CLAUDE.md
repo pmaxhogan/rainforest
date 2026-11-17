@@ -9,8 +9,9 @@ and the quiet Playwright extension fork.
 ## Commands
 
 - `npm ci` - install
-- `npm run check` - everything CI runs: typecheck, eslint, prettier, ASCII check, tests with coverage
-- `npm test` - vitest with coverage
+- `npm run check` - everything CI runs: typecheck, eslint, prettier, ASCII check, fixture allowlist gate,
+  tests with coverage, and the Worker suite (`npm run test:worker`, which runs inside workerd)
+- `npm test` - vitest with coverage (excludes `packages/worker`)
 - `npm run format` - prettier --write
 - `node scripts/package-daemon.mjs [--version v] [--out dir]` - build the release tarball + manifest (CI signs and publishes via `.github/workflows/release.yml`; `scripts/verify-release.mjs <dir>` checks one)
 - `node scripts/setup-hooks.mjs` - enable the git hooks in a fresh clone (required before committing)
@@ -20,9 +21,9 @@ and the quiet Playwright extension fork.
 - `packages/core` - tool registry, wire protocol, error taxonomy, capture/parser/fixture contracts.
   Every other package keys on it. Change it deliberately.
 - `packages/parsers` - pure `(capture) -> data` functions. No I/O, no clock, no randomness.
-- `packages/daemon` - `rainforestd`: hub client, browser controller, policy rails, flows, updater, CLI.
+- `packages/browser` - broker clients, extension-mode attach, URL policy and network guard, pacing, session.
+- `packages/daemon` - `rainforestd`: hub client, browser controller, flows, updater, service install, CLI.
 - `packages/worker` - Cloudflare Worker: OAuth, consent, pairing, Hub Durable Object, admin page.
-- `packages/mock-site` - deterministic fake storefront serving fixtures, with real cart/list state.
 - `packages/scrubber` - capture -> synthetic fixture, plus the privacy gates.
 - `fixtures/` - synthetic only. `docs/` - ARCHITECTURE, SECURITY, SETUP, PRIVACY, TOOLS.
 
