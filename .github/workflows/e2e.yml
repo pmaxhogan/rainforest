@@ -1,0 +1,64 @@
+name: e2e
+
+# End-to-end suite against the mock storefront (packages/mock-site): a real Chromium with
+# the quiet Playwright extension fork, the daemon's embedded broker on the fork's fixed
+# port, and the real browser session and flows. The real site is never contacted: the
+# test browser maps the storefront hostname to the loopback mock and fails every other
+# name. Informational only: not a required check and not part of the release gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The extension fork is built from this pinned public commit (bump deliberately).
+  EXTENSION_REPO: pmaxhogan/playwright-extension-quiet
+  EXTENSION_SHA: f51e147b759a1fd09c0dc382871412e42072d4f0
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright's Chromium (honors --load-extension)
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the extension fork at the pinned commit
+        run: |
+          git init -q "$RUNNER_TEMP/ext"
+          cd "$RUNNER_TEMP/ext"
+          git remote add origin "https://github.com/${EXTENSION_REPO}.git"
+          git fetch -q --depth 1 origin "$EXTENSION_SHA"
+          git checkout -q FETCH_HEAD
+          npm ci
+          scripts/build.sh
+          test -f dist/manifest.json
+
+      # The fork dials a fixed broker port; on a fresh runner nothing holds it.
+      - name: Check the broker port is free
+        run: "! (ss -ltn | grep -q ':47117 ')"
+
+      # New headless mode loads extensions, so no display is needed. To debug headed, set
+      # RAINFOREST_E2E_HEADED=1 and wrap the command in: xvfb-run -a -s "-screen 0 1920x1200x24"
+      - name: E2E
+        env:
+          RAINFOREST_E2E_EXTENSION_DIR: ${{ runner.temp }}/ext/dist
+          RAINFOREST_E2E_REQUIRE: "1"
+        run: npm run test:e2e
