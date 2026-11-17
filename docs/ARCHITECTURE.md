@@ -366,7 +366,7 @@ gets half of what one browser was seen to tolerate).
 - One page load at a time per computer (the session queue).
 - A random gap of 5 to 11 seconds between loads.
 - Per page-type caps per rolling hour and per rolling day, and a cap across all types together
-  (15 per hour, 100 per day); the per-type table is in docs/TOOLS.md. Fragments count as loads.
+  (15 per hour, 200 per day); the per-type table is in docs/TOOLS.md. Fragments count as loads.
 - A burst cap: at most 6 loads in any 10 minutes, across all types.
 - A cool-down of 60 minutes after any captcha, sign-in prompt, checkpoint or other human-only
   page, and of 10 minutes when Amazon throttles. While cooling down, the browser refuses to attach

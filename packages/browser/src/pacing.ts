@@ -36,7 +36,9 @@ export const MAX_GAP_MS = 11_000;
 /** Cap across ALL page types together: per-type caps alone add up to too much traffic. */
 // Per device. An account is usually driven from two computers, and Amazon counts the
 // account, so each device gets half of what one browser was seen to tolerate.
-export const GLOBAL_CAPS: Caps = { perHour: 15, perDay: 100 };
+// The hourly and burst caps are what the observed friction tracked; the daily cap is a
+// backstop only.
+export const GLOBAL_CAPS: Caps = { perHour: 15, perDay: 200 };
 /**
  * Burst cap across all page types. Measured: about 63 loads in 47 minutes, 13 of them in
  * the last 10, drew a "continue shopping" checkpoint. These limits stay far below that.

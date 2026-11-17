@@ -118,7 +118,7 @@ the budget, and return `throttled` (`retry_after_s` 300) before touching anythin
 | `cart`          | 15       | 120     | `get_cart` and the cart write tools                                                                                                                                    |
 | `list`          | 12       | 80      | `list_lists`, `get_list` and the list write tools                                                                                                                      |
 | `price_history` | 6        | 30      | the CamelCamelCamel source of `get_price_history`                                                                                                                      |
-| all classes     | 15       | 100     | every load above together (and at most 6 in any 10 minutes)                                                                                                            |
+| all classes     | 15       | 200     | every load above together (and at most 6 in any 10 minutes)                                                                                                            |
 
 `show_on_screen` has class `none`: it does not count against any budget. The hub tools have no
 class. The class in each tool's entry is the registry's hint; the code decides by the page it
