@@ -20,6 +20,8 @@ const PING_INTERVAL_MS = 30_000;
 const PONG_TIMEOUT_MS = 75_000;
 const BACKOFF_MIN_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
+/** How long a sent result stays eligible for a repeat after a reconnect (the hub's call wait). */
+const RESULT_RESEND_MS = 240_000;
 const MAX_FRAME_BYTES = 256 * 1024;
 
 export function hubWebSocketUrl(hubUrl: string): string {
@@ -58,6 +60,22 @@ export function createHubClient(deps: HubClientDeps, options: HubClientOptions =
     } catch {
       return false;
     }
+  };
+
+  // Results are kept for a short while after they are sent. A connection can die without
+  // the socket noticing at once, and a result written into it is then lost; after the next
+  // welcome every recent result goes out again. The hub ignores a result for a call that is
+  // no longer pending, so a repeat is harmless.
+  let recentResults: { result: DaemonResult; at: number }[] = [];
+  const rememberResult = (result: DaemonResult): void => {
+    const now = Date.now();
+    recentResults = recentResults.filter((r) => now - r.at < RESULT_RESEND_MS).slice(-19);
+    recentResults.push({ result, at: now });
+  };
+  const resendRecentResults = (): void => {
+    const now = Date.now();
+    recentResults = recentResults.filter((r) => now - r.at < RESULT_RESEND_MS);
+    for (const r of recentResults) send(r.result);
   };
 
   const setConnected = (value: boolean): void => {
@@ -146,6 +164,7 @@ export function createHubClient(deps: HubClientDeps, options: HubClientOptions =
           backoff = BACKOFF_MIN_MS;
           setConnected(true);
           log.info("connected to the hub");
+          resendRecentResults();
           deps.onWelcome?.({ protocol: msg.protocol, min_daemon_version: msg.min_daemon_version });
           break;
         case "call":
@@ -195,7 +214,10 @@ export function createHubClient(deps: HubClientDeps, options: HubClientOptions =
       cleanup();
       ws?.close(1000, "shutdown");
     },
-    sendResult: (result: DaemonResult) => connected && send(result),
+    sendResult: (result: DaemonResult) => {
+      rememberResult(result);
+      return connected && send(result);
+    },
     sendPresence: (presence: Presence) => connected && send({ type: "presence", presence }),
     isConnected: () => connected,
   };
