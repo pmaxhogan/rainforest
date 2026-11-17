@@ -421,7 +421,12 @@ export class BrowserSession {
     this.#options.onPacingChange?.();
     throw new RfError("needs_human", message, {
       kind,
-      details: { cooling_down_until: this.#options.pacer.state.coolingDownUntil },
+      details: {
+        cooling_down_until: this.#options.pacer.state.coolingDownUntil,
+        // Which page was being opened when it happened, so the owner can open the same
+        // page in a normal tab and clear the challenge there.
+        while_opening: pathOnly(this.#lastUrl),
+      },
     });
   }
 
