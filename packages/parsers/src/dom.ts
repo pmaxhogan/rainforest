@@ -133,10 +133,12 @@ function normalizeSource(html: string): string {
  * outside `body`.
  */
 export function parseDocument(html: string): DomDocument {
-  return new DOMParser().parseFromString(
-    normalizeSource(html),
-    "text/html",
-  ) as unknown as DomDocument;
+  const parse = (src: string): DomDocument =>
+    new DOMParser().parseFromString(src, "text/html") as unknown as DomDocument;
+  const doc = parse(normalizeSource(html));
+  // "<html" inside a script or attribute can fool the source check; verify the result.
+  if (doc.documentElement?.localName === "html") return doc;
+  return parse(`<!DOCTYPE html><html><head></head><body>${html}</body></html>`);
 }
 
 export interface ParsedCapture {
@@ -354,12 +356,17 @@ function escapeRe(s: string): string {
 
 const SYMBOL_RE = CURRENCY_TOKENS.map(([t]) => escapeRe(t)).join("|");
 const NUMBER_RE = "(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.(\\d{1,2}))?";
+/**
+ * A minus sign counts only when it touches the amount and does not follow a word or digit,
+ * so "Widget - $5" and the "$10-$20" range separator stay positive.
+ */
+const SIGN_RE = "(?:(?<![\\w.])([-\\u2212]))?";
 /** sign? symbol number  |  sign? number code */
 const MONEY_RE = new RegExp(
-  `([-\\u2212])?\\s*(${SYMBOL_RE})\\s*${NUMBER_RE}|([-\\u2212])?${NUMBER_RE}\\s*(USD|CAD|GBP|EUR)\\b`,
+  `${SIGN_RE}(${SYMBOL_RE})\\s*${NUMBER_RE}|${SIGN_RE}${NUMBER_RE}\\s*(USD|CAD|GBP|EUR)\\b`,
   "g",
 );
-const BARE_RE = new RegExp(`([-\\u2212])?${NUMBER_RE}`, "g");
+const BARE_RE = new RegExp(`${SIGN_RE}${NUMBER_RE}`, "g");
 
 function currencyOf(token: string): string {
   for (const [t, code] of CURRENCY_TOKENS) if (t === token) return code;
@@ -438,25 +445,27 @@ export function parseMoneyRange(s: string | null | undefined): MoneyRange | unde
 }
 
 /**
- * Money from an Amazon-style price element (`.a-price`). Prefers the offscreen text
- * (`.a-offscreen`, read even when it carries the hidden marker, because it exists only for
- * screen readers), then the split whole / fraction markup, then the element's visible text.
- * Returns undefined when the price element itself is not visible.
+ * Money from an Amazon-style price element (`.a-price`) or a container of them. Prefers the
+ * offscreen text (`.a-offscreen`, read even when that node carries the hidden marker,
+ * because it exists only for screen readers, but only inside a visible `.a-price`), then the
+ * split whole / fraction markup, then the element's visible text. Returns undefined when the
+ * element itself is not visible.
  */
 export function moneyFromPriceElement(el: DomElement | null | undefined): Money | undefined {
   if (el == null || !visible(el)) return undefined;
-  const offscreen = el.querySelector(".a-offscreen");
-  const fromOffscreen = parseMoney(collapse(offscreen?.textContent ?? ""));
-  if (fromOffscreen !== undefined) return fromOffscreen;
-  const wholeEl = el.querySelector(".a-price-whole");
-  if (wholeEl !== null) {
+  // The marker is ignored on the offscreen node itself only; its ancestors must be visible.
+  for (const off of Array.from(el.querySelectorAll(".a-offscreen"))) {
+    if (off.parentElement !== null && !visible(off.parentElement)) continue;
+    const m = parseMoney(collapse(off.textContent ?? ""));
+    if (m !== undefined) return m;
+  }
+  const wholeEl = q(el, ".a-price-whole");
+  if (wholeEl !== undefined) {
     const whole = (wholeEl.textContent ?? "").replace(/[^0-9]/g, "");
     if (whole !== "") {
-      const fraction = (el.querySelector(".a-price-fraction")?.textContent ?? "").replace(
-        /[^0-9]/g,
-        "",
-      );
-      const symbol = collapse(el.querySelector(".a-price-symbol")?.textContent ?? "") || "$";
+      const scope = wholeEl.closest(".a-price") ?? el;
+      const fraction = (q(scope, ".a-price-fraction")?.textContent ?? "").replace(/[^0-9]/g, "");
+      const symbol = collapse(q(scope, ".a-price-symbol")?.textContent ?? "") || "$";
       const frac = fraction === "" ? "00" : fraction.slice(0, 2);
       return {
         amount: Number(`${whole}.${frac}`),
@@ -477,7 +486,9 @@ export interface Count {
   raw: string;
 }
 
-const COUNT_RE = /(over |more than |about |~)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*([KkMm])?(\+)?/i;
+/** The K / M suffix must touch the number and end the word, so "12 months" stays 12. */
+const COUNT_RE =
+  /(over |more than |about |~)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)([KkMm](?![a-zA-Z]))?(\+)?/i;
 
 /** Count with its precision: "1,234 ratings" -> 1234 exact, "2K+ bought" -> 2000 approximate. */
 export function parseCountDetail(s: string | null | undefined): Count | undefined {

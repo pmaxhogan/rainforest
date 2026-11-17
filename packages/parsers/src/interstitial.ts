@@ -2,10 +2,12 @@
  * Interstitial classifier: is this capture a captcha, a sign-in wall, a throttle page, a
  * "dog" not-found page or some other non-content page instead of what was asked for?
  *
- * Each kind has several independent signals. A strong signal (URL path, form or field id)
- * weighs 2, a weak one (title or body phrase) weighs 1, and a kind needs a score of at least
- * 2, so one stray phrase in a review ("something went wrong") never trips it. Signals are
- * leads from public knowledge; add or reweigh them in INTERSTITIAL_SIGNALS once real
+ * Each kind has several independent signals. A strong signal (form or field id, sign-in URL)
+ * weighs 2, a weak one (title, body phrase, generic URL) weighs 1, and a kind needs a score
+ * of at least 2, so one stray phrase never trips it. Body phrases are additionally only
+ * consulted on short pages (SHORT_PAGE_CHARS of visible text): interstitials are small, and
+ * a long content page quoting "something went wrong" in a review must never match. Signals
+ * are leads from public knowledge; add or reweigh them in INTERSTITIAL_SIGNALS once real
  * captures exist. Only visible text is consulted.
  */
 import type { Capture } from "@rainforest/core";
@@ -61,6 +63,9 @@ export interface Interstitial {
 /** Minimum score for a kind to win. */
 export const INTERSTITIAL_THRESHOLD = 2;
 
+/** Body-phrase signals only fire when the page has at most this much visible text. */
+export const SHORT_PAGE_CHARS = 5000;
+
 const urlHas =
   (re: RegExp) =>
   (ctx: SignalContext): boolean =>
@@ -72,7 +77,7 @@ const titleHas =
 const textHas =
   (re: RegExp) =>
   (ctx: SignalContext): boolean =>
-    re.test(ctx.text);
+    ctx.text.length <= SHORT_PAGE_CHARS && re.test(ctx.text);
 const exists =
   (selector: string) =>
   (ctx: SignalContext): boolean =>
@@ -104,7 +109,7 @@ const CAPTCHA_FORM = /\/errors\/validatecaptcha/i;
 
 export const INTERSTITIAL_SIGNALS: readonly InterstitialSignal[] = [
   // captcha
-  { kind: "captcha", name: "url /errors/validateCaptcha", weight: 2, test: urlHas(CAPTCHA_FORM) },
+  { kind: "captcha", name: "url /errors/validateCaptcha", weight: 1, test: urlHas(CAPTCHA_FORM) },
   {
     kind: "captcha",
     name: "field #captchacharacters",
@@ -160,7 +165,7 @@ export const INTERSTITIAL_SIGNALS: readonly InterstitialSignal[] = [
   {
     kind: "soft_challenge",
     name: "text 'click the button below to continue shopping'",
-    weight: 2,
+    weight: 1,
     test: textHas(/click the button below to continue shopping/i),
   },
   {
@@ -180,7 +185,7 @@ export const INTERSTITIAL_SIGNALS: readonly InterstitialSignal[] = [
   {
     kind: "throttled",
     name: "text 'too many requests'",
-    weight: 2,
+    weight: 1,
     test: textHas(/too many requests|request was throttled|rate exceeded/i),
   },
   {
@@ -212,7 +217,7 @@ export const INTERSTITIAL_SIGNALS: readonly InterstitialSignal[] = [
   {
     kind: "not_found",
     name: "text 'not a functioning page'",
-    weight: 2,
+    weight: 1,
     test: textHas(/not a functioning page on our site/i),
   },
   {

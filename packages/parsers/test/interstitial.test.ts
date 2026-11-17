@@ -51,12 +51,26 @@ describe("classifyInterstitial", () => {
       <div id=dp><h1 id=title>Fake Widget Deluxe</h1>
       <div id=price>$12.34</div>
       <div id=reviews><p>Invented review: the box said sorry! something went wrong, but it works.</p>
-      <p>Looking for something? This fake widget is it.</p></div>
+      <p>Looking for something? This fake widget is it.</p>
+      <p>Too many requests from my kids; not a functioning page on our site, they joked.</p>
+      <p>Click the button below to continue shopping, said nobody. We're sorry we waited.</p></div>
       <form action="/cart/add"><input type=submit value="Add to Cart"></form>
-      ${"<p>Filler invented description text for a normal product page.</p>".repeat(8)}
+      ${"<p>Filler invented description text for a normal product page.</p>".repeat(100)}
       </div>`,
     );
     expect(classifyInterstitial(normal)).toBeNull();
+  });
+
+  it("does not let one body phrase trip a short page", () => {
+    for (const phrase of [
+      "Too many requests.",
+      "This is not a functioning page on our site.",
+      "Click the button below to continue shopping.",
+      "Sorry! Something went wrong.",
+      "Looking for something?",
+    ]) {
+      expect(classifyInterstitial(cap(`${NAV}<p>${phrase}</p>`))).toBeNull();
+    }
   });
 
   it("detects a captcha", () => {
@@ -71,8 +85,12 @@ describe("classifyInterstitial", () => {
     expect(r?.kind).toBe("captcha");
     expect(r?.signals).toContain("field #captchacharacters");
     expect(r?.evidence.startsWith("captcha: ")).toBe(true);
+    const urlOnly = cap("<p>x</p>", { url: `${HOST}/errors/validateCaptcha?amzn=fake` });
+    expect(classifyInterstitial(urlOnly)).toBeNull();
     const byUrl = classifyInterstitial(
-      cap("<p>x</p>", { url: `${HOST}/errors/validateCaptcha?amzn=fake` }),
+      cap(`<form action="/errors/validateCaptcha"><input id=other></form>`, {
+        url: `${HOST}/errors/validateCaptcha?amzn=fake`,
+      }),
     );
     expect(byUrl?.kind).toBe("captcha");
   });
@@ -110,7 +128,15 @@ describe("classifyInterstitial", () => {
       ),
     );
     expect(r?.kind).toBe("soft_challenge");
-    expect(r?.score).toBe(4);
+    expect(r?.score).toBe(3);
+    // Served under the captcha path it still wins over captcha.
+    const atPath = classifyInterstitial(
+      cap(
+        `<h4>Click the button below to continue shopping</h4><form action="/errors/validateCaptcha"><button type=submit>Continue shopping</button></form>`,
+        { url: `${HOST}/errors/validateCaptcha` },
+      ),
+    );
+    expect(atPath?.kind).toBe("soft_challenge");
   });
 
   it("detects throttling", () => {

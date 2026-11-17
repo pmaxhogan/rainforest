@@ -50,6 +50,9 @@ describe("parseDocument", () => {
     expect(text(a.body)).toBe("q");
     const b = parseDocument("<html><p>nobody</p></html>");
     expect(text(b.body)).toBe("nobody");
+    const s = parseDocument('<script>var t = "<html>";</script><p>fragment with html text</p>');
+    expect(s.documentElement.localName).toBe("html");
+    expect(text(s.body)).toBe("fragment with html text");
     const c = parseDocument("<html lang=en><head><title>T</title></head><p>after head</p>");
     expect(c.title).toBe("T");
     expect(text(c.body)).toBe("after head");
@@ -220,6 +223,14 @@ describe("money", () => {
 
   it("finds every amount", () => {
     expect(findMoney("was $20.00 now $15.00").map((m) => m.amount)).toEqual([20, 15]);
+    expect(findMoney("$10.99 - $24.99").map((m) => m.amount)).toEqual([10.99, 24.99]);
+    expect(findMoney("$10-$20").map((m) => m.amount)).toEqual([10, 20]);
+    expect(parseMoney("Fake widget - $12.34")?.amount).toBe(12.34);
+    expect(parseMoney("Fake widget -$12.34")?.amount).toBe(-12.34);
+    expect(parseMoney("x-$1")?.amount).toBe(1);
+    expect(findMoney("total -3.50 or 2", { defaultCurrency: "USD" }).map((m) => m.amount)).toEqual([
+      -3.5, 2,
+    ]);
   });
 
   it("parses ranges", () => {
@@ -269,6 +280,27 @@ describe("money", () => {
     expect(moneyFromPriceElement(d.querySelector("#p7"))).toBeUndefined();
     expect(moneyFromPriceElement(null)).toBeUndefined();
   });
+
+  it("picks the visible price inside a container", () => {
+    const d = parseDocument(
+      page(`
+      <div id=c1>
+        <span class="a-price" data-rf-hidden="1"><span class="a-offscreen">$1.11</span></span>
+        <span class="a-price"><span class="a-offscreen">$2.22</span></span>
+      </div>
+      <div id=c2>
+        <span class="a-price" data-rf-hidden="1"><span class="a-price-symbol">$</span><span class="a-price-whole">3</span><span class="a-price-fraction">33</span></span>
+        <span class="a-price"><span class="a-price-symbol">&pound;</span><span class="a-price-whole">4</span><span class="a-price-fraction">44</span></span>
+      </div>
+    `),
+    );
+    expect(moneyFromPriceElement(d.querySelector("#c1"))?.amount).toBe(2.22);
+    expect(moneyFromPriceElement(d.querySelector("#c2"))).toEqual({
+      amount: 4.44,
+      currency: "GBP",
+      raw: "\u00a34.44",
+    });
+  });
 });
 
 describe("counts and ratings", () => {
@@ -286,6 +318,11 @@ describe("counts and ratings", () => {
     expect(parseCountDetail("over 10,000 sold")).toMatchObject({ value: 10000, approximate: true });
     expect(parseCountDetail("50+ bought")).toMatchObject({ value: 50, approximate: true });
     expect(parseCountDetail("12 reviews")).toMatchObject({ value: 12, approximate: false });
+    expect(parseCount("12 months")).toBe(12);
+    expect(parseCount("3 more offers")).toBe(3);
+    expect(parseCount("1,234 members")).toBe(1234);
+    expect(parseCount("5 kits")).toBe(5);
+    expect(parseCount("4Kids pack")).toBe(4);
   });
 
   it("parses ratings", () => {
