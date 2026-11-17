@@ -32,8 +32,21 @@ export function handoffUrl(target: unknown): string {
   throw new RfError("invalid_arguments", "unknown hand-off target");
 }
 
+/** Hand-offs open visible tabs, so they are capped: this many per window. */
+export const HANDOFF_CAP = { opens: 6, windowMs: 10 * 60_000 } as const;
+const recentOpens: number[] = [];
+
 export const showOnScreen: Flow = async (args, ctx) => {
   const url = handoffUrl(args.target);
+  const now = ctx.now();
+  while (recentOpens.length > 0 && now - recentOpens[0]! >= HANDOFF_CAP.windowMs)
+    recentOpens.shift();
+  if (recentOpens.length >= HANDOFF_CAP.opens) {
+    throw new RfError("throttled", "too many tabs were opened recently; try again later", {
+      retry_after_s: Math.ceil((recentOpens[0]! + HANDOFF_CAP.windowMs - now) / 1000),
+    });
+  }
+  recentOpens.push(now);
   ctx.browser.showOnScreen(url);
   return {
     changed: true,

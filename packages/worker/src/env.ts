@@ -6,6 +6,7 @@ export interface Env {
   HUB: DurableObjectNamespace<Hub>;
   RL_STRICT: RateLimit;
   RL_PUBLIC: RateLimit;
+  RL_MCP: RateLimit;
   /** Injected by the OAuth provider for the default handler. */
   OAUTH_PROVIDER: OAuthHelpers;
 

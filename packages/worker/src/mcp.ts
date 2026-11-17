@@ -92,6 +92,18 @@ async function callTool(
   name: string,
   rawArgs: unknown,
 ): Promise<{ content: ContentBlock[]; isError?: boolean }> {
+  // A grant gets a generous but finite call rate; a limiter failure refuses.
+  const overLimit = await env.RL_MCP.limit({ key: props.grantKey }).then(
+    (r) => !r.success,
+    () => true,
+  );
+  if (overLimit) {
+    return errorContent({
+      code: "throttled",
+      message: "too many tool calls; slow down",
+      retry_after_s: 60,
+    });
+  }
   const def = getTool(name);
   // Calls refused before they reach the Hub are audited too: every call writes a row.
   const auditRefusal = (tool: string): Promise<void> =>
