@@ -1,0 +1,336 @@
+{
+  "data": {
+    "can_create": true,
+    "create_list_path": "/hz/wishlist/Est",
+    "help_link": {
+      "href": "/gp/help/customer/display.html/ref=rf",
+      "text": "List help"
+    },
+    "lists": [
+      {
+        "is_default": true,
+        "label": "Default List",
+        "list_id": "FAKETOKEN0003",
+        "list_kind": "wish_list",
+        "name": "List Two",
+        "privacy": "private",
+        "privacy_text": "Private",
+        "selected": true,
+        "shared_with_me": false,
+        "url_path": "/hz/wishlist/ls/FAKETOKEN0003"
+      },
+      {
+        "is_default": false,
+        "list_id": "FAKEID0003",
+        "list_kind": "unknown",
+        "name": "List Three",
+        "privacy": "private",
+        "privacy_text": "Private",
+        "selected": false,
+        "shared_with_me": false,
+        "url_path": "/gp/Aliquam-id-semper-dolor"
+      }
+    ],
+    "selected_list": {
+      "filter": {
+        "label": "Show",
+        "options": [
+          {
+            "label": "Unpurchased",
+            "selected": true,
+            "value": "unpurchased"
+          },
+          {
+            "label": "Purchased",
+            "selected": false,
+            "value": "purchased"
+          },
+          {
+            "label": "Amet",
+            "selected": false,
+            "value": "Ad"
+          }
+        ],
+        "param": "filter",
+        "selected_label": "Unpurchased",
+        "selected_value": "unpurchased"
+      },
+      "has_search": true,
+      "is_empty": false,
+      "items": [
+        {
+          "actions": [
+            "Add to Cart",
+            "Add a note",
+            "Move",
+            "Delete"
+          ],
+          "added": {
+            "iso": "2022-11-11",
+            "raw": "Item added November 11, 2022"
+          },
+          "asin": "B0FAKE0000",
+          "brand": "Imperdiet augue dolor varius pulvinar ac tempor",
+          "byline": "Imperdiet augue dolor varius pulvinar ac tempor (gravida)",
+          "byline_qualifier": "gravida",
+          "can_add_to_cart": true,
+          "external_id": "ASIN:B0FAKE0000|FAKEID0002",
+          "image_url": "https://images.example.com/placeholder.png",
+          "is_purchased": false,
+          "item_id": "FAKETOKEN0004",
+          "position": 1,
+          "price": {
+            "amount": 512,
+            "currency": "USD",
+            "raw": "$512.00"
+          },
+          "price_hint": 993.79,
+          "primary_action": "Add to Cart",
+          "prime": true,
+          "rating": {
+            "out_of": 5,
+            "value": 4.7
+          },
+          "review_count": 413,
+          "source": "page",
+          "title": "Magna posuere tellus vel molestie ac sodales est",
+          "url_path": "/dp/B0FAKE0000/"
+        },
+        {
+          "actions": [
+            "Add to Cart",
+            "Add a note",
+            "Move",
+            "Delete"
+          ],
+          "added": {
+            "iso": "2022-11-11",
+            "raw": "Item added November 11, 2022"
+          },
+          "asin": "B0FAKE0001",
+          "brand": "Lacus dolor ut tincidunt ad",
+          "byline": "Lacus dolor ut tincidunt ad",
+          "can_add_to_cart": true,
+          "external_id": "ASIN:B0FAKE0001|FAKEID0002",
+          "image_url": "https://images.example.com/placeholder.png",
+          "is_purchased": false,
+          "item_id": "FAKETOKEN0008",
+          "position": 2,
+          "price": {
+            "amount": 209.89,
+            "currency": "USD",
+            "raw": "$209.89"
+          },
+          "price_hint": 568.83,
+          "primary_action": "Add to Cart",
+          "prime": true,
+          "source": "page",
+          "title": "Qui amet tellus ipsum tincidunt imperdiet vel pharetra",
+          "url_path": "/dp/B0FAKE0001/"
+        },
+        {
+          "actions": [
+            "See all buying options",
+            "Add a note",
+            "Move",
+            "Delete"
+          ],
+          "added": {
+            "iso": "2022-11-11",
+            "raw": "Item added November 11, 2022"
+          },
+          "asin": "B0FAKE0002",
+          "brand": "Lacus dolor ut tincidunt ad",
+          "byline": "Lacus dolor ut tincidunt ad",
+          "can_add_to_cart": false,
+          "external_id": "ASIN:B0FAKE0002|FAKEID0002",
+          "image_url": "https://images.example.com/placeholder.png",
+          "is_purchased": false,
+          "item_id": "FAKETOKEN0010",
+          "position": 3,
+          "price_hint": 226.12,
+          "primary_action": "See all buying options",
+          "prime": false,
+          "source": "page",
+          "title": "Est elementum id est elit tellus consequat tempor nulla qui sed varius justo dictum et",
+          "url_path": "/dp/B0FAKE0002/"
+        },
+        {
+          "actions": [
+            "See all buying options",
+            "Add a note",
+            "Move",
+            "Delete"
+          ],
+          "added": {
+            "iso": "2022-11-11",
+            "raw": "Item added November 11, 2022"
+          },
+          "asin": "B0FAKE0003",
+          "brand": "Augue qui",
+          "byline": "Augue qui",
+          "can_add_to_cart": false,
+          "external_id": "ASIN:B0FAKE0003|FAKEID0002",
+          "image_url": "https://images.example.com/placeholder.png",
+          "is_purchased": false,
+          "item_id": "FAKETOKEN0011",
+          "position": 4,
+          "primary_action": "See all buying options",
+          "prime": false,
+          "rating": {
+            "out_of": 5,
+            "value": 1
+          },
+          "review_count": 3,
+          "source": "page",
+          "title": "Felis vel id imperdiet lacus gravida pharetra fermentum nulla aliquam id elementum amet dolor varius pharetra porta molestie",
+          "url_path": "/dp/B0FAKE0003/"
+        },
+        {
+          "actions": [
+            "Add to Cart",
+            "Add a note",
+            "Move",
+            "Delete"
+          ],
+          "added": {
+            "iso": "2022-11-11",
+            "raw": "Item added November 11, 2022"
+          },
+          "asin": "B0FAKE0004",
+          "brand": "Imperdiet augue dolor varius pulvinar ac tempor",
+          "byline": "Imperdiet augue dolor varius pulvinar ac tempor (gravida)",
+          "byline_qualifier": "gravida",
+          "can_add_to_cart": true,
+          "delivery_text": "FREE One-Day",
+          "external_id": "ASIN:B0FAKE0004|FAKEID0002",
+          "image_url": "https://images.example.com/placeholder.png",
+          "is_purchased": false,
+          "item_id": "FAKETOKEN0012",
+          "position": 5,
+          "price": {
+            "amount": 302.16,
+            "currency": "USD",
+            "raw": "$302.16"
+          },
+          "price_hint": 170.79,
+          "primary_action": "Add to Cart",
+          "prime": true,
+          "rating": {
+            "out_of": 5,
+            "value": 2.8
+          },
+          "review_count": 350,
+          "source": "page",
+          "title": "Eu gravida imperdiet molestie",
+          "url_path": "/dp/B0FAKE0004/"
+        }
+      ],
+      "list": {
+        "can_add_item": true,
+        "can_invite": true,
+        "collaborator_count": 0,
+        "is_shared": false,
+        "list_id": "FAKETOKEN0003",
+        "list_kind": "wish_list",
+        "list_type_raw": "Dictum",
+        "name": "List Two",
+        "privacy": "private",
+        "privacy_text": "Private",
+        "view_item_count": 2
+      },
+      "nav_lists": [],
+      "pagination": {
+        "end_of_list": true,
+        "has_more": false,
+        "items_rendered": 2,
+        "more_url_template": "/Ad elementum pulvinar nulla/items?elementum consequat id elementum amet mauris nulla justo imperdiet consequat faucibus vel imperdiet elit=FAKETOKEN0003"
+      },
+      "sort": {
+        "label": "Sort by",
+        "options": [
+          {
+            "label": "Most recently added",
+            "selected": true,
+            "value": "Non pulvinar"
+          },
+          {
+            "label": "Lacus vel",
+            "selected": false,
+            "value": "Et"
+          },
+          {
+            "label": "Mauris amet tellus (malesuada)",
+            "selected": false,
+            "value": "Non"
+          },
+          {
+            "label": "Price Elementum ipsum elit elementum (posuere)",
+            "selected": false,
+            "value": "Vel lorem"
+          },
+          {
+            "label": "Price Nulla rhoncus vel in (malesuada)",
+            "selected": false,
+            "value": "Sodales amet"
+          }
+        ],
+        "param": "sort",
+        "selected_label": "Most recently added",
+        "selected_value": "Non pulvinar"
+      },
+      "view": "list"
+    },
+    "selected_list_id": "FAKETOKEN0003",
+    "tabs": [
+      {
+        "active": true,
+        "href": "/hz/wishlist/ls/ref=rf",
+        "label": "Your Lists"
+      },
+      {
+        "active": false,
+        "href": "/hz/wishlist/Semper/Est-malesuada-fermentum-ad-sagittis-dolor-elementum-dolor",
+        "label": "Your Friends"
+      }
+    ],
+    "variant": "lists"
+  },
+  "meta": {
+    "strategies": {
+      "control.filter.options": "native-select",
+      "control.filter.selected": "selected-option",
+      "control.sort.options": "native-select",
+      "control.sort.selected": "selected-option",
+      "control.view": "active-switcher",
+      "item.added": "id",
+      "item.asin": "csa-item",
+      "item.byline": "id",
+      "item.item_id": "data-itemid",
+      "item.price": "price-element",
+      "item.primary_action": "pab-button",
+      "item.rating": "alt-text",
+      "item.review_count": "count-link",
+      "item.title": "name-link",
+      "list.collaborator_count": "people-icon",
+      "list.list_id": "hidden-input",
+      "list.name": "id",
+      "list.privacy": "id",
+      "nav.label": "row",
+      "nav.list_id": "id",
+      "nav.name": "id",
+      "nav.privacy": "id",
+      "pagination.has_more": "end-marker",
+      "pagination.items_rendered": "form-input",
+      "pagination.more_url": "form-input"
+    },
+    "unknown_blobs": [
+      "pageInfo",
+      "invite-view-only-state",
+      "invite-view-edit-state"
+    ],
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

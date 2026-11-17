@@ -1,0 +1,367 @@
+{
+  "data": {
+    "actions": [],
+    "links": [
+      {
+        "kind": "invoice",
+        "label": "View invoice",
+        "path": "/gp/css/summary/print.html?orderID=000-0000000-0000001"
+      }
+    ],
+    "notices": [],
+    "order_id": "000-0000000-0000001",
+    "order_types": [],
+    "payment": {
+      "actions": [
+        "View related transactions"
+      ],
+      "last4": "0000",
+      "lines": [
+        {
+          "amount": {
+            "amount": 13.23,
+            "currency": "USD",
+            "raw": "$13.23"
+          },
+          "label": "$13.23 (vehicula nam ipsum tincidunt rewards) applied",
+          "raw": "$13.23 (vehicula nam ipsum tincidunt rewards) applied"
+        }
+      ],
+      "methods": [
+        {
+          "card_name": "Elementum nam Card",
+          "details": [
+            "Vehicula magna tincidunt sed See terms and conditions",
+            "$13.23 (vehicula nam ipsum tincidunt rewards) applied"
+          ],
+          "label": "Elementum nam Card •••• 0000",
+          "last4": "0000",
+          "type": "card"
+        }
+      ],
+      "other_lines": []
+    },
+    "placed": {
+      "iso": "2023-10-01",
+      "raw": "October 1, 2023"
+    },
+    "returns_and_refunds": [
+      {
+        "amounts": [],
+        "asins": [
+          "B0FAKE0002"
+        ],
+        "dates": [],
+        "detail": "Your return is in transit. Your refund has been issued.",
+        "help_text": "Id ullamcorper aliquam sed lorem tellus malesuada viverra semper vulputate lacus ac non fermentum faucibus sed imperdiet vel sodales loremLearn more Sodales id",
+        "scope": "shipment",
+        "shipment_index": 1,
+        "status": "Refunded",
+        "status_path": "/spr/returns/prep?orderId=000-0000000-0000001&rmaId=FAKETOKEN0008"
+      },
+      {
+        "amounts": [],
+        "asins": [],
+        "breakdown": [
+          {
+            "amount": {
+              "amount": 36.41,
+              "currency": "USD",
+              "raw": "$36.41"
+            },
+            "label": "Elit vel",
+            "raw": "$36.41",
+            "type": "other"
+          }
+        ],
+        "dates": [],
+        "refund_total": {
+          "amount": 36.41,
+          "currency": "USD",
+          "raw": "$36.41"
+        },
+        "scope": "order",
+        "status": "Refund Total"
+      }
+    ],
+    "ship_to": {
+      "address_lines": [
+        "00001 viverra viverra lorem felis fermentum",
+        "Exampleville, ZZ 00000-0000"
+      ],
+      "country": "Eu",
+      "heading": "Ship to",
+      "lines": [
+        "Ipsum sodales",
+        "00001 viverra viverra lorem felis fermentum",
+        "Exampleville, ZZ 00000-0000",
+        "Eu"
+      ],
+      "name": "Ipsum sodales"
+    },
+    "shipments": [
+      {
+        "actions": [
+          {
+            "intent": "support",
+            "label": "Get product support"
+          },
+          {
+            "intent": "return",
+            "label": "Return or replace items"
+          },
+          {
+            "intent": "gift_receipt",
+            "label": "Share gift receipt"
+          },
+          {
+            "intent": "feedback",
+            "label": "Leave seller feedback"
+          },
+          {
+            "intent": "review",
+            "label": "Write a product review"
+          }
+        ],
+        "items": [
+          {
+            "actions": [
+              {
+                "intent": "buy_again",
+                "label": "Buy it again"
+              }
+            ],
+            "asin": "B0FAKE0000",
+            "extras": {},
+            "links": [],
+            "price": {
+              "amount": 4.85,
+              "currency": "USD",
+              "raw": "$4.85"
+            },
+            "quantity": 1,
+            "return_window": {
+              "eligible": true,
+              "text": "Return or replace items: Eligible through December 27, 2023",
+              "through": {
+                "iso": "2023-12-27",
+                "raw": "December 27, 2023"
+              }
+            },
+            "seller": "Nulla",
+            "seller_id": "FAKEID0003",
+            "title": "Dictum pharetra posuere vehicula at nam magna vulputate elit ad amet vehicula ut justo 00002 varius ut non nam magna aliquam in tincidunt lorem magna semper justo pharetra faucibus vel rhoncus augue dictum viverra lorem",
+            "url_path": "/dp/B0FAKE0000"
+          },
+          {
+            "actions": [
+              {
+                "intent": "buy_again",
+                "label": "Buy it again"
+              }
+            ],
+            "asin": "B0FAKE0001",
+            "extras": {},
+            "links": [],
+            "price": {
+              "amount": 12.98,
+              "currency": "USD",
+              "raw": "$12.98"
+            },
+            "quantity": 1,
+            "return_window": {
+              "eligible": true,
+              "text": "Return or replace items: Eligible through December 27, 2023",
+              "through": {
+                "iso": "2023-12-27",
+                "raw": "December 27, 2023"
+              }
+            },
+            "seller": "Posuere lacus",
+            "seller_id": "FAKEID0004",
+            "title": "Magna faucibus fermentum magna nulla nulla pharetra vehicula semper fermentum faucibus ad lorem elementum nulla porta non sagittis sodales vel lacus vulputate qui imperdiet pharetra tincidunt",
+            "url_path": "/dp/B0FAKE0001"
+          }
+        ],
+        "links": [
+          {
+            "kind": "tracking",
+            "label": "Track package",
+            "path": "/progress-tracker/package?orderId=000-0000000-0000001"
+          }
+        ],
+        "status": {
+          "date": {
+            "iso": "2023-10-03",
+            "raw": "October 3",
+            "year_inferred": true
+          },
+          "detail": "Elit vel ad nam elementum elementum ut tincidunt nam elit felis",
+          "kind": "delivered",
+          "raw": "Delivered October 3"
+        },
+        "tracking": {
+          "path": "/progress-tracker/package?orderId=000-0000000-0000001"
+        }
+      },
+      {
+        "actions": [
+          {
+            "intent": "feedback",
+            "label": "Leave seller feedback"
+          },
+          {
+            "intent": "review",
+            "label": "Write a product review"
+          }
+        ],
+        "items": [
+          {
+            "actions": [
+              {
+                "intent": "buy_again",
+                "label": "Buy it again"
+              }
+            ],
+            "asin": "B0FAKE0002",
+            "extras": {},
+            "links": [],
+            "price": {
+              "amount": 36.41,
+              "currency": "USD",
+              "raw": "$36.41"
+            },
+            "quantity": 1,
+            "seller": "Id qui augue",
+            "seller_id": "FAKEID0005",
+            "status": "Refunded",
+            "title": "Semper elit malesuada lacus ac aliquam elit posuere dictum semper vel consequat gravida sodales pulvinar est lacus vulputate amet nam vehicula porta ac elit nulla malesuada pharetra est ipsum vehicula gravida felis ipsum dictum lacus ac felis (magna)",
+            "url_path": "/dp/B0FAKE0002"
+          }
+        ],
+        "links": [
+          {
+            "kind": "return_status",
+            "label": "View return/refund status",
+            "path": "/spr/returns/prep?orderId=000-0000000-0000001&rmaId=FAKETOKEN0008"
+          }
+        ],
+        "status": {
+          "detail": "Your return is in transit. Your refund has been issued.",
+          "help_label": "When will I get my refund?",
+          "help_text": "Id ullamcorper aliquam sed lorem tellus malesuada viverra semper vulputate lacus ac non fermentum faucibus sed imperdiet vel sodales loremLearn more Sodales id",
+          "kind": "refunded",
+          "raw": "Refunded"
+        }
+      }
+    ],
+    "status": {
+      "kinds": [
+        "delivered",
+        "refunded"
+      ],
+      "summary": "Delivered October 3 / Refunded"
+    },
+    "totals": [
+      {
+        "amount": {
+          "amount": 86.78,
+          "currency": "USD",
+          "raw": "$86.78"
+        },
+        "label": "Item(s) Subtotal",
+        "raw": "$86.78",
+        "type": "items_subtotal"
+      },
+      {
+        "amount": {
+          "amount": 0,
+          "currency": "USD",
+          "raw": "$0.00"
+        },
+        "label": "Shipping & Handling",
+        "raw": "$0.00",
+        "type": "shipping"
+      },
+      {
+        "amount": {
+          "amount": 86.78,
+          "currency": "USD",
+          "raw": "$86.78"
+        },
+        "label": "Total before tax",
+        "raw": "$86.78",
+        "type": "total_before_tax"
+      },
+      {
+        "amount": {
+          "amount": 1.38,
+          "currency": "USD",
+          "raw": "$1.38"
+        },
+        "label": "Estimated tax to be collected",
+        "raw": "$1.38",
+        "type": "tax"
+      },
+      {
+        "amount": {
+          "amount": -13.23,
+          "currency": "USD",
+          "raw": "-$13.23"
+        },
+        "label": "Rewards Points",
+        "raw": "-$13.23",
+        "type": "rewards"
+      },
+      {
+        "amount": {
+          "amount": 39.97,
+          "currency": "USD",
+          "raw": "$39.97"
+        },
+        "label": "Grand Total",
+        "raw": "$39.97",
+        "type": "grand_total"
+      },
+      {
+        "amount": {
+          "amount": 36.41,
+          "currency": "USD",
+          "raw": "$36.41"
+        },
+        "breakdown": [
+          {
+            "amount": {
+              "amount": 36.41,
+              "currency": "USD",
+              "raw": "$36.41"
+            },
+            "label": "Elit vel",
+            "raw": "$36.41",
+            "type": "other"
+          }
+        ],
+        "label": "Refund Total",
+        "raw": "$36.41",
+        "type": "refund_total"
+      }
+    ]
+  },
+  "meta": {
+    "strategies": {
+      "order_id": "data-component",
+      "payment": "data-component",
+      "placed": "data-component",
+      "ship_to": "data-component",
+      "shipments": "data-component",
+      "shipments.asin": "link",
+      "shipments.price": "data-component",
+      "shipments.seller": "data-component",
+      "shipments.title": "data-component",
+      "totals": "data-component"
+    },
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

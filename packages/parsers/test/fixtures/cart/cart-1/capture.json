@@ -1,0 +1,7 @@
+{
+  "kind": "cart",
+  "url": "https://www.example.com/gp/cart/view.html",
+  "final_url": "https://www.example.com/gp/cart/view.html",
+  "captured_at": "2020-07-01T12:00:00.000Z",
+  "note": "cart page"
+}

@@ -43,7 +43,7 @@ describe("fixture loading", () => {
       join("search", "case-a"),
       join("search", "case-b"),
     ]);
-    expect(listFixtureCases("cart", ROOT)).toEqual([]);
+    expect(listFixtureCases("reviews", ROOT)).toEqual([]);
     expect(DEFAULT_FIXTURES_ROOT.endsWith("fixtures")).toBe(true);
     expect(Array.isArray(listFixtureCases("search"))).toBe(true);
   });

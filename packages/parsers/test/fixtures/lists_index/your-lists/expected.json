@@ -1,0 +1,89 @@
+{
+  "data": {
+    "can_create": true,
+    "create_list_path": "/hz/wishlist/Id",
+    "lists": [],
+    "tabs": [
+      {
+        "active": true,
+        "href": "/hz/wishlist/ls/ref=rf",
+        "label": "Your Lists"
+      },
+      {
+        "active": false,
+        "href": "/hz/wishlist/Aliquam/Mauris-aliquam-fermentum-tempor",
+        "label": "Your Friends"
+      }
+    ],
+    "variant": "intro"
+  },
+  "meta": {
+    "strategies": {},
+    "unparsed_text_chars": 0,
+    "warnings": [
+      "lists: intro page without a lists navigation (no lists shown)"
+    ]
+  },
+  "other_sections": [
+    {
+      "heading": null,
+      "key": "div@2.0",
+      "text": "Dictum elementum ipsum"
+    },
+    {
+      "heading": null,
+      "key": "div@2.1.0.0",
+      "text": "Condimentum"
+    },
+    {
+      "heading": null,
+      "key": "div@2.1.0.1",
+      "text": "Elit Justo rhoncus tellus ipsum felis pulvinar Faucibus qui vulputate ac Tellus tempor vel tincidunt fermentum vulputate est et Varius sagittis eu Imperdiet mauris fermentum ad ad dolor"
+    },
+    {
+      "heading": null,
+      "key": "div@2.2",
+      "links": [
+        {
+          "href": "https://www.example.com/Ullamcorper/Dictum",
+          "text": "Condimentum tempor ad molestie"
+        },
+        {
+          "href": "https://www.example.com/Tincidunt-mauris-sodales/Ullamcorper",
+          "text": "Qui nam consequat non"
+        },
+        {
+          "href": "https://www.example.com/Nam",
+          "text": "Fermentum pulvinar semper"
+        }
+      ],
+      "text": "Felis aliquam Eu est porta justo dictum posuere ac consequat magna condimentum pulvinar posuere ut vel at non eu magna vehicula gravida dolor fermentum pulvinar fermentum in molestie ullamcorper malesuada magna ullamcorper non tempor et malesuada imperdiet malesuada imperdiet eu viverra vel Condimentum tempor ad molestie Qui nam consequat non Fermentum pulvinar semper"
+    },
+    {
+      "heading": null,
+      "key": "div@2.3",
+      "links": [
+        {
+          "href": "https://www.example.com/At/Tempor/Dictum",
+          "text": "Elementum gravida magna at Magna felis ad vel magna et ad qui eu malesuada"
+        }
+      ],
+      "text": "Elementum varius Elementum gravida magna at Magna felis ad vel magna et ad qui eu malesuada"
+    },
+    {
+      "heading": null,
+      "key": "div@2.4",
+      "links": [
+        {
+          "href": "https://www.example.com/gp/help/customer/display.html/Sed-lorem-elit-sodales",
+          "text": "Dictum nulla"
+        },
+        {
+          "href": "https://www.example.com/hz/Faucibus-ipsum-et/Gravida/Aliquam",
+          "text": "Magna nam id"
+        }
+      ],
+      "text": "At ullamcorper Sed elit porta Dictum nulla Qui augue et sed mauris vulputate sodales et sodales faucibus Magna nam id"
+    }
+  ]
+}

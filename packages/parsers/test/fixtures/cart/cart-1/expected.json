@@ -1,0 +1,212 @@
+{
+  "data": {
+    "active_count": 0,
+    "active_items": [],
+    "active_quantity_total": 0,
+    "checkout_available": false,
+    "empty_message": "Your Amazon Cart Consequat dictum",
+    "groups": [],
+    "is_empty": true,
+    "notices": [],
+    "saved_count": 3,
+    "saved_declared_count": 3,
+    "saved_items": [
+      {
+        "actions": [
+          "move-to-cart",
+          "delete-saved",
+          "add-to-list-popover",
+          "compare"
+        ],
+        "asin": "B0FAKE0008",
+        "badges": [],
+        "condition": null,
+        "delivery": [],
+        "delivery_dates": [],
+        "details": [],
+        "fulfillment": [],
+        "gift_option": false,
+        "gift_wrapped": false,
+        "group": null,
+        "image_url": "https://images.example.com/placeholder.png",
+        "in_stock": true,
+        "is_prime": true,
+        "item_id": "00000000-0000-4000-8000-000000000003",
+        "list": "saved",
+        "list_price": null,
+        "low_stock_count": null,
+        "max_quantity": null,
+        "notices": [],
+        "offer_unavailable": false,
+        "price": {
+          "amount": 27.52,
+          "currency": "USD",
+          "raw": "$27.52"
+        },
+        "price_notes": [],
+        "quantity": 1,
+        "quantity_control": "none",
+        "quantity_open_ended": false,
+        "quantity_options": [],
+        "returns": "FREE Returns",
+        "savings": null,
+        "selected": null,
+        "seller": null,
+        "seller_id": "FAKEID0004",
+        "ships_from": null,
+        "stock_text": null,
+        "subscribe_and_save": false,
+        "subscribe_hints": [],
+        "title": "At faucibus ut sagittis non condimentum rhoncus tincidunt faucibus augue consequat condimentum imperdiet elementum condimentum qui tincidunt sodales ullamcorper ipsum pulvinar dictum justo pulvinar molestie",
+        "url_path": "/gp/product/B0FAKE0008/ref=rf",
+        "variant": []
+      },
+      {
+        "actions": [
+          "move-to-cart",
+          "delete-saved",
+          "add-to-list-popover",
+          "compare"
+        ],
+        "asin": "B0FAKE0009",
+        "badges": [],
+        "condition": null,
+        "delivery": [],
+        "delivery_dates": [],
+        "details": [],
+        "fulfillment": [],
+        "gift_option": false,
+        "gift_wrapped": false,
+        "group": null,
+        "image_url": "https://images.example.com/placeholder.png",
+        "in_stock": true,
+        "is_prime": true,
+        "item_id": "00000000-0000-4000-8000-000000000004",
+        "list": "saved",
+        "list_price": null,
+        "low_stock_count": null,
+        "max_quantity": null,
+        "notices": [],
+        "offer_unavailable": false,
+        "price": {
+          "amount": 17.86,
+          "currency": "USD",
+          "raw": "$17.86"
+        },
+        "price_notes": [],
+        "quantity": 1,
+        "quantity_control": "none",
+        "quantity_open_ended": false,
+        "quantity_options": [],
+        "returns": "FREE Returns",
+        "savings": null,
+        "selected": null,
+        "seller": null,
+        "seller_id": "FAKEID0005",
+        "ships_from": null,
+        "stock_text": "In Stock",
+        "subscribe_and_save": false,
+        "subscribe_hints": [],
+        "title": "Et elit mauris eu",
+        "url_path": "/gp/product/B0FAKE0009/ref=rf",
+        "variant": []
+      },
+      {
+        "actions": [
+          "move-to-cart",
+          "delete-saved",
+          "add-to-list-popover",
+          "compare"
+        ],
+        "asin": "B0FAKE000A",
+        "badges": [],
+        "condition": null,
+        "delivery": [],
+        "delivery_dates": [],
+        "details": [],
+        "fulfillment": [],
+        "gift_option": false,
+        "gift_wrapped": false,
+        "group": null,
+        "image_url": "https://images.example.com/placeholder.png",
+        "in_stock": true,
+        "is_prime": true,
+        "item_id": "00000000-0000-4000-8000-000000000005",
+        "list": "saved",
+        "list_price": null,
+        "low_stock_count": null,
+        "max_quantity": null,
+        "notices": [],
+        "offer_unavailable": false,
+        "price": {
+          "amount": 23.31,
+          "currency": "USD",
+          "raw": "$23.31"
+        },
+        "price_notes": [],
+        "quantity": 1,
+        "quantity_control": "none",
+        "quantity_open_ended": false,
+        "quantity_options": [],
+        "returns": "FREE Returns",
+        "savings": null,
+        "selected": null,
+        "seller": null,
+        "seller_id": "FAKEID0006",
+        "ships_from": null,
+        "stock_text": "In Stock",
+        "subscribe_and_save": false,
+        "subscribe_hints": [],
+        "title": "Vehicula at dolor in vehicula sodales fermentum id qui malesuada posuere mauris malesuada ullamcorper vehicula aliquam semper consequat",
+        "url_path": "/gp/product/B0FAKE000A/ref=rf",
+        "variant": []
+      }
+    ],
+    "subtotal": null
+  },
+  "meta": {
+    "strategies": {
+      "is_empty": "empty-marker",
+      "item.asin": "data-attr",
+      "item.gift_option": "data-attr",
+      "item.in_stock": "text-in-stock",
+      "item.item_id": "data-attr",
+      "item.price": "price-element",
+      "item.quantity": "data-attr",
+      "item.title": "full-title",
+      "items": "data-itemid",
+      "saved_declared_count": "data-attr"
+    },
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": [
+    {
+      "heading": null,
+      "key": "sc-new-upsell",
+      "links": [
+        {
+          "href": "/gp/Nam/Mauris-justo",
+          "text": "Dolor non et malesuada rhoncus Varius ullamcorper fermentum fermentum sodales semper Lorem vel"
+        }
+      ],
+      "text": "Dolor non et malesuada rhoncus Varius ullamcorper fermentum fermentum sodales semper Lorem vel"
+    },
+    {
+      "heading": null,
+      "key": "sc-all-carts",
+      "text": "Consequat dolor"
+    },
+    {
+      "heading": null,
+      "key": "sc-about",
+      "links": [
+        {
+          "href": "/gp/help/customer/display.html/ref=rf",
+          "text": "Shopping Cart Learn more"
+        }
+      ],
+      "text": "Ut justo dictum vel nulla ut mauris dictum non eu imperdiet nulla vulputate dictum lorem tellus viverra at qui eu dictum rhoncus nam tincidunt malesuada id non et Shopping Cart Learn more Faucibus dolor aliquam magna at ac vehicula faucibus porta et aliquam sed est vel porta ac semper magna elit vel in pharetra at dictum tincidunt condimentum nulla elementum in"
+    }
+  ]
+}

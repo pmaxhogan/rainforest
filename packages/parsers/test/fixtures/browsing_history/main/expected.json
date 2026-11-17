@@ -1,0 +1,268 @@
+{
+  "data": {
+    "all_asins": [
+      "B0FAKE0000",
+      "B0FAKE0001",
+      "B0FAKE0002",
+      "B0FAKE0003",
+      "B0FAKE0004",
+      "B0FAKE0005",
+      "B0FAKE0006",
+      "B0FAKE0007",
+      "B0FAKE0008",
+      "B0FAKE0009",
+      "B0FAKE000A",
+      "B0FAKE000B",
+      "B0FAKE000C",
+      "B0FAKE000D",
+      "B0FAKE000E",
+      "B0FAKE000F",
+      "B0FAKE000G",
+      "B0FAKE000H",
+      "B0FAKE000I",
+      "B0FAKE000J",
+      "B0FAKE000K",
+      "B0FAKE000L",
+      "B0FAKE000M"
+    ],
+    "description": "Justo est ut posuere posuere consequat lacus eu sed ullamcorper viverra aliquam ac",
+    "empty_message": null,
+    "end_of_list_marker": true,
+    "group_headings": [],
+    "has_more": true,
+    "heading": "Your Browsing History",
+    "history_status": "enabled",
+    "history_status_raw": "ENABLED",
+    "is_empty": false,
+    "items": [
+      {
+        "asin": "B0FAKE0000",
+        "badges": [
+          "Elit augue"
+        ],
+        "delivery_badge": "Tomorrow",
+        "delivery_date_text": "Tomorrow, Jul 31",
+        "delivery_message": "FREE delivery Tomorrow, Jul 31",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 0,
+        "price": {
+          "amount": 26.04,
+          "currency": "USD",
+          "raw": "$26.04"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 3.2
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 35754,
+        "title": "Viverra sagittis sagittis est tempor viverra elit felis ad non consequat lorem posuere felis aliquam non viverra tempor dictum tellus ullamcorper fermentum sagittis consequat qui condimentum lacus amet non varius lacus vulputate vulputate lacus",
+        "unit_price": {
+          "amount": 0.19,
+          "currency": "USD",
+          "raw": "$0.19"
+        },
+        "unit_price_text": "($0.19/id)",
+        "url_path": "/Ut-ipsum-nam-ipsum-vehicula-non/dp/B0FAKE0000",
+        "viewed_group": null
+      },
+      {
+        "asin": "B0FAKE0001",
+        "badges": [],
+        "delivery_badge": "Ac",
+        "delivery_date_text": "Tue, Aug 4",
+        "delivery_message": "FREE delivery Tue, Aug 4",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 1,
+        "price": {
+          "amount": 4.01,
+          "currency": "USD",
+          "raw": "$4.01"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 4.2
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 929,
+        "title": "At molestie tellus ut qui magna varius felis dolor amet vulputate in ac fermentum condimentum in sed semper dolor eu dictum id at vulputate lacus sed id ipsum",
+        "unit_price": null,
+        "unit_price_text": null,
+        "url_path": "/Sodales-semper-ut-id-viverra-semper-ad/dp/B0FAKE0001",
+        "viewed_group": null
+      },
+      {
+        "asin": "B0FAKE0002",
+        "badges": [],
+        "delivery_badge": "Ac",
+        "delivery_date_text": "Tue, Aug 4",
+        "delivery_message": "FREE delivery Tue, Aug 4",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 2,
+        "price": {
+          "amount": 79.11,
+          "currency": "USD",
+          "raw": "$79.11"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 5
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 7060,
+        "title": "Ipsum sed sodales rhoncus pulvinar justo dictum gravida augue imperdiet vel augue et ipsum posuere tellus elit qui felis varius augue id vehicula consequat in id malesuada consequat rhoncus gravida nam amet qui qui in est fermentum eu sodales consequat nulla tempor nulla at justo non rhoncus semper porta varius malesuada (molestie)",
+        "unit_price": null,
+        "unit_price_text": null,
+        "url_path": "/Elit-ut-est/dp/B0FAKE0002",
+        "viewed_group": null
+      },
+      {
+        "asin": "B0FAKE0003",
+        "badges": [],
+        "delivery_badge": "Ac",
+        "delivery_date_text": "Tue, Aug 4",
+        "delivery_message": "FREE delivery Tue, Aug 4",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 3,
+        "price": {
+          "amount": 9.29,
+          "currency": "USD",
+          "raw": "$9.29"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 2.6
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 74,
+        "title": "Mauris nam elit tellus id aliquam malesuada 00001 justo pharetra tellus amet et at 00001 vel in malesuada nulla nam felis molestie varius",
+        "unit_price": null,
+        "unit_price_text": null,
+        "url_path": "/Posuere-aliquam-posuere-posuere-tincidunt-nulla/dp/B0FAKE0003",
+        "viewed_group": null
+      },
+      {
+        "asin": "B0FAKE0004",
+        "badges": [],
+        "delivery_badge": "Ac",
+        "delivery_date_text": "Tue, Aug 4",
+        "delivery_message": "FREE delivery Tue, Aug 4",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 5,
+        "price": {
+          "amount": 33.74,
+          "currency": "USD",
+          "raw": "$33.74"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 2
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 724,
+        "title": "Dictum qui amet faucibus ad ipsum lorem vulputate qui fermentum semper sodales et tincidunt pulvinar est mauris ipsum condimentum faucibus sed faucibus vehicula vehicula gravida posuere at est at vehicula lorem ac ad lorem",
+        "unit_price": {
+          "amount": 0.01,
+          "currency": "USD",
+          "raw": "$0.01"
+        },
+        "unit_price_text": "($0.01/ullamcorper)",
+        "url_path": "/Vehicula-gravida-molestie-porta-gravida-qui-eu-elementum/dp/B0FAKE0004",
+        "viewed_group": null
+      },
+      {
+        "asin": "B0FAKE0005",
+        "badges": [
+          "Elit augue"
+        ],
+        "delivery_badge": "Tomorrow",
+        "delivery_date_text": "Tomorrow, Jul 31",
+        "delivery_message": "FREE delivery Tomorrow, Jul 31",
+        "image_url": "https://images.example.com/placeholder.png",
+        "position": 6,
+        "price": {
+          "amount": 5.06,
+          "currency": "USD",
+          "raw": "$5.06"
+        },
+        "prime": true,
+        "rating": {
+          "out_of": 5,
+          "value": 5
+        },
+        "remove_label": "Malesuada semper non non vulputate",
+        "review_count": 345,
+        "title": "Posuere pharetra ac et in magna mauris lorem elementum magna magna eu dolor dictum pulvinar augue vulputate tellus lacus justo tellus magna sagittis tempor faucibus nam consequat porta pharetra sed elit nulla tincidunt varius pulvinar",
+        "unit_price": null,
+        "unit_price_text": null,
+        "url_path": "/Sodales-rhoncus-molestie-vehicula-varius-semper/dp/B0FAKE0005",
+        "viewed_group": null
+      }
+    ],
+    "pause_expiration": "0",
+    "section_links": [
+      {
+        "href_path": "/gp/Rhoncus/Aliquam/",
+        "label": "Augue molestie gravida nam viverra"
+      },
+      {
+        "href_path": "/gp/history/",
+        "label": "Your Browsing History"
+      },
+      {
+        "href_path": "/gp/Rhoncus/Pharetra/",
+        "label": "Recommended For You"
+      },
+      {
+        "href_path": "/gp/Rhoncus/Magna/",
+        "label": "Imperdiet magna"
+      },
+      {
+        "href_path": "/Nulla/Malesuada/",
+        "label": "Condimentum magna et"
+      },
+      {
+        "href_path": "/gp/help/customer/display.html/",
+        "label": "Learn More"
+      }
+    ],
+    "status_message": null,
+    "total_items": 23,
+    "unrendered_asins": [
+      "B0FAKE0006",
+      "B0FAKE0007",
+      "B0FAKE0008",
+      "B0FAKE0009",
+      "B0FAKE000A",
+      "B0FAKE000B",
+      "B0FAKE000C",
+      "B0FAKE000D",
+      "B0FAKE000E",
+      "B0FAKE000F",
+      "B0FAKE000G",
+      "B0FAKE000H",
+      "B0FAKE000I",
+      "B0FAKE000J",
+      "B0FAKE000K",
+      "B0FAKE000L",
+      "B0FAKE000M"
+    ]
+  },
+  "meta": {
+    "strategies": {
+      "all_asins": "data-attr",
+      "description": "label",
+      "heading": "id",
+      "history_status": "data-attr",
+      "items": "id"
+    },
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

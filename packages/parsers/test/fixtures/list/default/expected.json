@@ -1,0 +1,221 @@
+{
+  "data": {
+    "filter": {
+      "label": "Show",
+      "options": [
+        {
+          "label": "Unpurchased",
+          "selected": true,
+          "value": "unpurchased"
+        },
+        {
+          "label": "Purchased",
+          "selected": false,
+          "value": "purchased"
+        },
+        {
+          "label": "Tellus",
+          "selected": false,
+          "value": "In"
+        }
+      ],
+      "param": "filter",
+      "selected_label": "Unpurchased",
+      "selected_value": "unpurchased"
+    },
+    "has_search": true,
+    "is_empty": false,
+    "items": [
+      {
+        "actions": [
+          "See all buying options",
+          "Add a note",
+          "Move",
+          "Delete"
+        ],
+        "added": {
+          "iso": "2031-11-05",
+          "raw": "Item added November 5, 2031"
+        },
+        "asin": "B0FAKE0000",
+        "brand": "Porta amet",
+        "byline": "Porta amet",
+        "can_add_to_cart": false,
+        "external_id": "ASIN:B0FAKE0000|FAKEID0002",
+        "image_url": "https://images.example.com/placeholder.png",
+        "is_purchased": false,
+        "item_id": "FAKETOKEN0004",
+        "position": 1,
+        "primary_action": "See all buying options",
+        "prime": false,
+        "rating": {
+          "out_of": 5,
+          "value": 4.6
+        },
+        "review_count": 8,
+        "source": "page",
+        "title": "Fermentum ac ad amet eu gravida ut ipsum malesuada lacus malesuada est felis imperdiet elementum eu dolor magna augue rhoncus porta imperdiet varius tempor et vulputate",
+        "url_path": "/dp/B0FAKE0000/"
+      },
+      {
+        "actions": [
+          "Add to Cart",
+          "Add a note",
+          "Move",
+          "Delete"
+        ],
+        "added": {
+          "iso": "2031-11-05",
+          "raw": "Item added November 5, 2031"
+        },
+        "asin": "B0FAKE0001",
+        "brand": "Ut condimentum ut augue qui ad",
+        "byline": "Ut condimentum ut augue qui ad (rhoncus)",
+        "byline_qualifier": "rhoncus",
+        "can_add_to_cart": true,
+        "delivery_text": "+ $2.35 shipping",
+        "external_id": "ASIN:B0FAKE0001|FAKEID0002",
+        "image_url": "https://images.example.com/placeholder.png",
+        "is_purchased": false,
+        "item_id": "FAKETOKEN0006",
+        "position": 2,
+        "price": {
+          "amount": 163.76,
+          "currency": "USD",
+          "raw": "$163.76"
+        },
+        "price_hint": 806.28,
+        "primary_action": "Add to Cart",
+        "prime": false,
+        "rating": {
+          "out_of": 5,
+          "value": 1.7
+        },
+        "review_count": 34,
+        "shipping_fee": {
+          "amount": 2.35,
+          "currency": "USD",
+          "raw": "$2.35"
+        },
+        "source": "page",
+        "title": "Lacus dictum nulla molestie qui ad",
+        "url_path": "/dp/B0FAKE0001/"
+      }
+    ],
+    "list": {
+      "can_add_item": true,
+      "can_invite": true,
+      "collaborator_count": 0,
+      "is_shared": false,
+      "list_id": "FAKETOKEN0001",
+      "list_kind": "wish_list",
+      "list_type_raw": "Lorem",
+      "name": "List Two",
+      "privacy": "private",
+      "privacy_text": "Private",
+      "view_item_count": 4
+    },
+    "nav_lists": [
+      {
+        "is_default": true,
+        "label": "Default List",
+        "list_id": "FAKETOKEN0001",
+        "list_kind": "wish_list",
+        "name": "List Two",
+        "privacy": "private",
+        "privacy_text": "Private",
+        "selected": true,
+        "shared_with_me": false,
+        "url_path": "/hz/wishlist/ls/FAKETOKEN0001"
+      },
+      {
+        "is_default": false,
+        "list_id": "FAKEID0003",
+        "list_kind": "unknown",
+        "name": "List Three",
+        "privacy": "private",
+        "privacy_text": "Private",
+        "selected": false,
+        "shared_with_me": false,
+        "url_path": "/gp/Ut-elit-molestie"
+      }
+    ],
+    "pagination": {
+      "end_of_list": true,
+      "has_more": false,
+      "items_rendered": 4,
+      "more_url_template": "/Sodales non/items?lacus et ad semper porta augue dolor lacus elementum eu ut vulputate ut et malesuada vulputate=FAKETOKEN0001"
+    },
+    "sort": {
+      "label": "Sort by",
+      "options": [
+        {
+          "label": "Most recently added",
+          "selected": true,
+          "value": "Felis eu consequat"
+        },
+        {
+          "label": "Sed",
+          "selected": false,
+          "value": "Varius"
+        },
+        {
+          "label": "Vel sagittis faucibus (at)",
+          "selected": false,
+          "value": "Qui"
+        },
+        {
+          "label": "Price Tincidunt felis (in)",
+          "selected": false,
+          "value": "Elit dolor"
+        },
+        {
+          "label": "Price Vehicula eu tincidunt justo sodales (elit)",
+          "selected": false,
+          "value": "Aliquam elementum"
+        }
+      ],
+      "param": "sort",
+      "selected_label": "Most recently added",
+      "selected_value": "Felis eu consequat"
+    },
+    "view": "list"
+  },
+  "meta": {
+    "strategies": {
+      "control.filter.options": "native-select",
+      "control.filter.selected": "selected-option",
+      "control.sort.options": "native-select",
+      "control.sort.selected": "selected-option",
+      "control.view": "active-switcher",
+      "item.added": "id",
+      "item.asin": "csa-item",
+      "item.byline": "id",
+      "item.item_id": "data-itemid",
+      "item.price": "price-element",
+      "item.primary_action": "pab-button",
+      "item.rating": "alt-text",
+      "item.review_count": "count-link",
+      "item.title": "name-link",
+      "list.collaborator_count": "people-icon",
+      "list.list_id": "hidden-input",
+      "list.name": "id",
+      "list.privacy": "id",
+      "nav.label": "row",
+      "nav.list_id": "id",
+      "nav.name": "id",
+      "nav.privacy": "id",
+      "pagination.has_more": "end-marker",
+      "pagination.items_rendered": "form-input",
+      "pagination.more_url": "form-input"
+    },
+    "unknown_blobs": [
+      "pageInfo",
+      "invite-view-only-state",
+      "invite-view-edit-state"
+    ],
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

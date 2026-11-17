@@ -1,0 +1,297 @@
+{
+  "data": {
+    "active_period": "Ipsum sed",
+    "asin": "B0FAKE0000",
+    "blocked": false,
+    "buy_box": [
+      {
+        "as_of_date": "2032-01-06",
+        "as_of_raw": "Jan 6, 2032 09:00 AM",
+        "label": "Consequat non",
+        "price": {
+          "amount": 8.58,
+          "currency": "USD",
+          "raw": "$8.58"
+        },
+        "type": "unknown"
+      },
+      {
+        "availability": "Qui varius",
+        "label": "3rd Party New",
+        "type": "new"
+      },
+      {
+        "availability": "Qui varius",
+        "label": "3rd Party Used",
+        "type": "used"
+      }
+    ],
+    "chart_urls": [],
+    "image_url": "https://images.example.com/placeholder.png",
+    "last_checked": "2032-05-20",
+    "last_checked_raw": "May 20, 2032",
+    "last_tracked": "1 day ago",
+    "last_update_scan": "7 days ago",
+    "list_price": {
+      "amount": 24.71,
+      "currency": "USD",
+      "raw": "$24.71"
+    },
+    "locale": "Est",
+    "monitoring_since": "2027-05-06",
+    "monitoring_since_raw": "May 6, 2027",
+    "periods": [
+      {
+        "active": false,
+        "key": "1m",
+        "label": "1 Month",
+        "since": "2032-04-24",
+        "since_raw": "Apr 24, 2032",
+        "title": "1 month - view data going back to Apr 24, 2032"
+      },
+      {
+        "active": false,
+        "key": "3m",
+        "label": "6 Months",
+        "since": "2032-02-23",
+        "since_raw": "Feb 23, 2032",
+        "title": "6 months - view data going back to Feb 23, 2032"
+      },
+      {
+        "active": false,
+        "key": "6m",
+        "label": "9 Months",
+        "since": "2031-11-23",
+        "since_raw": "Nov 23, 2031",
+        "title": "9 months - view data going back to Nov 23, 2031"
+      },
+      {
+        "active": false,
+        "key": "1y",
+        "label": "1 Year",
+        "since": "2031-05-24",
+        "since_raw": "May 24, 2031",
+        "title": "1 year - view data going back to May 24, 2031"
+      },
+      {
+        "active": true,
+        "key": "Ipsum sed",
+        "label": "Fermentum",
+        "since": "2027-05-06",
+        "since_raw": "May 6, 2027",
+        "title": "Qui - view data going back to May 6, 2027"
+      }
+    ],
+    "price_type_toggles": [
+      {
+        "label": "Amazon",
+        "no_data": false,
+        "selected": true,
+        "title": "Elit elit et pharetra ac id",
+        "type": "amazon"
+      },
+      {
+        "label": "New",
+        "no_data": true,
+        "selected": false,
+        "title": "Et pharetra ullamcorper non eu lacus nulla malesuada elit lacus",
+        "type": "new"
+      },
+      {
+        "label": "Used",
+        "no_data": false,
+        "selected": false,
+        "title": "Tempor lacus semper sagittis elementum vulputate molestie at",
+        "type": "used"
+      }
+    ],
+    "price_types_description": "camelcamelcamel monitors individual product prices across three Price Types: Gravida felis aliquam vel molestie vehicula malesuada vulputate consequat porta sed qui tempor fermentum varius et justo gravida tellus faucibus magna sed aliquam tellus at faucibus felis amet",
+    "price_watches": [],
+    "product_fields": {
+      "category": "LoremVarius",
+      "ean": "900000000002",
+      "id": "900000001",
+      "last_tracked": "1 day ago",
+      "last_update_scan": "7 days ago",
+      "list_price": "$24.71",
+      "locale": "EuPharetra",
+      "manufacturer": "IdEst condimentum",
+      "model": "Qui",
+      "product_group": "AmetJusto",
+      "sku": "B0FAKE0000",
+      "upc": "900000000001"
+    },
+    "section_heading": "Amazon Price History",
+    "series": [],
+    "share_url": "https://www.example.com/Est/B0FAKE0000",
+    "state": "ok",
+    "stats": [
+      {
+        "average": {
+          "amount": 33.14,
+          "currency": "USD",
+          "raw": "$33.14"
+        },
+        "cells_raw": {
+          "average": "$33.14",
+          "current": "$8.58 (Jan 6, 2032)",
+          "highest": "$11.19 (Jul 12, 2029)",
+          "lowest": "$27.81 (Jun 10, 2031)"
+        },
+        "current": {
+          "amount": 8.58,
+          "currency": "USD",
+          "raw": "$8.58"
+        },
+        "current_date": "2032-01-06",
+        "current_date_raw": "Jan 6, 2032",
+        "has_data": true,
+        "highest": {
+          "amount": 11.19,
+          "currency": "USD",
+          "raw": "$11.19"
+        },
+        "highest_date": "2029-07-12",
+        "highest_date_raw": "Jul 12, 2029",
+        "label": "Amazon",
+        "lowest": {
+          "amount": 27.81,
+          "currency": "USD",
+          "raw": "$27.81"
+        },
+        "lowest_date": "2031-06-10",
+        "lowest_date_raw": "Jun 10, 2031",
+        "type": "amazon"
+      },
+      {
+        "cells_raw": {
+          "average": "-",
+          "current": "-",
+          "highest": "-",
+          "lowest": "-"
+        },
+        "has_data": false,
+        "label": "3rd Party New",
+        "type": "new"
+      },
+      {
+        "average": {
+          "amount": 31.32,
+          "currency": "USD",
+          "raw": "$31.32"
+        },
+        "cells_raw": {
+          "average": "$31.32",
+          "current": "-",
+          "highest": "$12.14 (Apr 21, 2028)",
+          "lowest": "$9.09 (Mar 12, 2028)"
+        },
+        "has_data": true,
+        "highest": {
+          "amount": 12.14,
+          "currency": "USD",
+          "raw": "$12.14"
+        },
+        "highest_date": "2028-04-21",
+        "highest_date_raw": "Apr 21, 2028",
+        "label": "3rd Party Used",
+        "lowest": {
+          "amount": 9.09,
+          "currency": "USD",
+          "raw": "$9.09"
+        },
+        "lowest_date": "2028-03-12",
+        "lowest_date_raw": "Mar 12, 2028",
+        "type": "used"
+      }
+    ],
+    "title": "Tellus tincidunt sed pharetra tellus pharetra aliquam dictum pulvinar varius felis qui magna faucibus viverra aliquam nulla varius faucibus justo pulvinar",
+    "variants_url": "https://www.example.com/product/B0FAKE0001"
+  },
+  "meta": {
+    "strategies": {
+      "asin": "data-attr",
+      "buy_box": "id",
+      "locale": "data-attr",
+      "monitoring_since": "text-anchor",
+      "periods": "id",
+      "product_fields": "id",
+      "state": "label",
+      "stats": "id",
+      "title": "id"
+    },
+    "unparsed_text_chars": 12,
+    "warnings": [
+      "chart url rejected by the host allowlist (img)"
+    ]
+  },
+  "other_sections": [
+    {
+      "heading": null,
+      "key": "FAKETOKEN0005",
+      "links": [
+        {
+          "href": "https://www.example.com/product/B0FAKE0002",
+          "text": "Aliquam imperdiet tellus amet ipsum sagittis ac lacus vel porta malesuada (B0FAKE0002) augue at nam justo ipsum at porta sed at"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0002",
+          "text": "Nulla lorem qui felis in id consequat porta aliquam amet felis tincidunt magna rhoncus"
+        },
+        {
+          "href": "https://www.example.com/product/FAKETOKEN0007/Mauris",
+          "text": "View at Amazon"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0003",
+          "text": "Qui condimentum elit ad at nulla condimentum condimentum est gravida faucibus mauris non ipsum non (B0FAKE0003) tincidunt ullamcorper amet condimentum gravida justo"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0003",
+          "text": "Justo consequat augue imperdiet imperdiet felis porta sed porta vulputate elit amet malesuada eu sagittis varius justo"
+        },
+        {
+          "href": "https://www.example.com/product/FAKETOKEN0008/Mauris",
+          "text": "View at Amazon"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0004",
+          "text": "Vel sed nulla posuere pulvinar posuere pharetra imperdiet felis id posuere rhoncus ac malesuada eu aliquam posuere porta pharetra faucibus (B0FAKE0004) imperdiet ipsum vulputate lorem at qui augue"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0004",
+          "text": "Imperdiet ullamcorper at sed tellus elementum ipsum vel varius ipsum vel tempor molestie at at et dictum qui tincidunt ut at lacus sed"
+        },
+        {
+          "href": "https://www.example.com/product/FAKETOKEN0009/Mauris",
+          "text": "View at Amazon"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0005",
+          "text": "Sed id felis est amet pharetra vel ad amet vel nam molestie magna porta mauris semper faucibus elementum (B0FAKE0005) non vel tincidunt at vehicula aliquam elementum lorem mauris"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0005",
+          "text": "Tellus malesuada fermentum nam posuere dolor justo nulla nulla lacus tincidunt porta ipsum id ut"
+        },
+        {
+          "href": "https://www.example.com/product/FAKETOKEN0010/Mauris",
+          "text": "View at Amazon"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0006",
+          "text": "Felis elementum molestie gravida in felis magna vulputate (B0FAKE0006) posuere pharetra vehicula augue dictum gravida ad posuere"
+        },
+        {
+          "href": "https://www.example.com/product/B0FAKE0006",
+          "text": "Consequat molestie sodales tellus tempor et ut"
+        },
+        {
+          "href": "https://www.example.com/product/FAKETOKEN0011/Mauris",
+          "text": "View at Amazon"
+        }
+      ],
+      "text": "Pharetra non nam Nulla lorem qui felis in id consequat porta aliquam amet felis tincidunt magna rhoncus $2.66 Amet: $2.30 View at Amazon Magna consequat in Justo consequat augue imperdiet imperdiet felis porta sed porta vulputate elit amet malesuada eu sagittis varius justo $41.59 Elit: $11.50 View at Amazon Pharetra non nam Imperdiet ullamcorper at sed tellus elementum ipsum vel varius ipsum vel tempor molestie at at et dictum qui tincidunt ut at lacus sed $15.41 Tincidunt: $4.19 View at Amazon Magna consequat in Tellus malesuada fermentum nam posuere dolor justo nulla nulla lacus tincidunt porta ipsum id ut $45.04 Vel: $114.17 View at Amazon Pharetra non nam Consequat molestie sodales tellus tempor et ut $29.46 Condimentum: $23.01 View at Amazon"
+    }
+  ]
+}

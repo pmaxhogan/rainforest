@@ -1,0 +1,189 @@
+{
+  "data": {
+    "actions": [
+      {
+        "intent": "other",
+        "label": "Print"
+      }
+    ],
+    "charge_breakdown": [
+      {
+        "amount": {
+          "amount": 95.33,
+          "currency": "USD",
+          "raw": "$95.33"
+        },
+        "label": "Item(s) Subtotal",
+        "raw": "$95.33",
+        "type": "items_subtotal"
+      },
+      {
+        "amount": {
+          "amount": 0,
+          "currency": "USD",
+          "raw": "$0.00"
+        },
+        "label": "Shipping & Handling",
+        "raw": "$0.00",
+        "type": "shipping"
+      },
+      {
+        "amount": {
+          "amount": -1.8,
+          "currency": "USD",
+          "raw": "-$1.80"
+        },
+        "label": "Subscribe & Save",
+        "raw": "-$1.80",
+        "type": "promotion"
+      },
+      {
+        "amount": {
+          "amount": 92.37,
+          "currency": "USD",
+          "raw": "$92.37"
+        },
+        "label": "Total before tax",
+        "raw": "$92.37",
+        "type": "total_before_tax"
+      },
+      {
+        "amount": {
+          "amount": 1.1,
+          "currency": "USD",
+          "raw": "$1.10"
+        },
+        "label": "Estimated tax to be collected",
+        "raw": "$1.10",
+        "type": "tax"
+      },
+      {
+        "amount": {
+          "amount": 13.88,
+          "currency": "USD",
+          "raw": "$13.88"
+        },
+        "label": "Grand Total",
+        "raw": "$13.88",
+        "type": "grand_total"
+      }
+    ],
+    "notices": [],
+    "order_id": "000-0000000-0000001",
+    "order_total": {
+      "amount": 13.88,
+      "currency": "USD",
+      "raw": "$13.88"
+    },
+    "order_types": [
+      "subscribe_and_save"
+    ],
+    "payment": {
+      "actions": [
+        "View related transactions"
+      ],
+      "last4": "0000",
+      "lines": [],
+      "methods": [
+        {
+          "card_name": "Lorem dolor Card",
+          "details": [
+            "Aliquam aliquam elementum vehicula elementum ad See terms and conditions"
+          ],
+          "label": "Lorem dolor Card •••• 0000",
+          "last4": "0000",
+          "type": "card"
+        }
+      ],
+      "other_lines": []
+    },
+    "placed": {
+      "iso": "2030-08-20",
+      "raw": "August 20, 2030"
+    },
+    "refunds": [],
+    "ship_to": {
+      "address_lines": [
+        "00000 qui nulla nam",
+        "Exampleville, ZZ 00001-0000"
+      ],
+      "country": "Ad mauris tincidunt",
+      "heading": "Ship to",
+      "lines": [
+        "Felis rhoncus sed",
+        "00000 qui nulla nam",
+        "Exampleville, ZZ 00001-0000",
+        "Ad mauris tincidunt"
+      ],
+      "name": "Felis rhoncus sed"
+    },
+    "shipments": [
+      {
+        "items": [
+          {
+            "actions": [],
+            "asin": "B0FAKE0000",
+            "extras": {
+              "delivery_frequency": "Auto-delivered: Every 5 weeks",
+              "supplier_of_record": "Supplied by: Porta"
+            },
+            "links": [],
+            "price": {
+              "amount": 95.33,
+              "currency": "USD",
+              "raw": "$95.33"
+            },
+            "quantity": 1,
+            "seller": "Semper",
+            "seller_id": "FAKEID0002",
+            "title": "Nam felis semper ad sodales viverra vel tempor mauris gravida imperdiet elementum mauris imperdiet mauris posuere gravida mauris at dictum malesuada faucibus id rhoncus",
+            "url_path": "/dp/B0FAKE0000"
+          }
+        ],
+        "shipping_address": {
+          "address_lines": [
+            "00000 qui nulla nam",
+            "Exampleville, ZZ 00001-0000"
+          ],
+          "country": "Ad mauris tincidunt",
+          "heading": "Ship to",
+          "lines": [
+            "Felis rhoncus sed",
+            "00000 qui nulla nam",
+            "Exampleville, ZZ 00001-0000",
+            "Ad mauris tincidunt"
+          ],
+          "name": "Felis rhoncus sed"
+        },
+        "status": {
+          "date": {
+            "iso": "2030-08-31",
+            "raw": "August 31",
+            "year_inferred": true
+          },
+          "kind": "arriving",
+          "raw": "Arriving August 31"
+        }
+      }
+    ],
+    "transactions": []
+  },
+  "meta": {
+    "strategies": {
+      "order_id": "data-component",
+      "order_total": "charge-line",
+      "payment": "data-component",
+      "placed": "data-component",
+      "ship_to": "data-component",
+      "shipments": "data-component",
+      "shipments.asin": "link",
+      "shipments.price": "data-component",
+      "shipments.seller": "data-component",
+      "shipments.title": "data-component",
+      "totals": "data-component"
+    },
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

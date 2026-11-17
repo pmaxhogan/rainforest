@@ -1,0 +1,7 @@
+{
+  "kind": "subscriptions",
+  "url": "https://www.example.com/auto-deliveries",
+  "final_url": "https://www.example.com/auto-deliveries",
+  "captured_at": "2020-07-01T12:00:00.000Z",
+  "note": "subscriptions page"
+}

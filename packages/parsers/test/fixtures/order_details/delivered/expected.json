@@ -1,0 +1,191 @@
+{
+  "data": {
+    "actions": [],
+    "links": [
+      {
+        "kind": "invoice",
+        "label": "View invoice",
+        "path": "/gp/css/summary/print.html?orderID=000-0000000-0000001"
+      }
+    ],
+    "notices": [],
+    "order_id": "000-0000000-0000001",
+    "order_types": [
+      "subscribe_and_save"
+    ],
+    "payment": {
+      "actions": [
+        "View related transactions"
+      ],
+      "last4": "0000",
+      "lines": [],
+      "methods": [
+        {
+          "card_name": "Imperdiet Card",
+          "details": [
+            "Consequat aliquam rhoncus pharetra in in See terms and conditions"
+          ],
+          "label": "Imperdiet Card •••• 0000",
+          "last4": "0000",
+          "type": "card"
+        }
+      ],
+      "other_lines": []
+    },
+    "placed": {
+      "iso": "2020-09-27",
+      "raw": "September 27, 2020"
+    },
+    "returns_and_refunds": [],
+    "ship_to": {
+      "address_lines": [
+        "00001 fermentum faucibus aliquam tellus",
+        "Exampleville, ZZ 00000-0000"
+      ],
+      "country": "Felis ad",
+      "heading": "Ship to",
+      "lines": [
+        "Dictum viverra",
+        "00001 fermentum faucibus aliquam tellus",
+        "Exampleville, ZZ 00000-0000",
+        "Felis ad"
+      ],
+      "name": "Dictum viverra"
+    },
+    "shipments": [
+      {
+        "actions": [
+          {
+            "intent": "support",
+            "label": "Get product support"
+          },
+          {
+            "intent": "other",
+            "label": "View your Subscribe Malesuada"
+          },
+          {
+            "intent": "review",
+            "label": "Write a product review"
+          }
+        ],
+        "items": [
+          {
+            "actions": [
+              {
+                "intent": "buy_again",
+                "label": "Buy it again"
+              }
+            ],
+            "asin": "B0FAKE0000",
+            "extras": {
+              "delivery_frequency": "Auto-delivered: Every 7 weeks"
+            },
+            "links": [],
+            "price": {
+              "amount": 61.83,
+              "currency": "USD",
+              "raw": "$61.83"
+            },
+            "quantity": 1,
+            "return_window": {
+              "eligible": false,
+              "text": "Return window closed on November 12, 2020",
+              "through": {
+                "iso": "2020-11-12",
+                "raw": "November 12, 2020"
+              }
+            },
+            "seller": "Eu",
+            "seller_id": "FAKEID0003",
+            "title": "Tincidunt vel aliquam fermentum ut gravida sodales ipsum aliquam posuere ipsum vel posuere nam ad nam est malesuada",
+            "url_path": "/dp/B0FAKE0000"
+          }
+        ],
+        "links": []
+      }
+    ],
+    "status": {
+      "kinds": [],
+      "summary": ""
+    },
+    "totals": [
+      {
+        "amount": {
+          "amount": 61.83,
+          "currency": "USD",
+          "raw": "$61.83"
+        },
+        "label": "Item(s) Subtotal",
+        "raw": "$61.83",
+        "type": "items_subtotal"
+      },
+      {
+        "amount": {
+          "amount": 0,
+          "currency": "USD",
+          "raw": "$0.00"
+        },
+        "label": "Shipping & Handling",
+        "raw": "$0.00",
+        "type": "shipping"
+      },
+      {
+        "amount": {
+          "amount": -1.04,
+          "currency": "USD",
+          "raw": "-$1.04"
+        },
+        "label": "Subscribe & Save",
+        "raw": "-$1.04",
+        "type": "promotion"
+      },
+      {
+        "amount": {
+          "amount": 99.74,
+          "currency": "USD",
+          "raw": "$99.74"
+        },
+        "label": "Total before tax",
+        "raw": "$99.74",
+        "type": "total_before_tax"
+      },
+      {
+        "amount": {
+          "amount": 0.59,
+          "currency": "USD",
+          "raw": "$0.59"
+        },
+        "label": "Estimated tax to be collected",
+        "raw": "$0.59",
+        "type": "tax"
+      },
+      {
+        "amount": {
+          "amount": 11.99,
+          "currency": "USD",
+          "raw": "$11.99"
+        },
+        "label": "Grand Total",
+        "raw": "$11.99",
+        "type": "grand_total"
+      }
+    ]
+  },
+  "meta": {
+    "strategies": {
+      "order_id": "data-component",
+      "payment": "data-component",
+      "placed": "data-component",
+      "ship_to": "data-component",
+      "shipments": "data-component",
+      "shipments.asin": "link",
+      "shipments.price": "data-component",
+      "shipments.seller": "data-component",
+      "shipments.title": "data-component",
+      "totals": "data-component"
+    },
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}

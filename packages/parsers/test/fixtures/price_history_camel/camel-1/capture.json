@@ -1,0 +1,7 @@
+{
+  "kind": "price_history_camel",
+  "url": "https://www.example.com/product/B0FAKE0000",
+  "final_url": "https://www.example.com/product/B0FAKE0000",
+  "captured_at": "2020-07-01T12:00:00.000Z",
+  "note": "price history page"
+}

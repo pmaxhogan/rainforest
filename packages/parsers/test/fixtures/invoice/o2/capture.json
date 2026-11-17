@@ -1,0 +1,7 @@
+{
+  "kind": "invoice",
+  "url": "https://www.example.com/gp/css/summary/print.html?orderID=000-0000000-0000001",
+  "final_url": "https://www.example.com/gp/css/summary/print.html?orderID=000-0000000-0000001",
+  "captured_at": "2020-07-01T12:00:00.000Z",
+  "note": "invoice page"
+}

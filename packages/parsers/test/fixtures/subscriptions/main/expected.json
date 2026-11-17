@@ -1,0 +1,735 @@
+{
+  "data": {
+    "action_labels": [
+      "Edit All"
+    ],
+    "bulk_edit_path": "/Ut ipsum aliquam pulvinar vehicula dolor nulla ut sodales viverra porta posuere at ullamcorper semper vehicula ipsum tincidunt=00000000-0000-4000-8000-000000000005&FAKETOKEN0016",
+    "category_filters": [
+      {
+        "count": 6,
+        "id": "Qui",
+        "label": "Pulvinar nulla justo"
+      },
+      {
+        "count": 3,
+        "id": "Elit faucibus lorem sagittis",
+        "label": "Molestie condimentum"
+      },
+      {
+        "count": 1,
+        "id": "Ac nam",
+        "label": "Consequat"
+      },
+      {
+        "count": 1,
+        "id": "Lacus et",
+        "label": "Fermentum"
+      }
+    ],
+    "deliveries_heading": "Upcoming delivery days",
+    "deliveries_next_path": "/api/marketplaces/FAKEID0002/customer/replenishment/fulfillment/deliveries",
+    "empty_message": null,
+    "is_empty": false,
+    "program": "Subscribe & Save",
+    "program_links": [
+      {
+        "href_path": "/gp/buyagain",
+        "label": "Buy Again"
+      }
+    ],
+    "recommended": [
+      {
+        "action_labels": [
+          "Subscribe now"
+        ],
+        "asin": "B0FAKE0006",
+        "default_frequency": "3 months",
+        "discount_pct": 56,
+        "extra_discount_pct": 44,
+        "extra_discount_text": "Extra 44% off",
+        "frequency_options": [
+          {
+            "label": "2 weeks",
+            "selected": false,
+            "value": "Sed aliquam tellus"
+          },
+          {
+            "label": "3 weeks",
+            "selected": false,
+            "value": "Dictum malesuada sed"
+          },
+          {
+            "label": "1 month",
+            "selected": false,
+            "value": "Justo ad"
+          },
+          {
+            "label": "5 weeks",
+            "selected": false,
+            "value": "Ipsum magna"
+          },
+          {
+            "label": "9 weeks",
+            "selected": false,
+            "value": "Sagittis et"
+          },
+          {
+            "label": "7 weeks",
+            "selected": false,
+            "value": "Tellus"
+          },
+          {
+            "label": "2 months",
+            "selected": false,
+            "value": "Est elementum"
+          },
+          {
+            "label": "3 months",
+            "selected": true,
+            "value": "Elementum"
+          },
+          {
+            "label": "8 months",
+            "selected": false,
+            "value": "Malesuada ac vulputate"
+          },
+          {
+            "label": "5 months",
+            "selected": false,
+            "value": "Faucibus sagittis"
+          },
+          {
+            "label": "9 months",
+            "selected": false,
+            "value": "Est gravida"
+          }
+        ],
+        "image_url": "https://images.example.com/placeholder.png",
+        "list_price": null,
+        "one_time_price": {
+          "amount": 11.45,
+          "currency": "USD",
+          "raw": "$11.45"
+        },
+        "price": {
+          "amount": 3.18,
+          "currency": "USD",
+          "raw": "$3.18"
+        },
+        "purchased_count": null,
+        "purchased_text": null,
+        "title": "Nam malesuada pulvinar et consequat imperdiet non malesuada gravida vel vehicula pulvinar in in vulputate molestie semper dolor viverra",
+        "typical_price": null,
+        "url_path": "/Ut-lacus-ut-magna/dp/B0FAKE0006"
+      },
+      {
+        "action_labels": [
+          "Subscribe now"
+        ],
+        "asin": "B0FAKE0007",
+        "default_frequency": "3 months",
+        "discount_pct": 44,
+        "extra_discount_pct": 44,
+        "extra_discount_text": "Extra 44% off",
+        "frequency_options": [
+          {
+            "label": "2 weeks",
+            "selected": false,
+            "value": "Sed aliquam tellus"
+          },
+          {
+            "label": "3 weeks",
+            "selected": false,
+            "value": "Dictum malesuada sed"
+          },
+          {
+            "label": "1 month",
+            "selected": false,
+            "value": "Justo ad"
+          },
+          {
+            "label": "5 weeks",
+            "selected": false,
+            "value": "Ipsum magna"
+          },
+          {
+            "label": "9 weeks",
+            "selected": false,
+            "value": "Sagittis et"
+          },
+          {
+            "label": "7 weeks",
+            "selected": false,
+            "value": "Tellus"
+          },
+          {
+            "label": "2 months",
+            "selected": false,
+            "value": "Est elementum"
+          },
+          {
+            "label": "3 months",
+            "selected": true,
+            "value": "Elementum"
+          },
+          {
+            "label": "8 months",
+            "selected": false,
+            "value": "Malesuada ac vulputate"
+          },
+          {
+            "label": "5 months",
+            "selected": false,
+            "value": "Faucibus sagittis"
+          },
+          {
+            "label": "9 months",
+            "selected": false,
+            "value": "Est gravida"
+          }
+        ],
+        "image_url": "https://images.example.com/placeholder.png",
+        "list_price": null,
+        "one_time_price": {
+          "amount": 24.77,
+          "currency": "USD",
+          "raw": "$24.77"
+        },
+        "price": {
+          "amount": 4.78,
+          "currency": "USD",
+          "raw": "$4.78"
+        },
+        "purchased_count": null,
+        "purchased_text": null,
+        "title": "Semper justo pulvinar elementum posuere tincidunt amet in dictum elementum qui gravida",
+        "typical_price": null,
+        "url_path": "/Qui-et-felis-malesuada-fermentum-justo/dp/B0FAKE0007"
+      },
+      {
+        "action_labels": [
+          "Subscribe now"
+        ],
+        "asin": "B0FAKE0008",
+        "default_frequency": "8 months",
+        "discount_pct": 56,
+        "extra_discount_pct": null,
+        "extra_discount_text": null,
+        "frequency_options": [
+          {
+            "label": "2 weeks",
+            "selected": false,
+            "value": "Sed aliquam tellus"
+          },
+          {
+            "label": "3 weeks",
+            "selected": false,
+            "value": "Dictum malesuada sed"
+          },
+          {
+            "label": "1 month",
+            "selected": false,
+            "value": "Justo ad"
+          },
+          {
+            "label": "5 weeks",
+            "selected": false,
+            "value": "Ipsum magna"
+          },
+          {
+            "label": "9 weeks",
+            "selected": false,
+            "value": "Sagittis et"
+          },
+          {
+            "label": "7 weeks",
+            "selected": false,
+            "value": "Tellus"
+          },
+          {
+            "label": "2 months",
+            "selected": false,
+            "value": "Est elementum"
+          },
+          {
+            "label": "3 months",
+            "selected": false,
+            "value": "Elementum"
+          },
+          {
+            "label": "8 months",
+            "selected": true,
+            "value": "Malesuada ac vulputate"
+          },
+          {
+            "label": "5 months",
+            "selected": false,
+            "value": "Faucibus sagittis"
+          },
+          {
+            "label": "9 months",
+            "selected": false,
+            "value": "Est gravida"
+          }
+        ],
+        "image_url": "https://images.example.com/placeholder.png",
+        "list_price": null,
+        "one_time_price": {
+          "amount": 37.09,
+          "currency": "USD",
+          "raw": "$37.09"
+        },
+        "price": {
+          "amount": 68.84,
+          "currency": "USD",
+          "raw": "$68.84"
+        },
+        "purchased_count": null,
+        "purchased_text": null,
+        "title": "Id ipsum posuere amet faucibus condimentum felis ut rhoncus nam gravida et tincidunt rhoncus justo mauris qui qui mauris tellus sodales ut qui est varius",
+        "typical_price": null,
+        "url_path": "/Imperdiet-vulputate-elementum-vel-augue/dp/B0FAKE0008"
+      },
+      {
+        "action_labels": [
+          "Subscribe now"
+        ],
+        "asin": "B0FAKE0009",
+        "default_frequency": "3 months",
+        "discount_pct": 63,
+        "extra_discount_pct": 44,
+        "extra_discount_text": "Extra 44% off",
+        "frequency_options": [
+          {
+            "label": "2 weeks",
+            "selected": false,
+            "value": "Sed aliquam tellus"
+          },
+          {
+            "label": "3 weeks",
+            "selected": false,
+            "value": "Dictum malesuada sed"
+          },
+          {
+            "label": "1 month",
+            "selected": false,
+            "value": "Justo ad"
+          },
+          {
+            "label": "5 weeks",
+            "selected": false,
+            "value": "Ipsum magna"
+          },
+          {
+            "label": "9 weeks",
+            "selected": false,
+            "value": "Sagittis et"
+          },
+          {
+            "label": "7 weeks",
+            "selected": false,
+            "value": "Tellus"
+          },
+          {
+            "label": "2 months",
+            "selected": false,
+            "value": "Est elementum"
+          },
+          {
+            "label": "3 months",
+            "selected": true,
+            "value": "Elementum"
+          },
+          {
+            "label": "8 months",
+            "selected": false,
+            "value": "Malesuada ac vulputate"
+          },
+          {
+            "label": "5 months",
+            "selected": false,
+            "value": "Faucibus sagittis"
+          },
+          {
+            "label": "9 months",
+            "selected": false,
+            "value": "Est gravida"
+          }
+        ],
+        "image_url": "https://images.example.com/placeholder.png",
+        "list_price": null,
+        "one_time_price": {
+          "amount": 13.17,
+          "currency": "USD",
+          "raw": "$13.17"
+        },
+        "price": {
+          "amount": 20.88,
+          "currency": "USD",
+          "raw": "$20.88"
+        },
+        "purchased_count": null,
+        "purchased_text": null,
+        "title": "Tempor in viverra pulvinar vulputate eu ac ipsum elementum mauris ullamcorper ullamcorper est condimentum nulla amet varius justo",
+        "typical_price": null,
+        "url_path": "/Elementum-at-semper-varius-lorem-faucibus/dp/B0FAKE0009"
+      },
+      {
+        "action_labels": [
+          "Subscribe now"
+        ],
+        "asin": "B0FAKE000A",
+        "default_frequency": "9 months",
+        "discount_pct": 56,
+        "extra_discount_pct": null,
+        "extra_discount_text": null,
+        "frequency_options": [
+          {
+            "label": "2 weeks",
+            "selected": false,
+            "value": "Sed aliquam tellus"
+          },
+          {
+            "label": "3 weeks",
+            "selected": false,
+            "value": "Dictum malesuada sed"
+          },
+          {
+            "label": "1 month",
+            "selected": false,
+            "value": "Justo ad"
+          },
+          {
+            "label": "5 weeks",
+            "selected": false,
+            "value": "Ipsum magna"
+          },
+          {
+            "label": "9 weeks",
+            "selected": false,
+            "value": "Sagittis et"
+          },
+          {
+            "label": "7 weeks",
+            "selected": false,
+            "value": "Tellus"
+          },
+          {
+            "label": "2 months",
+            "selected": false,
+            "value": "Est elementum"
+          },
+          {
+            "label": "3 months",
+            "selected": false,
+            "value": "Elementum"
+          },
+          {
+            "label": "8 months",
+            "selected": false,
+            "value": "Malesuada ac vulputate"
+          },
+          {
+            "label": "5 months",
+            "selected": false,
+            "value": "Faucibus sagittis"
+          },
+          {
+            "label": "9 months",
+            "selected": true,
+            "value": "Est gravida"
+          }
+        ],
+        "image_url": "https://images.example.com/placeholder.png",
+        "list_price": null,
+        "one_time_price": {
+          "amount": 21.05,
+          "currency": "USD",
+          "raw": "$21.05"
+        },
+        "price": {
+          "amount": 3.34,
+          "currency": "USD",
+          "raw": "$3.34"
+        },
+        "purchased_count": null,
+        "purchased_text": null,
+        "title": "Aliquam elit vehicula nam at elementum aliquam dictum varius sodales aliquam ut sagittis tellus consequat qui nulla condimentum",
+        "typical_price": null,
+        "url_path": "/Pharetra-non-nam-non-eu/dp/B0FAKE000A"
+      }
+    ],
+    "recommended_heading": "Recommended for you",
+    "savings": {
+      "since_text": "Jul 2031",
+      "text": "You've saved $502.08$502 since Jul 2031 Learn more",
+      "total": {
+        "amount": 502.08,
+        "currency": "USD",
+        "raw": "$502.08"
+      }
+    },
+    "subscriptions": [
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0000",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0017&subAsin=B0FAKE0000&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 3,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 3 months",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2020-09-15",
+        "next_delivery_text": "Sep 15",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0017",
+        "title": "Non vel in faucibus ad magna tempor mauris posuere ac gravida tempor ipsum sed nulla porta aliquam consequat elit augue elit (tempor)"
+      },
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0001",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0018&subAsin=B0FAKE0001&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 5,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 5 months",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2021-01-21",
+        "next_delivery_text": "Jan 21",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0018",
+        "title": "Elit ipsum malesuada pharetra pharetra et et varius rhoncus rhoncus magna tincidunt imperdiet mauris sed eu et tellus imperdiet elit sodales ac tempor est sodales pharetra"
+      },
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0002",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0019&subAsin=B0FAKE0002&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 2,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 2 months",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2020-09-15",
+        "next_delivery_text": "Sep 15",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0019",
+        "title": "Gravida elit lorem semper elit lacus condimentum et justo ac vehicula tempor pharetra id semper ut aliquam amet in dolor fermentum condimentum nam"
+      },
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0003",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0020&subAsin=B0FAKE0003&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 8,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 8 months",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2020-12-12",
+        "next_delivery_text": "Dec 12",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0020",
+        "title": "Gravida in magna magna nam elit amet gravida amet vehicula consequat sed viverra fermentum non"
+      },
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0004",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0021&subAsin=B0FAKE0004&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 3,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 3 months",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2020-11-15",
+        "next_delivery_text": "Nov 15",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0021",
+        "title": "Dolor faucibus elementum nam et vulputate ac lacus tincidunt ullamcorper viverra tellus malesuada nulla nam tempor ad tellus dolor mauris vehicula sodales tincidunt imperdiet magna semper ullamcorper vehicula semper faucibus gravida posuere mauris consequat"
+      },
+      {
+        "action_labels": [
+          "Edit"
+        ],
+        "asin": "B0FAKE0005",
+        "edit_path": "/auto-deliveries/ajax/subscription/?subscriptionId=FAKETOKEN0022&subAsin=B0FAKE0005&shipId=FAKETOKEN0003",
+        "frequency": {
+          "every": 1,
+          "unit": "month"
+        },
+        "frequency_text": "1 unit every 1 month",
+        "image_url": "https://images.example.com/placeholder.png",
+        "next_delivery_date": "2020-09-15",
+        "next_delivery_text": "Sep 15",
+        "quantity": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": null,
+        "subscription_id": "FAKETOKEN0022",
+        "title": "Elit viverra molestie lacus nam eu condimentum dictum est elementum ut nulla nam est lacus sodales dolor posuere tellus nulla dictum rhoncus pharetra est dolor augue justo malesuada tincidunt (id)"
+      }
+    ],
+    "subscriptions_heading": "Your Subscriptions",
+    "tabs": [
+      {
+        "href_path": "/auto-deliveries/Id",
+        "key": "settings",
+        "label": "Amet",
+        "selected": false
+      },
+      {
+        "href_path": "/auto-deliveries",
+        "key": "deliveries",
+        "label": "Deliveries",
+        "selected": true
+      },
+      {
+        "href_path": "/auto-deliveries",
+        "key": "subscriptions",
+        "label": "Subscriptions",
+        "selected": false
+      },
+      {
+        "href_path": "/auto-deliveries/Ac",
+        "key": "shop",
+        "label": "Shop",
+        "selected": false
+      }
+    ],
+    "upcoming_deliveries": [
+      {
+        "action_labels": [
+          "Manage"
+        ],
+        "bundle_id": "FAKETOKEN0011",
+        "date_text": "Tue, Sep 8",
+        "delivery_date": "2255-03-14",
+        "extra_item_count": 0,
+        "in_progress": true,
+        "item_count": 1,
+        "items": [
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Condimentum sagittis varius posuere elementum elit ipsum fermentum pulvinar pharetra dictum dictum (in)"
+          }
+        ],
+        "last_edit_date": "2020-09-01",
+        "last_edit_text": "Tue, Sep 1",
+        "manage_path": "/auto-deliveries/?shipId=FAKETOKEN0003&deliveryDate=9000000000001&deliveryBundleId=FAKETOKEN0011",
+        "offscreen": false,
+        "position": 1,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": "Arriving"
+      },
+      {
+        "action_labels": [
+          "Manage",
+          "Skip items"
+        ],
+        "bundle_id": "FAKETOKEN0012",
+        "date_text": "Tue, Sep 15",
+        "delivery_date": "2255-03-14",
+        "extra_item_count": 2,
+        "in_progress": false,
+        "item_count": 5,
+        "items": [
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Ullamcorper tellus malesuada pharetra tempor ipsum mauris magna tempor non rhoncus"
+          },
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Non vel in faucibus ad magna tempor mauris posuere ac gravida tempor ipsum sed nulla porta aliquam consequat elit augue elit (tempor)"
+          },
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Gravida elit lorem semper elit lacus condimentum et justo ac vehicula tempor pharetra id semper ut aliquam amet in dolor fermentum condimentum nam"
+          }
+        ],
+        "last_edit_date": "2020-09-10",
+        "last_edit_text": "Thu, Sep 10",
+        "manage_path": "/auto-deliveries/?shipId=FAKETOKEN0003&deliveryDate=9000000000002&deliveryBundleId=FAKETOKEN0012",
+        "offscreen": false,
+        "position": 2,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": "Arriving"
+      },
+      {
+        "action_labels": [
+          "Manage"
+        ],
+        "bundle_id": "FAKETOKEN0013",
+        "date_text": "Wed, Oct 21",
+        "delivery_date": "2255-03-14",
+        "extra_item_count": 1,
+        "in_progress": false,
+        "item_count": 4,
+        "items": [
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Ullamcorper tellus malesuada pharetra tempor ipsum mauris magna tempor non rhoncus"
+          },
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Eu elementum malesuada ad justo faucibus condimentum fermentum pharetra malesuada non nam est elit vehicula et aliquam faucibus elementum et justo tempor molestie augue nam sodales fermentum id sed posuere dolor porta gravida"
+          },
+          {
+            "image_url": "https://images.example.com/placeholder.png",
+            "title": "Felis molestie ac at ac felis dictum sagittis sagittis ac condimentum est fermentum vel eu dolor"
+          }
+        ],
+        "last_edit_date": "2020-10-13",
+        "last_edit_text": "Tue, Oct 13",
+        "manage_path": "/auto-deliveries/?shipId=FAKETOKEN0003&deliveryDate=9000000000003&deliveryBundleId=FAKETOKEN0013",
+        "offscreen": true,
+        "position": 3,
+        "ship_id": "FAKETOKEN0003",
+        "status_text": "Arriving"
+      }
+    ],
+    "upcoming_deliveries_total": 4
+  },
+  "meta": {
+    "strategies": {
+      "delivery_date": "data-attr",
+      "program": "id",
+      "recommended": "data-attr",
+      "savings": "id",
+      "subscriptions": "id",
+      "tabs": "id",
+      "upcoming_deliveries": "data-attr"
+    },
+    "unknown_blobs": [
+      "addressesByShipId",
+      "addressSubscriptionCounts",
+      "addressGroupLabels",
+      "addressIngress",
+      "addressSelectorText"
+    ],
+    "unparsed_text_chars": 0,
+    "warnings": []
+  },
+  "other_sections": []
+}
