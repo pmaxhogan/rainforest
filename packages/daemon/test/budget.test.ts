@@ -221,3 +221,27 @@ describe("this computer's caps", () => {
     expect(controller.pacingSummary?.()).toEqual({ loads_left: 6 });
   });
 });
+
+test("when one page type's own cap is what binds, the refusal does not claim room it lacks", () => {
+  // This computer allows 16 loads per 10 minutes and 30 per hour, but product pages keep
+  // their own 15 per hour. Fifteen product loads over 50 minutes use that up while the
+  // caps across types still have room.
+  const c = clock();
+  const pacer = new Pacer({ now: c.now, burst: { loads: 16 }, global: { perHour: 30 } });
+  for (let i = 0; i < 15; i++) {
+    pacer.record("product");
+    c.advance(200_000);
+  }
+  expect(pacer.summary().loads_left).toBeGreaterThanOrEqual(4);
+  const { ctx } = context(pacer, c.now);
+  const error = refusal(() => requireBudget(ctx, { cart: 2, product: 2 }));
+  expect(error.payload.code).toBe("throttled");
+  // Two product loads fit once the two oldest are an hour old: the second was at 200 s,
+  // and now is 3000 s.
+  expect(error.payload.retry_after_s).toBe(800);
+  // The two cart loads fit; neither product load does.
+  expect(error.payload.details).toEqual({ needed: 4, available: 2, limited_by: "product" });
+  expect(error.payload.message).toBe(
+    "this action needs 4 page loads and only 2 fit the pacing budget right now (the product page cap is what limits it); all 4 fit in 800 s",
+  );
+});

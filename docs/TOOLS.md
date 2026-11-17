@@ -116,7 +116,8 @@ two together add up. Multi-step flows check that every page load they need fits 
 return `throttled` before touching anything if it does not. The check runs when the call is made
 and again once the call has the browser to itself, so calls queued ahead of it cannot spend the
 budget underneath it. `retry_after_s` is then the time until all of the flow's loads fit, and
-`details` is `{ needed, available }`.
+`details` is `{ needed, available, limited_by? }`: `limited_by` names the page class whose own cap
+is what falls short, when it is not the caps across classes.
 
 What each tool costs in page loads:
 

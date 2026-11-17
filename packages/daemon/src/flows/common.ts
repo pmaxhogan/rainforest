@@ -7,7 +7,7 @@ import {
   type ParseResult,
   type Parser,
 } from "@rainforest/core";
-import type { LoadNeeds, PageContext, PageType } from "@rainforest/browser";
+import type { LoadNeeds, PacedType, PageContext, PageType } from "@rainforest/browser";
 import type { SessionProvider } from "../browser-controller.ts";
 
 export const AMAZON = "https://www.amazon.com";
@@ -243,8 +243,25 @@ export function requireBudget(
   const pacer = ctx.browser.pacer();
   const wait = pacer.waitFor(needs);
   if (wait === 0) return;
-  const loads = Object.values(needs).reduce((sum, n) => sum + (n ?? 0), 0);
-  const details = { needed: loads, available: pacer.summary().loads_left };
+  const wanted = (Object.entries(needs) as [PacedType, number | undefined][]).filter(
+    (entry): entry is [PacedType, number] => (entry[1] ?? 0) > 0,
+  );
+  const loads = wanted.reduce((sum, [, n]) => sum + n, 0);
+  // How many of these loads fit now: the room across page types, and no more of each type
+  // than its own caps leave. When a type's own cap is what falls short, name it, so the
+  // refusal never reads as if there were room.
+  const overall = pacer.summary().loads_left;
+  const perType = wanted.map(([type, n]) => ({ type, n, room: pacer.headroom(type) }));
+  const available = Math.min(
+    overall,
+    perType.reduce((sum, t) => sum + Math.min(t.n, t.room), 0),
+  );
+  const limitedBy = perType.find((t) => t.room < t.n && t.room < overall)?.type;
+  const details = {
+    needed: loads,
+    available,
+    ...(limitedBy ? { limited_by: limitedBy } : {}),
+  };
   if (wait === null) {
     throw new RfError(
       "throttled",
@@ -263,8 +280,9 @@ export function requireBudget(
   const extra = note?.(wait);
   throw new RfError(
     "throttled",
-    `this action needs ${loads} page loads and only ${details.available} fit the pacing budget right now; ` +
-      `all ${loads} fit in ${retry} s` +
+    `this action needs ${loads} page loads and only ${available} fit the pacing budget right now` +
+      (limitedBy ? ` (the ${limitedBy} page cap is what limits it)` : "") +
+      `; all ${loads} fit in ${retry} s` +
       (extra ? `. ${extra}` : ""),
     { retry_after_s: retry, details },
   );
