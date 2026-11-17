@@ -1,0 +1,6 @@
+{
+  "kind": "search",
+  "url": "https://www.example.com/s?k=invented",
+  "final_url": "https://www.example.com/s?k=invented",
+  "captured_at": "2000-01-01T00:00:00.000Z"
+}
