@@ -34,8 +34,18 @@ function form(
   return `<form class="inline" method="post" action="/admin">${hidden}<button class="${esc(cls)}">${esc(label)}</button></form>`;
 }
 
-async function render(env: Env, csrf: string, notice: string): Promise<Response> {
+async function render(env: Env, csrf: string, notice: string, owner: string): Promise<Response> {
   const state = (await hub(env).adminState()) as unknown as AdminState;
+  const grantList = await env.OAUTH_PROVIDER.listUserGrants(owner).catch(() => ({ items: [] }));
+  const clients = grantList.items.length
+    ? `<table><tr><th>Client</th><th>Connected</th><th></th></tr>${grantList.items
+        .map((g) => {
+          const meta = (g.metadata ?? {}) as { client?: unknown };
+          const name = typeof meta.client === "string" ? meta.client : g.clientId;
+          return `<tr><td>${esc(name)}</td><td>${esc(when(g.createdAt * 1000))}</td><td>${form(csrf, "revoke_grant", { grant_id: g.id }, "Disconnect", "danger")}</td></tr>`;
+        })
+        .join("")}</table>`
+    : '<p class="muted">No clients are connected.</p>';
   const pairings = state.pairings.length
     ? `<table><tr><th>Code</th><th>Name</th><th>OS</th><th>Key</th><th>Expires</th><th></th></tr>${state.pairings
         .map(
@@ -65,6 +75,7 @@ async function render(env: Env, csrf: string, notice: string): Promise<Response>
   const body = `<h1>rainforest admin</h1>${notice ? `<p class="warn">${esc(notice)}</p>` : ""}
 <h2>Pending pairings</h2>${pairings}
 <h2>Devices</h2>${devices}
+<h2>Connected clients</h2>${clients}
 <h2>Audit log (latest 100, kept 90 days)</h2>${audit}`;
   const headers = new Headers();
   headers.append(
@@ -81,7 +92,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   if (!owner) return plain("unauthorized - sign in through Cloudflare Access", 401);
 
   if (request.method === "GET") {
-    return render(env, getCookie(request.headers.get("cookie"), CSRF_COOKIE) ?? randomToken(), "");
+    return render(
+      env,
+      getCookie(request.headers.get("cookie"), CSRF_COOKIE) ?? randomToken(),
+      "",
+      owner,
+    );
   }
   if (request.method !== "POST") return plain("method not allowed", 405);
   if (request.headers.get("origin") !== config.baseUrl) return plain("bad origin", 400);
@@ -107,8 +123,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await stub.revokeDevice(String(data.get("device_id") ?? ""));
       notice = "Device revoked.";
       break;
+    case "revoke_grant":
+      await env.OAUTH_PROVIDER.revokeGrant(String(data.get("grant_id") ?? ""), owner);
+      notice = "Client disconnected.";
+      break;
     default:
       return plain("unknown action", 400);
   }
-  return render(env, cookie, notice);
+  return render(env, cookie, notice, owner);
 }
