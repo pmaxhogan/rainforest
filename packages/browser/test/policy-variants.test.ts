@@ -58,7 +58,7 @@ describe("a malformed escape does not hide a buy marker", () => {
 
 test("lenientDecode and normalizePath", () => {
   expect(lenientDecode("a%2Db%zz%")).toBe("a-b%zz%");
-  expect(lenientDecode("%E2%82")).toBe("â\u0082");
+  expect(lenientDecode("%E2%82")).toBe(String.fromCharCode(0xe2, 0x82));
   expect(normalizePath("/-/es//gp;v=1/./buy/")).toBe("/gp/buy");
   expect(normalizePath("/-/es")).toBe("/");
   expect(normalizePath("/dp/B0FAKE0001")).toBe("/dp/B0FAKE0001");
