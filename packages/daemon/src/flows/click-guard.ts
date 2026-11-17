@@ -26,10 +26,16 @@ export interface ExpectedControl {
   label?: RegExp;
 }
 
-const DESCRIBE = `(el) => {
+type Described = ControlDescriptor & { tag?: string; type?: string | null };
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/** Runs in the page: a plain description of the element, nothing else. */
+function describeInPage(el: any): Described {
   const form = el.closest ? el.closest("form") : null;
   return {
-    text: (el.innerText || el.textContent || "").trim().slice(0, 200),
+    text: String(el.innerText || el.textContent || "")
+      .trim()
+      .slice(0, 200),
     id: el.id || null,
     name: el.getAttribute("name"),
     ariaLabel: el.getAttribute("aria-label"),
@@ -39,12 +45,13 @@ const DESCRIBE = `(el) => {
     tag: el.tagName,
     type: el.getAttribute("type"),
   };
-}`;
-
-type Described = ControlDescriptor & { tag?: string; type?: string | null };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export async function describeControl(locator: Locator): Promise<Described> {
-  return (await locator.evaluate(DESCRIBE as unknown as (el: unknown) => Described)) as Described;
+  // A real function, not a source string: Playwright evaluates a string as an expression
+  // and would return nothing useful.
+  return await locator.evaluate(describeInPage);
 }
 
 /** Pure check, exported for tests. Throws `blocked_by_policy` unless everything matches. */
