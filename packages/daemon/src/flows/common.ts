@@ -25,7 +25,8 @@ const SETTLE_MS = 1200;
 /**
  * Recent captures, so several tools that read the same page (product, variants, media,
  * review summary, price history) share one page load instead of five. Short-lived and
- * in memory only: raw pages are never written to disk by the daemon.
+ * in memory. (The pages themselves are also kept on disk, bounded, by the local page
+ * archive: see page-archive.ts.)
  */
 const CAPTURE_CACHE_MS = 120_000;
 const captureCache = new Map<string, { at: number; capture: Capture }>();

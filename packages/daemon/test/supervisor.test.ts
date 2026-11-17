@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { RfError } from "@rainforest/core";
 import { join } from "node:path";
 import { createAudit } from "../src/audit.ts";
-import { nullLogger } from "../src/log.ts";
+import { createLogger, nullLogger } from "../src/log.ts";
 import { createSupervisor } from "../src/supervisor.ts";
 import { RESTART_EXIT_CODE } from "../src/version.ts";
 import { call, fakeServices, presence, sampleConfig } from "./fakes.ts";
@@ -14,7 +14,7 @@ afterEach(async () => {
   await Promise.all(created.splice(0).map((s) => s.stop()));
 });
 
-function setup(config = sampleConfig({ idle_detach_s: 0 })) {
+function setup(config = sampleConfig({ idle_detach_s: 0 }), log = nullLogger()) {
   const services = fakeServices();
   const file = join(tmpDir(), "audit.jsonl");
   const audit = createAudit({ file });
@@ -22,7 +22,7 @@ function setup(config = sampleConfig({ idle_detach_s: 0 })) {
   const supervisor = createSupervisor({
     config,
     paths: {} as never,
-    log: nullLogger(),
+    log,
     audit,
     services,
     getPresence,
@@ -172,6 +172,55 @@ describe("supervisor call handling", () => {
     await supervisor.handleCall(call({ tool: "get_cart" }));
     expect(hub.results[0]).toMatchObject({ ok: true });
     expect(hub.results[0]).not.toHaveProperty("pacing");
+  });
+
+  test("every call leaves one log line; a failed one also leaves what the browser did", async () => {
+    const lines: Record<string, unknown>[] = [];
+    const log = createLogger({ sink: (line) => lines.push(JSON.parse(line)) });
+    const { supervisor, services } = setup(sampleConfig({ idle_detach_s: 0 }), log);
+    await supervisor.start();
+    services.browser.pacingSummary = () => ({ loads_left: 3 });
+    const asked: number[] = [];
+    services.browser.trace = (sinceMs) => {
+      asked.push(sinceMs);
+      return ["18:00:01.000 goto product /dp/B0FAKE0001", "18:00:02.000 landed /dp/B0FAKE0001"];
+    };
+    await supervisor.handleCall(call({ tool: "search", args: { query: "invented widget" } }));
+    services.router.handler = async () => {
+      throw new RfError("layout_unrecognized", "the all-offers panel did not open", {
+        details: { page: { visibility: "hidden", add_controls: 0 } },
+      });
+    };
+    await supervisor.handleCall(call({ id: "call-0002", tool: "get_cart" }));
+    const calls = lines.filter((l) => l.msg === "call");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      id: "call-0001",
+      tool: "search",
+      outcome: "ok",
+      loads_left: 3,
+      level: "info",
+    });
+    expect(calls[0]).not.toHaveProperty("error_code");
+    expect(calls[1]).toMatchObject({
+      id: "call-0002",
+      tool: "get_cart",
+      outcome: "error",
+      error_code: "layout_unrecognized",
+      error_message: "the all-offers panel did not open",
+      error_details: JSON.stringify({ page: { visibility: "hidden", add_controls: 0 } }),
+    });
+    // The trace is logged for the failed call only, and only from that call's start.
+    const traces = lines.filter((l) => l.msg === "call trace");
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({
+      id: "call-0002",
+      tool: "get_cart",
+      trace: ["18:00:01.000 goto product /dp/B0FAKE0001", "18:00:02.000 landed /dp/B0FAKE0001"],
+    });
+    expect(asked).toHaveLength(1);
+    // What was searched for never reaches the log.
+    expect(JSON.stringify(lines)).not.toContain("invented widget");
   });
 
   test("an unexpected error becomes internal without leaking its message", async () => {

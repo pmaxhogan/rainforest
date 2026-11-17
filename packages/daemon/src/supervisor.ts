@@ -189,6 +189,35 @@ export function createSupervisor(deps: SupervisorDeps): Supervisor {
         log.warn("pacing summary failed", { error });
       }
     }
+    // One line per call, so the log alone says what was asked and how it ended. Arguments
+    // are left to the audit log (writes only): a search query never reaches this file.
+    log.info("call", {
+      id: call.id,
+      tool: call.tool,
+      outcome: executed.ok ? "ok" : "error",
+      duration_ms,
+      ...(executed.error
+        ? {
+            error_code: executed.error.code,
+            error_message: executed.error.message,
+            ...(executed.error.retry_after_s !== undefined
+              ? { retry_after_s: executed.error.retry_after_s }
+              : {}),
+            ...(executed.error.details
+              ? { error_details: JSON.stringify(executed.error.details).slice(0, 3000) }
+              : {}),
+          }
+        : {}),
+      ...(pacing ? { loads_left: pacing.loads_left } : {}),
+    });
+    if (!executed.ok) {
+      try {
+        const trace = services.browser.trace?.(started) ?? [];
+        if (trace.length > 0) log.info("call trace", { id: call.id, tool: call.tool, trace });
+      } catch (error) {
+        log.warn("call trace failed", { error });
+      }
+    }
     const frame: DaemonResult = {
       type: "result",
       id: call.id,

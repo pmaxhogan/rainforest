@@ -78,6 +78,18 @@ const pacingSchema = z.strictObject({
   price_history: capsOverride.optional(),
 });
 
+/**
+ * The local page archive (see page-archive.ts): every page the daemon reads is kept on
+ * this computer for troubleshooting, oldest dropped first past these limits. It never
+ * leaves the computer. `enabled: false` turns it off.
+ */
+export const DEFAULT_PAGE_ARCHIVE = { enabled: true, max_pages: 200, max_mb: 2048 } as const;
+const pageArchiveSchema = z.strictObject({
+  enabled: z.boolean().default(DEFAULT_PAGE_ARCHIVE.enabled),
+  max_pages: z.number().int().min(1).max(5000).default(DEFAULT_PAGE_ARCHIVE.max_pages),
+  max_mb: z.number().int().min(1).max(20_000).default(DEFAULT_PAGE_ARCHIVE.max_mb),
+});
+
 export const configSchema = z.looseObject({
   hub_url: httpsUrl,
   device_id: z.string().min(8).max(64),
@@ -88,6 +100,7 @@ export const configSchema = z.looseObject({
   broker: brokerSchema.default(() => ({ mode: "external" as const, port: DEFAULT_BROKER_PORT })),
   update: updateSchema,
   pacing: pacingSchema.optional(),
+  page_archive: pageArchiveSchema.default(() => ({ ...DEFAULT_PAGE_ARCHIVE })),
   idle_detach_s: z.number().int().min(0).max(86_400).default(DEFAULT_IDLE_DETACH_S),
 });
 
@@ -183,5 +196,6 @@ export function summarizeConfig(config: DaemonConfig): Record<string, unknown> {
     },
     idle_detach_s: config.idle_detach_s,
     ...(config.pacing ? { pacing: config.pacing } : {}),
+    page_archive: config.page_archive,
   };
 }

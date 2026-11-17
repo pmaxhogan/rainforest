@@ -21,6 +21,7 @@ import {
   type LoadNeeds,
   type PacingDecision,
   type PageType,
+  type SeenPage,
 } from "@rainforest/browser";
 import { RfError, TOOLS, type ToolDef } from "@rainforest/core";
 import { classifyInterstitial } from "@rainforest/parsers";
@@ -68,6 +69,8 @@ export interface Harness {
   /** Forget any cool-down the pacer is in (between rails tests). */
   clearCoolDown(): void;
   log: string[];
+  /** Every page, fragment and failure snapshot the session reported (newest last). */
+  pages: SeenPage[];
   mode: "fixed-port" | "patched-copy";
   /** The throwaway profile directory of the test browser. */
   userDataDir: string;
@@ -489,7 +492,12 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
     watchdog.unref();
     cleanups.push(() => clearTimeout(watchdog));
     const pacer = options.pacer ?? new FastPacer();
+    const pages: SeenPage[] = [];
     const session = new BrowserSession({
+      onPage: (seen) => {
+        pages.push(seen);
+        if (pages.length > 400) pages.splice(0, pages.length - 400);
+      },
       broker,
       token,
       extensionId,
@@ -554,6 +562,7 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
         delete pacer.state.coolDownReason;
       },
       log,
+      pages,
       mode: patched ? "patched-copy" : "fixed-port",
       userDataDir,
       close: cleanup,

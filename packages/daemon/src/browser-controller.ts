@@ -17,6 +17,7 @@ import { pacingOverrides, type DaemonConfig } from "./config.ts";
 import { atomicWriteJson } from "./fsutil.ts";
 import type { BrowserController, BrowserStatus } from "./interfaces.ts";
 import type { Logger } from "./log.ts";
+import { createPageArchive } from "./page-archive.ts";
 import type { AppPaths } from "./paths.ts";
 import { loadSecrets } from "./secrets.ts";
 
@@ -159,6 +160,28 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
     per_day: pacer.limits.global.perDay,
     from_config: config.pacing !== undefined,
   });
+  const archive = config.page_archive.enabled
+    ? createPageArchive({
+        dir: paths.pagesDir,
+        maxPages: config.page_archive.max_pages,
+        maxBytes: config.page_archive.max_mb * 1024 * 1024,
+        log,
+      })
+    : null;
+  log.info("page archive", {
+    enabled: archive !== null,
+    max_pages: config.page_archive.max_pages,
+    max_mb: config.page_archive.max_mb,
+  });
+  // What the session did lately, kept in memory so a failed call can be explained from
+  // the log without turning debug logging on for everything.
+  const TRACE_LINES = 400;
+  const traceLines: { at: number; line: string }[] = [];
+  const sessionLog = (line: string): void => {
+    traceLines.push({ at: Date.now(), line });
+    if (traceLines.length > TRACE_LINES) traceLines.splice(0, traceLines.length - TRACE_LINES);
+    log.debug(line);
+  };
   let broker: Broker | null = null;
   let embedded: EmbeddedBroker | null = null;
   let session: BrowserSession | null = null;
@@ -260,7 +283,8 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
         return hit ? { kind: hit.kind, evidence: hit.evidence } : null;
       },
       onPacingChange: savePacing,
-      log: (line) => log.debug(line),
+      ...(archive ? { onPage: (seen) => archive.save(seen) } : {}),
+      log: sessionLog,
     });
     return session;
   };
@@ -291,6 +315,10 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
       };
     },
     pacingSummary: () => pacer.summary(),
+    trace: (sinceMs) =>
+      traceLines
+        .filter((entry) => entry.at >= sinceMs)
+        .map((entry) => `${new Date(entry.at).toISOString().slice(11, 23)} ${entry.line}`),
     session: getSession,
     pacer: () => pacer,
     setSignedIn(value) {

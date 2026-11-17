@@ -27,9 +27,32 @@ export interface SessionOptions {
   classify?: (capture: Capture) => Interstitial | null;
   /** Persist pacing state after it changes. */
   onPacingChange?: () => void;
+  /**
+   * Receives every page the session reads (as read, before any classification), every
+   * fragment it fetches, and a snapshot of the page a failed call left behind. For local
+   * diagnostics only: the session keeps nothing, and a throwing receiver is ignored.
+   */
+  onPage?: (page: SeenPage) => void;
   log?: (line: string) => void;
   sleep?: (ms: number) => Promise<void>;
 }
+
+/** One page or fragment as the session saw it. */
+export interface SeenPage {
+  /** A capture kind, "fragment", or "failure" (the page a failed call left behind). */
+  kind: string;
+  /** URL that was requested. */
+  url: string;
+  /** URL the tab or the fetch ended on. */
+  final_url: string;
+  captured_at: string;
+  html: string;
+  /** Why it was kept, for a failure: the error code and message. A fragment: its status. */
+  note?: string;
+}
+
+/** Where account friction was noticed: on a redirect hop, on the landed URL, or in the page. */
+export type FrictionSeen = "redirect" | "landed" | "page";
 
 export interface PageContext {
   /** Policy-checked, paced navigation. Throws structured errors. */
@@ -133,7 +156,13 @@ export class BrowserSession {
       this.#cancelIdle();
       const ctx = await this.#ensureAttached();
       this.#violation = null;
-      const result = await work(ctx);
+      let result: T;
+      try {
+        result = await work(ctx);
+      } catch (error) {
+        await this.#snapshotFailure(ctx.page, error);
+        throw error;
+      }
       if (this.#violation !== null) {
         const where = this.#violation;
         this.#violation = null;
@@ -151,6 +180,50 @@ export class BrowserSession {
       this.#queued--;
       this.#armIdle();
       release();
+    }
+  }
+
+  #seen(page: SeenPage): void {
+    try {
+      this.#options.onPage?.(page);
+    } catch {
+      // Diagnostics must never fail a call.
+    }
+  }
+
+  /** Keep the page a failed call left behind, when there is one worth keeping. */
+  async #snapshotFailure(page: Page, error: unknown): Promise<void> {
+    if (!this.#options.onPage) return;
+    const code = error instanceof RfError ? error.payload.code : "internal";
+    const message = error instanceof RfError ? error.payload.message : "unexpected error";
+    this.#options.log?.(`call failed: ${code}: ${message.slice(0, 200)}`);
+    // Refusals made before or without a page have nothing to show, and a challenge was
+    // either refused before it loaded or kept already when the page was read.
+    if (
+      code === "throttled" ||
+      code === "busy" ||
+      code === "browser_offline" ||
+      code === "needs_human"
+    )
+      return;
+    try {
+      const url = page.url();
+      if (!/^https?:/i.test(url)) return;
+      const snapshot = await Promise.race([
+        serializeWithHiddenMarks(page),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      ]);
+      if (!snapshot) return;
+      this.#seen({
+        kind: "failure",
+        url: this.#lastUrl,
+        final_url: url,
+        captured_at: new Date().toISOString(),
+        html: snapshot.html,
+        note: `${code}: ${message.slice(0, 300)}`,
+      });
+    } catch {
+      // The page may be gone; there is nothing to keep then.
     }
   }
 
@@ -287,6 +360,7 @@ export class BrowserSession {
     }
     const plan = this.#options.pacer.plan(type);
     if (!plan.ok) {
+      this.#options.log?.(`pacing refused a ${type} load (${plan.reason})`);
       throw new RfError("throttled", `pacing limit reached (${plan.reason})`, {
         retry_after_s: Math.ceil(plan.retryAfterMs / 1000),
         details: { reason: plan.reason, page_type: type },
@@ -297,6 +371,7 @@ export class BrowserSession {
     this.#options.pacer.record(type);
     this.#options.onPacingChange?.();
     this.#lastUrl = url;
+    this.#options.log?.(`goto ${type} ${pathOnly(url)}${inPage ? " (in page)" : ""}`);
     try {
       await retryOnDrag(
         () =>
@@ -316,11 +391,23 @@ export class BrowserSession {
       const blocked = guard.blocked().find((b) => b.mainFrameDocument);
       if (blocked) {
         await page.goto("about:blank").catch(() => {});
+        const where = {
+          seen: "redirect" as const,
+          path: pathOnly(blocked.url),
+          rule: blocked.verdict.rule,
+        };
+        this.#options.log?.(
+          `redirect refused: ${blocked.verdict.reason}/${blocked.verdict.rule} ${where.path}`,
+        );
         if (blocked.verdict.reason === "sign_in")
-          this.#needsHuman("sign_in", "Amazon asked to sign in again");
+          this.#needsHuman("sign_in", "Amazon asked to sign in again", where);
         const hopFriction = accountFriction(blocked.url);
         if (hopFriction)
-          this.#needsHuman(hopFriction, `Amazon showed a ${hopFriction.replace("_", " ")} page`);
+          this.#needsHuman(
+            hopFriction,
+            `Amazon showed a ${hopFriction.replace("_", " ")} page`,
+            where,
+          );
         throw new RfError(
           "blocked_by_policy",
           `a redirect was refused by policy (${blocked.verdict.reason})`,
@@ -335,6 +422,7 @@ export class BrowserSession {
         );
       }
       const message = String((error as Error)?.message ?? error).split("\n")[0] ?? "";
+      this.#options.log?.(`navigation failed: ${message.slice(0, 160)}`);
       if (/Timeout/i.test(message)) throw new RfError("timeout", "the page did not load in time");
       throw new RfError("internal", "navigation failed", {
         details: { message: message.slice(0, 200) },
@@ -353,12 +441,15 @@ export class BrowserSession {
     // Second layer: whatever URL the tab ended up on must itself be allowed.
     const landedUrl = page.url();
     const landed = checkNavigation(landedUrl);
+    this.#options.log?.(`landed ${pathOnly(landedUrl)}${landed.allow ? "" : " (refused)"}`);
     if (!landed.allow) {
       await page.goto("about:blank").catch(() => {});
-      if (landed.reason === "sign_in") this.#needsHuman("sign_in", "Amazon asked to sign in again");
+      const where = { seen: "landed" as const, path: pathOnly(landedUrl), rule: landed.rule };
+      if (landed.reason === "sign_in")
+        this.#needsHuman("sign_in", "Amazon asked to sign in again", where);
       const friction = accountFriction(landedUrl);
       if (friction)
-        this.#needsHuman(friction, `Amazon showed a ${friction.replace("_", " ")} page`);
+        this.#needsHuman(friction, `Amazon showed a ${friction.replace("_", " ")} page`, where);
       throw new RfError(
         "blocked_by_policy",
         `the page landed on a refused URL (${landed.reason})`,
@@ -403,6 +494,17 @@ export class BrowserSession {
       });
       return { status: response.status, finalUrl: response.url, body: await response.text() };
     }, url)) as { status: number; finalUrl: string; body: string };
+    this.#options.log?.(
+      `fragment ${type} ${pathOnly(url)} -> ${result.status}, ${result.body.length} chars`,
+    );
+    this.#seen({
+      kind: "fragment",
+      url,
+      final_url: result.finalUrl,
+      captured_at: new Date().toISOString(),
+      html: result.body,
+      note: `status ${result.status}`,
+    });
     const landed = checkFragment(result.finalUrl);
     if (!landed.allow)
       throw new RfError("blocked_by_policy", "fragment was redirected to a refused URL");
@@ -416,9 +518,19 @@ export class BrowserSession {
     return result.body;
   }
 
-  #needsHuman(kind: HumanKind, message: string): never {
+  #needsHuman(
+    kind: HumanKind,
+    message: string,
+    where: { seen: FrictionSeen; path?: string; rule?: string; evidence?: string },
+  ): never {
     this.#options.pacer.coolDown(kind);
     this.#options.onPacingChange?.();
+    this.#options.log?.(
+      `needs human: ${kind}, seen on ${where.seen}` +
+        (where.path ? ` at ${where.path}` : "") +
+        (where.rule ? ` (rule ${where.rule})` : "") +
+        (where.evidence ? ` (${where.evidence})` : ""),
+    );
     throw new RfError("needs_human", message, {
       kind,
       details: {
@@ -426,6 +538,11 @@ export class BrowserSession {
         // Which page was being opened when it happened, so the owner can open the same
         // page in a normal tab and clear the challenge there.
         while_opening: pathOnly(this.#lastUrl),
+        // What gave it away: a redirect hop that was refused before it loaded, the URL
+        // the tab landed on, or the content of the page itself. Paths only.
+        seen: where.seen,
+        ...(where.path ? { friction_path: where.path } : {}),
+        ...(where.evidence ? { evidence: where.evidence } : {}),
       },
     });
   }
@@ -439,7 +556,14 @@ export class BrowserSession {
       captured_at: new Date().toISOString(),
       html,
     };
+    // Kept before anything is decided about it: a page that turns out to be a challenge
+    // or unreadable is exactly the one worth looking at afterwards.
+    this.#seen({ ...capture });
     const interstitial = this.#options.classify?.(capture) ?? null;
+    this.#options.log?.(
+      `capture ${kind} ${pathOnly(capture.final_url)}, ${html.length} chars` +
+        (interstitial ? `: ${interstitial.kind} (${interstitial.evidence})` : ""),
+    );
     if (interstitial) {
       switch (interstitial.kind) {
         case "captcha":
@@ -449,6 +573,11 @@ export class BrowserSession {
           this.#needsHuman(
             interstitial.kind,
             `Amazon showed a ${interstitial.kind.replace("_", " ")} page`,
+            {
+              seen: "page",
+              path: pathOnly(capture.final_url),
+              evidence: interstitial.evidence.slice(0, 120),
+            },
           );
           break;
         case "throttled":

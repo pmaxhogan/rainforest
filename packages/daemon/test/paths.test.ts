@@ -70,6 +70,7 @@ describe("resolvePaths", () => {
       logsDir: "/r/logs",
       logFile: "/r/logs/daemon.log",
       auditFile: "/r/audit.jsonl",
+      pagesDir: "/r/pages",
       stateFile: "/r/state.json",
       launcherFile: "/r/launcher.ts",
     });

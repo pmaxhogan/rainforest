@@ -66,6 +66,11 @@ export interface BrowserController {
   status(): BrowserStatus;
   /** How many page loads fit right now, and when one more does. Sent with paced results. */
   pacingSummary?(): { loads_left: number; next_free_in_s?: number };
+  /**
+   * What the browser session did since `sinceMs` (navigations, refusals, captures), one
+   * line each with a clock time. Paths only, never page content. Logged when a call fails.
+   */
+  trace?(sinceMs: number): string[];
 }
 
 // ---- tool router (rails + flows + browser, src/rails/*, src/flows/*) ----------------

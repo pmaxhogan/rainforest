@@ -498,6 +498,7 @@ Under the per-user app directory (`~/Library/Application Support/rainforest` on 
 | `secrets.json`                 | extension token and optional update token (owner-only)                                     |
 | `pacing.json`                  | page-load timestamps and cool-down (mode 0600)                                             |
 | `audit.jsonl`                  | local audit log, 90 days                                                                   |
+| `pages/`                       | page archive: pages as read, gzipped, newest 200 or 2 GB, never uploaded (mode 0700)       |
 | `state.json`                   | bad-version marks, rollback target, pending update                                         |
 | `current`, `versions/<v>/`     | the active version pointer and installed versions                                          |
 | `launcher.mjs` / `launcher.ts` | the stable launcher the service runs                                                       |

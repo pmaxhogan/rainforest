@@ -130,6 +130,28 @@ describe("config", () => {
     });
   });
 
+  test("the page archive is on by default at 200 pages and 2 GB, and can be changed or turned off", () => {
+    // Hardcoded on purpose: these are the limits the owner chose.
+    expect(parseConfig(minimal).page_archive).toEqual({
+      enabled: true,
+      max_pages: 200,
+      max_mb: 2048,
+    });
+    expect(parseConfig({ ...minimal, page_archive: { enabled: false } }).page_archive).toEqual({
+      enabled: false,
+      max_pages: 200,
+      max_mb: 2048,
+    });
+    expect(
+      parseConfig({ ...minimal, page_archive: { max_pages: 50, max_mb: 100 } }).page_archive,
+    ).toEqual({ enabled: true, max_pages: 50, max_mb: 100 });
+    for (const bad of [{ max_pages: 0 }, { max_mb: 0 }, { max_pages: 1.5 }, { keep: true }]) {
+      expect(() => parseConfig({ ...minimal, page_archive: bad }), JSON.stringify(bad)).toThrow(
+        ConfigError,
+      );
+    }
+  });
+
   test("validation errors never echo the offending value", () => {
     let message = "";
     try {

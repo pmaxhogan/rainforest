@@ -167,22 +167,34 @@ Cloudflare Access, which you configure, keeps its own record of who signed in to
 
 All of it lives in the app directory (see docs/ARCHITECTURE.md for paths):
 
-| File                                 | What                                                                                                                                                |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.json`                        | hub URL, device id and name, aliases, Chrome profile name, extension id, broker mode and port, update repository and interval, optional pacing caps |
-| `device-key.json`                    | the device's Ed25519 key pair (owner-only)                                                                                                          |
-| `secrets.json`                       | the extension token, and the update token if you add one (owner-only)                                                                               |
-| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down (owner-only)                                                                |
-| `audit.jsonl`                        | per call: time, tool, outcome, duration, error code; arguments for write tools only                                                                 |
-| `logs/`                              | operational JSON lines with secrets dropped by key name                                                                                             |
-| `state.json`, `versions/`, `current` | installed versions and update bookkeeping                                                                                                           |
+| File                                 | What                                                                                                                                                                                                            |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.json`                        | hub URL, device id and name, aliases, Chrome profile name, extension id, broker mode and port, update repository and interval, optional pacing caps                                                             |
+| `device-key.json`                    | the device's Ed25519 key pair (owner-only)                                                                                                                                                                      |
+| `secrets.json`                       | the extension token, and the update token if you add one (owner-only)                                                                                                                                           |
+| `pacing.json`                        | timestamps of recent page loads per page type, and any active cool-down (owner-only)                                                                                                                            |
+| `audit.jsonl`                        | per call: time, tool, outcome, duration, error code; arguments for write tools only                                                                                                                             |
+| `logs/`                              | operational JSON lines with secrets dropped by key name; one line per call (tool, outcome, duration, error code, message and details, never the arguments), and for a failed call the paths the browser visited |
+| `pages/`                             | the page archive: the pages the daemon read, whole, newest 200 or 2 GB (owner-only); see below                                                                                                                  |
+| `state.json`, `versions/`, `current` | installed versions and update bookkeeping                                                                                                                                                                       |
 
-The daemon holds page content in memory only while handling a call and for three small caches:
-the cursor cache (up to 40 parsed results for 15 minutes), the recent page captures that several
-product tools share (two minutes, dropped after any write) and the price-history cache (six hours
-per source and ASIN). The key that seals cart offer ids also lives only in memory, so offer ids die
-with the process. It does not write captures to disk in normal operation; the developer capture
-tool is a separate, opt-in program.
+**The page archive.** So that a failed call can be understood afterwards without asking anyone to
+copy tool output around, the daemon keeps what it read on the computer that read it: every page
+it captured (as served, before parsing), every fragment it fetched, and the page a failed call
+left behind. These are whole pages from your signed-in session, so they hold whatever the page
+showed: order history, addresses, list contents, search terms in the URL. They are written to
+`pages/` in the app directory as gzipped JSON files, readable only by your user (mode 0700 and
+0600 where the platform has modes), and the oldest are deleted once there are more than 200 files
+or more than 2 GB. They never leave the computer: nothing in the archive is sent to the hub, to a
+Claude client or anywhere else, and no tool can read it. Change the limits or turn it off in
+`config.json` (`"page_archive": { "enabled": false }`, or `max_pages` and `max_mb`), then restart
+the daemon; deleting the `pages` folder at any time is safe.
+
+Apart from that archive, the daemon holds page content in memory: while handling a call and in
+three small caches, the cursor cache (up to 40 parsed results for 15 minutes), the recent page
+captures that several product tools share (two minutes, dropped after any write) and the
+price-history cache (six hours per source and ASIN). The key that seals cart offer ids also lives
+only in memory, so offer ids die with the process.
 
 The daemon reads a little about the machine and sends it to the hub as presence: seconds since last
 keyboard or mouse input, whether the screen is locked, whether Chrome is running, whether the

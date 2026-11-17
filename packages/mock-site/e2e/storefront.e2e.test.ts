@@ -603,6 +603,12 @@ if (!start.ok) {
         );
         expect(err.payload.kind).toBe(kind);
         expect(h.pacer.state.coolingDownUntil).toBeGreaterThan(Date.now());
+        // It says the page itself gave it away, and that very page was kept for later.
+        expect(err.payload.details).toMatchObject({ seen: "page", while_opening: "/s" });
+        expect(typeof err.payload.details?.evidence).toBe("string");
+        const kept = h.pages[h.pages.length - 1]!;
+        expect(kept.kind).toBe("search");
+        expect(kept.html.length).toBeGreaterThan(100);
       });
     }
 
@@ -611,9 +617,18 @@ if (!start.ok) {
       ["captcha-redirect", "captcha"],
     ] as const) {
       it(`a 302 into the ${trap} page never loads it and asks for a human`, async () => {
-        await expectRefusal(() => goto(`/s?k=example&mock=${flag}`), "needs_human");
+        const err = await expectRefusal(() => goto(`/s?k=example&mock=${flag}`), "needs_human");
         expect((await h.state()).trap_counts[trap]).toBe(0);
         expect(h.pacer.state.coolingDownUntil).toBeGreaterThan(Date.now());
+        // The refusal names the redirect that was refused, by path, and the session's
+        // log has the same line: enough to tell afterwards what Amazon sent.
+        expect(err.payload.details).toMatchObject({ seen: "redirect", while_opening: "/s" });
+        expect(String(err.payload.details?.friction_path)).toMatch(
+          trap === "checkpoint" ? /^\/checkpoint/ : /captcha/i,
+        );
+        expect(h.log.some((line) => /^needs human: .* seen on redirect at \//.test(line))).toBe(
+          true,
+        );
       });
     }
 
@@ -688,6 +703,30 @@ if (!start.ok) {
         // The session poisoned itself (framenavigated layer); start the next test clean.
         await h.session.detach();
       });
+    });
+
+    it("reads are reported as they happen, and a failed call leaves its page behind", async () => {
+      const before = h.pages.length;
+      await h.call("search", { query: "widget" });
+      const read = h.pages.slice(before);
+      expect(read.map((p) => p.kind)).toEqual(["search"]);
+      expect(read[0]!.final_url).toContain("/s?");
+      expect(read[0]!.html).toContain("<");
+      const mark = h.pages.length;
+      await expectRefusal(
+        () =>
+          h.session.run(async (ctx) => {
+            await ctx.goto(`${STOREFRONT}/dp/B0FAKE0001`, "product");
+            throw new RfError("layout_unrecognized", "the panel did not open");
+          }),
+        "layout_unrecognized",
+      );
+      const left = h.pages.slice(mark);
+      expect(left.map((p) => p.kind)).toEqual(["failure"]);
+      expect(left[0]!.note).toBe("layout_unrecognized: the panel did not open");
+      expect(left[0]!.final_url).toContain("/dp/B0FAKE0001");
+      expect(left[0]!.html.length).toBeGreaterThan(100);
+      expect(h.log.some((line) => line === "goto product /dp/B0FAKE0001")).toBe(true);
     });
 
     it("pacing gaps are honored with the real pacer", async () => {

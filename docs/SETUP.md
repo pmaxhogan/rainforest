@@ -407,6 +407,26 @@ detail, stop the service and run it in the foreground with `RAINFOREST_LOG_LEVEL
 run a second copy while the service is up: a newer connection for the same device replaces the
 older one.
 
+**When a tool call failed,** everything needed is on the computer that served it (the result's
+`browser.name` says which one):
+
+- `daemon.log` has one `call` line per tool call: `tool`, `outcome`, `duration_ms`, and for a
+  failure `error_code`, `error_message` and `error_details`. Arguments are not logged; the audit
+  log keeps them for write tools.
+- A failed call is followed by a `call trace` line: what the browser did during that call, in
+  order, with clock times: each navigation (`goto product /dp/...`), where it landed, each
+  redirect the rails refused and by which rule, each fragment and capture, and for a challenge
+  `needs human: <kind>, seen on <redirect|landed|page> at <path>`. Paths only.
+- The `pages` folder next to `logs` holds the pages themselves, gzipped JSON, one file per page,
+  named `<UTC time>-<n>-<kind>.json.gz`. `kind` is the page kind, `fragment`, or `failure` for the
+  page a failed call left behind (its `note` is the error). Read one with
+  `gunzip -c <file> | head -c 2000`, or load the JSON and look at `html`. The newest 200 files or
+  2 GB are kept (docs/PRIVACY.md).
+
+A `needs_human` error also says where the challenge was seen in its `details`: `seen`
+(`redirect`, `landed` or `page`), `friction_path` and, for a page, the `evidence` that gave it
+away, next to `while_opening`.
+
 ### Hub and consent
 
 | Symptom                                                               | Likely cause and fix                                                                                                   |

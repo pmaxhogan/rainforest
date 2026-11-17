@@ -26,6 +26,8 @@ export interface AppPaths {
   logsDir: string;
   logFile: string;
   auditFile: string;
+  /** Mode 0700: the bounded local archive of pages the daemon read (diagnostics). */
+  pagesDir: string;
   stateFile: string;
   /** Stable launcher copy the autostart service runs. */
   launcherFile: string;
@@ -78,6 +80,7 @@ export function resolvePaths(pe: PathEnv = currentPathEnv()): AppPaths {
     logsDir,
     logFile: p.join(logsDir, "daemon.log"),
     auditFile: p.join(root, "audit.jsonl"),
+    pagesDir: p.join(root, "pages"),
     stateFile: p.join(root, "state.json"),
     launcherFile: p.join(root, "launcher.ts"),
   };

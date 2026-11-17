@@ -133,6 +133,47 @@ export function decideAdd(input: {
   return { flags };
 }
 
+/** Path of a URL without query or fragment, for diagnostics. */
+function pathOf(value: string): string {
+  try {
+    return new URL(value).pathname.slice(0, 120);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * What the product page shows about its all-offers panel. Counts and flags, no text.
+ * `frames` says whether the page is still being drawn (an animation frame arrives within
+ * 700 ms): a page that is not drawn, because its window is covered or the display is
+ * off, never runs the work that pages queue on the next frame.
+ */
+const PANEL_STATE = `(async () => {
+  const count = (selector) => document.querySelectorAll(selector).length;
+  const frames = await new Promise((resolve) => {
+    let done = false;
+    requestAnimationFrame(() => {
+      done = true;
+      resolve(true);
+    });
+    setTimeout(() => {
+      if (!done) resolve(false);
+    }, 700);
+  });
+  return {
+    visibility: document.visibilityState,
+    has_focus: document.hasFocus(),
+    frames,
+    ready_state: document.readyState,
+    url_has_aod: /[?&]aod=1(&|$)/.test(location.search),
+    panel_containers: count("#aod-container, #all-offers-display, #aod-background"),
+    panel_offers: count("#aod-offer, #aod-pinned-offer"),
+    add_controls: count("span[data-action='aod-atc-action']"),
+    ways_in: count("#aod-ingress-link, #buybox-see-all-buying-choices, [data-action='show-all-offers-display'], a[href*='aod=1']"),
+    buy_box_add: count("#add-to-cart-button"),
+  };
+})()`;
+
 async function declineUpsells(page: PageContext): Promise<string[]> {
   const declined: string[] = [];
   // Protection plan and add-on prompts: always the "no" control, never the offer.
@@ -196,10 +237,18 @@ export const addToCart: Flow = async (args, ctx) => {
       await page.page.waitForLoadState("load", { timeout: 20_000 }).catch(() => {});
       await page.page
         .waitForSelector("span[data-action='aod-atc-action']", { timeout: 20_000 })
-        .catch(() => {
+        .catch(async () => {
+          // Counts and flags only, so the refusal says what the page looked like: was the
+          // tab visible, did the panel exist at all, was there a way into it.
+          const state = await page.page.evaluate(PANEL_STATE).catch(() => null);
+          const refused = page.guard
+            .blocked()
+            .slice(-8)
+            .map((b) => ({ method: b.method, path: pathOf(b.url), rule: b.verdict.rule }));
           throw new RfError(
             "layout_unrecognized",
             "the all-offers panel did not open; nothing was added",
+            { details: { page: state, refused } },
           );
         });
       await new Promise((r) => setTimeout(r, 1000));
@@ -240,13 +289,6 @@ export const addToCart: Flow = async (args, ctx) => {
       });
       await new Promise((r) => setTimeout(r, 3000));
       // What the rails refused between the click and now (paths only), for diagnosis.
-      const pathOf = (value: string): string => {
-        try {
-          return new URL(value).pathname.slice(0, 120);
-        } catch {
-          return "";
-        }
-      };
       const refusedAfterClick = page.guard
         .blocked()
         .slice(-5)
