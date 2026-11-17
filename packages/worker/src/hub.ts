@@ -572,9 +572,17 @@ export class Hub extends DurableObject<Env> {
     return (
       rows.find((r) => r.id.toLowerCase() === wanted) ??
       rows.find((r) => r.name.toLowerCase() === wanted) ??
-      rows.find((r) => r.aliases.some((a) => a.toLowerCase() === wanted)) ??
-      null
+      this.#byAlias(wanted, rows)
     );
+  }
+
+  /**
+   * Aliases are reported by the devices themselves, so they only count when exactly one
+   * device claims the alias and it is not another device's name.
+   */
+  #byAlias(wanted: string, rows: BrowserRow[]): BrowserRow | null {
+    const claimed = rows.filter((r) => r.aliases.some((a) => a.toLowerCase() === wanted));
+    return claimed.length === 1 ? claimed[0]! : null;
   }
 
   async selectBrowser(grantKey: string, name: string | null): Promise<SelectResult> {
@@ -691,11 +699,21 @@ export class Hub extends DurableObject<Env> {
     }
     const row = resolved.row;
     const ws = this.#socketFor(row.id);
-    if (!ws)
+    if (!ws) {
+      this.#audit({
+        client: input.client,
+        tool: input.tool,
+        deviceId: row.id,
+        outcome: "error",
+        durationMs: 0,
+        errorCode: "browser_offline",
+        args: argsForAudit,
+      });
       return {
         ok: false,
         error: { code: "browser_offline", message: `browser "${row.name}" is offline` },
       };
+    }
     const minVersion = this.env.MIN_DAEMON_VERSION;
     if (minVersion && row.daemon_version && compareVersions(row.daemon_version, minVersion) < 0) {
       ws.send(JSON.stringify({ type: "update_hint" }));
