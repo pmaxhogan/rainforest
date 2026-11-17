@@ -92,13 +92,19 @@ async function callTool(
   rawArgs: unknown,
 ): Promise<{ content: ContentBlock[]; isError?: boolean }> {
   const def = getTool(name);
-  if (!def)
+  // Calls refused before they reach the Hub are audited too: every call writes a row.
+  const auditRefusal = (tool: string): Promise<void> =>
+    hub(env).auditHubTool(props.clientName, tool, "error", 0, "invalid_arguments", null);
+  if (!def) {
+    await auditRefusal(name.slice(0, 64));
     return errorContent({
       code: "invalid_arguments",
       message: `unknown tool "${name.slice(0, 64)}"`,
     });
+  }
   const parsed = def.input.safeParse(rawArgs ?? {});
   if (!parsed.success) {
+    await auditRefusal(def.name);
     const issue = parsed.error.issues[0];
     return errorContent({
       code: "invalid_arguments",
