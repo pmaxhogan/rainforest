@@ -200,11 +200,15 @@ export function pageBody(result: ParseResult<unknown>, capture: Capture): Record
   };
 }
 
-/** Top-level arrays of a body, largest last, as paging candidates. */
-export function arrayKeys(body: Record<string, unknown>): string[] {
-  return Object.keys(body)
-    .filter((key) => Array.isArray(body[key]))
-    .sort((a, b) => JSON.stringify(body[a]).length - JSON.stringify(body[b]).length);
+/**
+ * Cut order for a body: every top-level array that is not in `keep`, largest first, then
+ * the `keep` lists in the order given (so the last one named survives longest).
+ */
+export function arrayKeys(body: Record<string, unknown>, keep: string[] = []): string[] {
+  const others = Object.keys(body)
+    .filter((key) => Array.isArray(body[key]) && !keep.includes(key))
+    .sort((a, b) => JSON.stringify(body[b]).length - JSON.stringify(body[a]).length);
+  return [...others, ...keep.filter((key) => Array.isArray(body[key]))];
 }
 
 export function maxCharsOf(args: Record<string, unknown>): number | undefined {

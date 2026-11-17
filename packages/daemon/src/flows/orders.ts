@@ -105,7 +105,7 @@ export const getOrder: Flow = async (args, ctx) => {
         { settleMs: 2500 },
       );
       const body = pageBody(result, capture);
-      return fitToBudget(body, arrayKeys(body), maxCharsOf(args), ctx.now());
+      return fitToBudget(body, arrayKeys(body, ["shipments"]), maxCharsOf(args), ctx.now());
     } catch (error) {
       mapOrderError(error);
     }

@@ -54,7 +54,12 @@ export const listSubscriptions: Flow = async (args, ctx) => {
       parseSubscriptions,
     );
     const body = pageBody(result, capture);
-    return fitToBudget(body, arrayKeys(body), maxCharsOf(args), ctx.now());
+    return fitToBudget(
+      body,
+      arrayKeys(body, ["upcoming_deliveries", "subscriptions"]),
+      maxCharsOf(args),
+      ctx.now(),
+    );
   });
 };
 
@@ -81,7 +86,7 @@ export const getBrowsingHistory: Flow = async (args, ctx) => {
       },
     );
     const body = pageBody(result, capture);
-    return fitToBudget(body, arrayKeys(body), maxCharsOf(args), ctx.now());
+    return fitToBudget(body, arrayKeys(body, ["items"]), maxCharsOf(args), ctx.now());
   });
 };
 
