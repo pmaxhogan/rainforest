@@ -3,7 +3,15 @@
 // imports from a versioned directory) because it is the one file that does not change when
 // the daemon updates. It reads `current`, resolves versions/<v>/ and imports that version's
 // entry; the entry then runs the CLI with this process's argv.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -36,6 +44,60 @@ export function resolveLaunchTarget(root: string): LaunchTarget {
   return { ok: false, reason: `version ${version} has no entry point` };
 }
 
+/** A new version gets this many starts to prove itself before the launcher rolls back. */
+export const MAX_PENDING_BOOTS = 3;
+
+/**
+ * Roll back an update that keeps failing to come up. The updater records a `pending`
+ * entry when it switches versions and clears it once the new version is healthy; if the
+ * launcher sees the same pending version start too many times, it restores the previous
+ * version and marks the new one bad. Returns the version that was rolled back, if any.
+ */
+export function guardPendingUpdate(root: string, now: number = Date.now()): string | null {
+  const stateFile = join(root, "state.json");
+  let state: {
+    bad_versions?: Record<string, { at: number; reason: string }>;
+    previous_version?: string;
+    pending?: { version: string; previous: string; since: number; boots: number };
+  };
+  try {
+    state = JSON.parse(readFileSync(stateFile, "utf8")) as typeof state;
+  } catch {
+    return null;
+  }
+  const pending = state.pending;
+  if (!pending || typeof pending.version !== "string" || typeof pending.previous !== "string")
+    return null;
+  let current = "";
+  try {
+    current = readFileSync(join(root, "current"), "utf8").trim();
+  } catch {
+    return null;
+  }
+  if (current !== pending.version) return null;
+  const write = (value: unknown): void => {
+    const tmp = `${stateFile}.tmp-${process.pid}`;
+    writeFileSync(tmp, JSON.stringify(value, null, 2));
+    renameSync(tmp, stateFile);
+  };
+  const boots = (typeof pending.boots === "number" ? pending.boots : 0) + 1;
+  if (boots <= MAX_PENDING_BOOTS) {
+    write({ ...state, pending: { ...pending, boots } });
+    return null;
+  }
+  if (!VERSION_NAME.test(pending.previous) || !existsSync(join(root, "versions", pending.previous)))
+    return null;
+  const pointerTmp = join(root, `current.tmp-${process.pid}`);
+  writeFileSync(pointerTmp, `${pending.previous}\n`);
+  renameSync(pointerTmp, join(root, "current"));
+  const bad = { ...(state.bad_versions ?? {}) };
+  bad[pending.version] = { at: now, reason: "did not become healthy after an update" };
+  const next = { ...state, bad_versions: bad };
+  delete next.pending;
+  write(next);
+  return pending.version;
+}
+
 export function launcherRoot(env: Record<string, string | undefined>, here: string): string {
   const override = env.RAINFOREST_HOME;
   return override && override.trim() !== "" ? override : dirname(here);
@@ -55,6 +117,12 @@ function logLine(root: string, message: string): void {
 
 async function main(): Promise<void> {
   const root = launcherRoot(process.env, fileURLToPath(import.meta.url));
+  try {
+    const rolledBack = guardPendingUpdate(root);
+    if (rolledBack) logLine(root, `rolled back version ${rolledBack}: it did not become healthy`);
+  } catch (error) {
+    logLine(root, `update guard failed: ${(error as Error).message}`);
+  }
   const target = resolveLaunchTarget(root);
   if (!target.ok) {
     logLine(root, target.reason);

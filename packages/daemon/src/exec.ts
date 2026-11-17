@@ -9,6 +9,8 @@ export interface ExecResult {
 
 export interface ExecOptions {
   timeout_ms?: number;
+  /** Extra environment variables for the child (merged over this process's environment). */
+  env?: Record<string, string>;
 }
 
 /**
@@ -28,6 +30,7 @@ export const defaultExec: Exec = (file, args, opts = {}) =>
         timeout: opts.timeout_ms ?? 15_000,
         maxBuffer: 4 * 1024 * 1024,
         windowsHide: true,
+        ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
       },
       (error, stdout, stderr) => {
         if (!error) {

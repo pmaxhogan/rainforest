@@ -12,6 +12,7 @@ import { createBrowserController } from "./browser-controller.ts";
 import { pairCommand, setupCommand } from "./commands/operator.ts";
 import { createRouter } from "./flows/index.ts";
 import { hubClientFactory } from "./hub-client.ts";
+import { createUpdater } from "./updater/index.ts";
 
 /**
  * Shell wiring: stub implementations of every seam. The real hub client, browser
@@ -95,11 +96,39 @@ export const createServices: CreateServices = (deps) => {
     paths: deps.paths,
     log: deps.log,
   });
+  // The updater's health signal: has this process reached the hub?
+  let hubConnected = false;
+  const hubClient: HubClientFactory = (clientDeps) =>
+    hubClientFactory({
+      ...clientDeps,
+      onConnectionChange: (connected) => {
+        hubConnected = connected;
+        clientDeps.onConnectionChange?.(connected);
+      },
+    });
+  const updater = createUpdater({
+    config: deps.config,
+    paths: deps.paths,
+    log: deps.log,
+    exec: deps.exec,
+    version: deps.version,
+    requestRestart: deps.requestRestart,
+    isHealthy: () => hubConnected,
+  });
   return {
-    hubClient: hubClientFactory,
+    hubClient,
     browser,
     router: createRouter(browser),
-    updater: stubUpdater,
-    commands,
+    updater,
+    commands: {
+      ...commands,
+      update: async (_options, io) => {
+        const outcome = await updater.checkNow("manual");
+        io.out(JSON.stringify(outcome));
+        if (outcome.status === "updated" && outcome.restart_required)
+          deps.requestRestart(`updated to ${outcome.to}`);
+        return outcome.status === "failed" ? 1 : 0;
+      },
+    },
   };
 };

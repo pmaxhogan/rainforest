@@ -68,6 +68,17 @@ export interface DaemonState {
   bad_versions: Record<string, BadVersionMark>;
   /** Version that was current before the last switch; the updater rolls back to it. */
   previous_version?: string;
+  /** An update that has been switched to but has not yet proven healthy. */
+  pending?: PendingUpdate;
+}
+
+export interface PendingUpdate {
+  version: string;
+  previous: string;
+  /** Epoch ms of the switch. */
+  since: number;
+  /** How many times the launcher has started this version without it confirming. */
+  boots: number;
 }
 
 export function readState(paths: AppPaths): DaemonState {
@@ -82,6 +93,21 @@ export function readState(paths: AppPaths): DaemonState {
     }
     const state: DaemonState = { bad_versions: bad };
     if (typeof raw.previous_version === "string") state.previous_version = raw.previous_version;
+    const pending = raw.pending;
+    if (
+      pending &&
+      typeof pending.version === "string" &&
+      typeof pending.previous === "string" &&
+      typeof pending.since === "number" &&
+      typeof pending.boots === "number"
+    ) {
+      state.pending = {
+        version: pending.version,
+        previous: pending.previous,
+        since: pending.since,
+        boots: pending.boots,
+      };
+    }
     return state;
   } catch {
     return empty;
