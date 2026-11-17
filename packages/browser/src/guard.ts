@@ -9,6 +9,12 @@ import { checkRequest, type Verdict } from "./policy.ts";
  * redirected requests itself). So a catch-all route keeps request interception enabled,
  * and a listener PREPENDED on the page's raw CDP session inspects every paused request,
  * redirect hops included, and fails the denied ones before Playwright can continue them.
+ *
+ * Service workers are bypassed for the tab: a site's service worker otherwise fetches
+ * top-level pages itself, outside page-level interception, and the guard would never see
+ * those navigations. The guard also counts the main-frame documents it has inspected, so
+ * the session can refuse to continue when a navigation happened that the guard did not
+ * see (fail closed).
  */
 
 export interface BlockedRequest {
@@ -37,6 +43,8 @@ export interface Guard {
   blocked(): readonly BlockedRequest[];
   /** Forget recorded blocks (call before a navigation to attribute blocks to it). */
   reset(): void;
+  /** Main-frame document requests inspected since the last reset. */
+  mainDocumentsSeen(): number;
   dispose(): Promise<void>;
 }
 
@@ -71,12 +79,16 @@ export async function installGuard(
   const client = rawClient(page);
   const topFrame = await mainFrameId(client);
   const blocked: BlockedRequest[] = [];
+  let mainDocuments = 0;
+  // Without this a service worker can serve navigations the guard never sees.
+  await client.send("Network.setBypassServiceWorker", { bypass: true });
 
   const listener = (event: RequestPaused): void => {
     let verdict: Verdict;
     let isMainDocument = false;
     try {
       isMainDocument = event.resourceType === "Document" && event.frameId === topFrame;
+      if (isMainDocument) mainDocuments++;
       const postData = readBody(event.request);
       verdict = checkRequest({
         url: event.request.url,
@@ -114,7 +126,9 @@ export async function installGuard(
     blocked: () => blocked,
     reset: () => {
       blocked.length = 0;
+      mainDocuments = 0;
     },
+    mainDocumentsSeen: () => mainDocuments,
     async dispose() {
       client.removeListener("Fetch.requestPaused", listener as (payload: never) => void);
       await page.unroute("**/*").catch(() => {});

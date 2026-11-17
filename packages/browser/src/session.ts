@@ -93,6 +93,7 @@ export class BrowserSession {
   #queued = 0;
   #idleTimer: NodeJS.Timeout | null = null;
   #lastUrl = "about:blank";
+  #violation: string | null = null;
 
   constructor(options: SessionOptions) {
     this.#options = options;
@@ -125,7 +126,21 @@ export class BrowserSession {
       await previous.catch(() => {});
       this.#cancelIdle();
       const ctx = await this.#ensureAttached();
-      return await work(ctx);
+      this.#violation = null;
+      const result = await work(ctx);
+      if (this.#violation !== null) {
+        const where = this.#violation;
+        this.#violation = null;
+        void this.detach();
+        throw new RfError(
+          "blocked_by_policy",
+          "the tab reached a page the policy refuses; it was left immediately",
+          {
+            details: { landed: where },
+          },
+        );
+      }
+      return result;
     } finally {
       this.#queued--;
       this.#armIdle();
@@ -198,6 +213,16 @@ export class BrowserSession {
       attachment.context.on("page", (other) => {
         if (other !== page) void other.close().catch(() => {});
       });
+      // Third layer: if the tab ever commits a main-frame navigation to a refused URL
+      // (a click, a script, anything), leave it immediately and poison the session.
+      page.on("framenavigated", (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const current = frame.url();
+        if (current === "about:blank" || checkNavigation(current).allow) return;
+        this.#violation = current.split("?")[0]!.slice(0, 120);
+        this.#options.log?.("navigation guard: the tab committed a refused URL; leaving it");
+        void page.goto("about:blank").catch(() => {});
+      });
       this.#guard = await installGuard(page, (blocked) => {
         let where = "?";
         try {
@@ -266,6 +291,16 @@ export class BrowserSession {
       throw new RfError("internal", "navigation failed", {
         details: { message: message.slice(0, 200) },
       });
+    }
+    // The guard must have inspected this navigation. If it did not (for example a service
+    // worker served the page), nothing after this point can be trusted: stop and detach.
+    if (url !== "about:blank" && guard.mainDocumentsSeen() === 0) {
+      await page.goto("about:blank").catch(() => {});
+      void this.detach();
+      throw new RfError(
+        "internal",
+        "the network guard did not see this navigation; the browser session was closed",
+      );
     }
     // Second layer: whatever URL the tab ended up on must itself be allowed.
     const landedUrl = page.url();
