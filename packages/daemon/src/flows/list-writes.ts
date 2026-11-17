@@ -371,7 +371,7 @@ export const deleteList: Flow = async (args, ctx) => {
     const remove = await controlByLabel(
       page,
       DIALOG,
-      'input[type="submit"], button, a, span.a-button-text',
+      'input[type="submit"], button',
       /^delete list$/i,
       "Delete list control in the manage-list dialog",
     );
@@ -509,7 +509,7 @@ export const moveListItem: Flow = async (args, ctx) => {
     await guardedClick(
       page,
       page.page.locator(`#move-to-list-button-${itemId} input[type="submit"]:visible`),
-      { what: "the item's Move control", label: /^move\b/i },
+      { what: "the item's Move control", label: /\bmove\b/i },
     );
     const row = `#regItemMove_${itemId}_${toListId}`;
     await waitVisible(page, row, "that destination in the move menu", ".a-popover");
