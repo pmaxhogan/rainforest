@@ -144,3 +144,26 @@ describe("offer tokens", () => {
     );
   });
 });
+
+test("an expected link target is enforced", async () => {
+  const { assertClickAllowed } = await import("../src/flows/click-guard.ts");
+  const url = "https://www.amazon.com/hz/wishlist/ls/AAAAAAAAAAAAA";
+  const control = {
+    text: "Edit",
+    href: "/hz/wishlist/cqp/ref=x?listId=AAAAAAAAAAAAA&itemId=I1",
+    tag: "A",
+  };
+  expect(() =>
+    assertClickAllowed(url, control, { what: "edit link", href: /^\/hz\/wishlist\/cqp\// }),
+  ).not.toThrow();
+  expect(() =>
+    assertClickAllowed(
+      url,
+      { ...control, href: "/gp/buy/x" },
+      { what: "edit link", href: /^\/hz\/wishlist\/cqp\// },
+    ),
+  ).toThrow(/link target|purchase/);
+  expect(() =>
+    assertClickAllowed(url, { ...control, href: null }, { what: "edit link", href: /cqp/ }),
+  ).toThrow();
+});

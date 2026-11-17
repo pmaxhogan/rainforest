@@ -431,7 +431,7 @@ export const updateListItem: Flow = async (args, ctx) => {
       .first();
     await guardedClick(page, trigger, {
       what: "the item's edit link",
-      label: /comment|quantity|priority/i,
+      href: /^\/hz\/wishlist\/cqp\/[^?]*\?(?:[^#]*&)?listId=[A-Z0-9]{8,16}&/,
     });
     await waitVisible(page, "#WLNOTES_Comment", "the item's edit dialog", DIALOG);
     await sleep(800);

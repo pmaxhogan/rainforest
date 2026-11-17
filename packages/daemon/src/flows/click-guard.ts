@@ -24,6 +24,8 @@ export interface ExpectedControl {
   id?: RegExp;
   /** The control's visible text / value / aria-label must match (when given). */
   label?: RegExp;
+  /** The link's own href must match (when given). */
+  href?: RegExp;
 }
 
 type Described = ControlDescriptor & { tag?: string; type?: string | null };
@@ -92,7 +94,10 @@ export function assertClickAllowed(
       .join(" | ");
     if (!expected.label.test(label)) refuse("it is not the expected control (label)");
   }
-  if (!expected.name && !expected.id && !expected.label)
+  if (expected.href && !(typeof control.href === "string" && expected.href.test(control.href))) {
+    refuse("it is not the expected control (link target)");
+  }
+  if (!expected.name && !expected.id && !expected.label && !expected.href)
     refuse("the flow did not say which control it expects");
 }
 
