@@ -126,7 +126,7 @@ describe("offer tokens", () => {
 
   test("expired, altered, truncated and foreign tokens are refused the same way", () => {
     const token = mintOfferToken(snapshot, 1000);
-    const flipped = token.slice(0, -2) + (token.endsWith("A") ? "B" : "A") + token.slice(-1);
+    const flipped = token.slice(0, -3) + (token.at(-3) === "A" ? "B" : "A") + token.slice(-2);
     for (const bad of [
       flipped,
       token.slice(0, 20),

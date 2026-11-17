@@ -22,25 +22,27 @@ export interface Caps {
 
 export const DEFAULT_CAPS: Readonly<Record<Exclude<PageType, "none">, Caps>> = {
   search: { perHour: 15, perDay: 100 },
-  product: { perHour: 20, perDay: 120 },
+  product: { perHour: 15, perDay: 120 },
   offers: { perHour: 15, perDay: 100 },
-  reviews: { perHour: 20, perDay: 120 },
+  reviews: { perHour: 15, perDay: 120 },
   account: { perHour: 12, perDay: 80 },
-  cart: { perHour: 20, perDay: 120 },
+  cart: { perHour: 15, perDay: 120 },
   list: { perHour: 12, perDay: 80 },
   price_history: { perHour: 6, perDay: 30 },
 };
 
-export const MIN_GAP_MS = 4000;
-export const MAX_GAP_MS = 9000;
+export const MIN_GAP_MS = 5000;
+export const MAX_GAP_MS = 11_000;
 /** Cap across ALL page types together: per-type caps alone add up to too much traffic. */
-export const GLOBAL_CAPS: Caps = { perHour: 30, perDay: 200 };
+// Per device. An account is usually driven from two computers, and Amazon counts the
+// account, so each device gets half of what one browser was seen to tolerate.
+export const GLOBAL_CAPS: Caps = { perHour: 15, perDay: 100 };
 /**
  * Burst cap across all page types. Measured: about 63 loads in 47 minutes, 13 of them in
  * the last 10, drew a "continue shopping" checkpoint. These limits stay far below that.
  */
-export const BURST_CAP = { loads: 8, windowMs: 10 * 60_000 } as const;
-export const DEFAULT_COOLDOWN_MS = 30 * 60_000;
+export const BURST_CAP = { loads: 6, windowMs: 10 * 60_000 } as const;
+export const DEFAULT_COOLDOWN_MS = 60 * 60_000;
 
 export interface PacingState {
   /** Epoch-ms timestamps of page loads per type, pruned to the last 24 h. */

@@ -15,9 +15,9 @@ function clock(start = 1_000_000_000) {
 }
 
 test("caps stay far below the traffic level that drew a checkpoint", () => {
-  expect(GLOBAL_CAPS.perHour).toBeLessThanOrEqual(30);
-  expect(BURST_CAP.loads).toBeLessThanOrEqual(8);
-  expect(MIN_GAP_MS).toBeGreaterThanOrEqual(4000);
+  expect(GLOBAL_CAPS.perHour).toBeLessThanOrEqual(15);
+  expect(BURST_CAP.loads).toBeLessThanOrEqual(6);
+  expect(MIN_GAP_MS).toBeGreaterThanOrEqual(5000);
   for (const caps of Object.values(DEFAULT_CAPS))
     expect(caps.perHour).toBeLessThanOrEqual(GLOBAL_CAPS.perHour);
 });
