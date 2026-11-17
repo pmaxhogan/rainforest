@@ -1,0 +1,8 @@
+{
+  "kind": "search",
+  "url": "https://www.example.com/s?k=fake+widget",
+  "final_url": "https://www.example.com/s?k=fake+widget",
+  "captured_at": "2000-01-01T00:00:00.000Z",
+  "fragments": { "more": "more.html" },
+  "note": "synthetic case for the testing helpers"
+}
