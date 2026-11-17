@@ -71,8 +71,10 @@ export function scrubCapture(capture: Capture, opts: ScrubOptions = {}): ScrubRe
   // Fixed processing order so the first-appearance numbering is stable.
   const url = scrubUrl(capture.url, ctx, "page");
   const finalUrl = scrubUrl(capture.final_url, ctx, "page");
+  // The main page gets the item-count trim; fragments keep their own structure.
   const hopts = { reduce: opts.reduce === true };
-  const html = scrubHtml(capture.html, ctx, hopts);
+  const pageOpts = { ...hopts, kind: capture.kind };
+  const html = scrubHtml(capture.html, ctx, pageOpts);
   const fragments: Record<string, string> = {};
   for (const name of fragNames) {
     fragments[name] = scrubHtml(capture.fragments?.[name] ?? "", ctx, hopts);

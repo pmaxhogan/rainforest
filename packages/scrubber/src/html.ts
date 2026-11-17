@@ -23,6 +23,7 @@ import {
   URL_ATTRS,
 } from "./allowlists.ts";
 import type { ScrubContext } from "./context.ts";
+import { trimCollections } from "./trim.ts";
 import { registerHtmlScrubber, scrubJson, stringifySafe } from "./json.ts";
 import { EXTENSION_SIGNATURE, EXTENSION_URL, SCRIPT_TYPES } from "./rules.mjs";
 import { scrubText, scrubTokens, type TextMode } from "./text.ts";
@@ -590,6 +591,8 @@ function alignStars(root: DomNode, ctx: ScrubContext): void {
 export interface HtmlOptions {
   /** Drop chrome and hidden subtrees and collapse whitespace (structure-preserving). */
   reduce?: boolean;
+  /** Page kind, for the item-count trim rules (always on when given). */
+  kind?: string;
 }
 
 function escText(s: string): string {
@@ -638,6 +641,7 @@ export function scrubHtml(html: string, ctx: ScrubContext, opts: HtmlOptions = {
   if (isDoc) scrubAttributes(asElement(root), asElement(root).localName.toLowerCase(), ctx);
   const reduce = opts.reduce === true;
   stripInjected(root, ctx);
+  if (opts.kind !== undefined) trimCollections(root, opts.kind, ctx);
   if (reduce) reduceTree(root, ctx);
   trimYearOptions(root, ctx);
   trimPagination(root, ctx);
