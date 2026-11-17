@@ -49,7 +49,8 @@ const INSTRUCTIONS =
   "each, get_buying_options 2 (1 right after a product read of the same item), add_to_cart 4, the other cart " +
   "and list writes 2 to 4. Plan before spending: skip reads you do not need, keep enough loads for the writes " +
   "you intend, and do not repeat a call to check a result. A throttled error's retry_after_s is the exact " +
-  "wait; wait that long, not longer, and do not retry sooner.";
+  "wait; wait that long, not longer, and do not retry sooner. A write that fails with details.write " +
+  '"unverified" had already clicked: the change may have been made, so read the cart or list before retrying.';
 
 function safeJson(value: string): unknown {
   try {

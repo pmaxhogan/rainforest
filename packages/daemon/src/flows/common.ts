@@ -308,6 +308,35 @@ export function requireBudget(
 }
 
 /**
+ * Read a write's result back. When that read fails (a challenge, a cap, a timeout), the
+ * failure is passed on as it is, but it now says the click had already been made. Without
+ * that a caller cannot tell "nothing was done" from "done, but not seen", and trying
+ * again would do it twice. `details.write` is "unverified".
+ */
+export async function readBack<T>(
+  read: () => Promise<T>,
+  clicked = "the control for this change",
+): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    const note =
+      `${clicked} had already been clicked, so the change may have been made: ` +
+      "read the current state before trying again";
+    if (!(error instanceof RfError)) {
+      throw new RfError("internal", `the result could not be read back; ${note}`, {
+        details: { write: "unverified" },
+      });
+    }
+    const { code, message, ...rest } = error.payload;
+    throw new RfError(code, `${message}; ${note}`, {
+      ...rest,
+      details: { ...rest.details, write: "unverified" },
+    });
+  }
+}
+
+/**
  * Run a multi-step flow with the browser to itself. The budget is checked twice: once
  * before the browser is touched (a cheap refusal), and again once this call holds the
  * browser, because calls queued ahead of it may have spent the budget in the meantime.

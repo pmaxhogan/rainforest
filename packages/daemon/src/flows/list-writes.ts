@@ -8,7 +8,15 @@ import {
   type ListsIndexPage,
 } from "@rainforest/parsers";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, readPage, runWithBudget, settle, type Flow } from "./common.ts";
+import {
+  AMAZON,
+  clearCaptureCache,
+  readBack,
+  readPage,
+  runWithBudget,
+  settle,
+  type Flow,
+} from "./common.ts";
 
 /** Compact list state for before/after comparison in list writes. */
 export interface ListState {
@@ -95,7 +103,7 @@ export const removeFromList: Flow = async (args, ctx) => {
       name: /^submit\.deleteItem$/,
     });
     await settle(2500);
-    const after = listState(await loadList(page, listId));
+    const after = listState(await readBack(() => loadList(page, listId)));
     const result = { before, after, item };
     if (after.items.some((i) => i.item_id === itemId)) {
       throw new RfError(
@@ -301,7 +309,7 @@ export const createList: Flow = async (args, ctx) => {
     const submit = page.page.locator('#wl-redesigned-create-list input[type="submit"]:visible');
     await guardedClick(page, submit, { what: "the Create List control", label: /\bcreate\b/i });
     await sleep(4000);
-    let after = await loadLists(page);
+    let after = await readBack(() => loadLists(page));
     const known = new Set(before.lists.map((l) => l.list_id));
     const created = after.lists.find((l) => !known.has(l.list_id) && l.name === name);
     const result = { before: listsState(before), after: listsState(after) };
@@ -315,9 +323,9 @@ export const createList: Flow = async (args, ctx) => {
       );
     }
     if (privacy !== "private") {
-      await loadList(page, created.list_id);
+      await readBack(() => loadList(page, created.list_id));
       await applySettings(page, { privacy });
-      after = await loadLists(page);
+      after = await readBack(() => loadLists(page));
     }
     const final = after.lists.find((l) => l.list_id === created.list_id);
     return {
@@ -344,7 +352,7 @@ export const updateList: Flow = async (args, ctx) => {
       ...(name !== undefined ? { name } : {}),
       ...(privacy ? { privacy } : {}),
     });
-    const after = await loadList(page, listId);
+    const after = await readBack(() => loadList(page, listId));
     const state = (l: ListPage) => ({
       list_id: listId,
       name: l.list.name ?? null,
@@ -400,7 +408,7 @@ export const deleteList: Flow = async (args, ctx) => {
       label: /^(yes|delete|delete list|confirm)$/i,
     });
     await sleep(3500);
-    const after = await loadLists(page);
+    const after = await readBack(() => loadLists(page));
     const result = {
       before: listsState(before),
       after: listsState(after),
@@ -469,7 +477,7 @@ export const updateListItem: Flow = async (args, ctx) => {
       label: /\bsave\b/i,
     });
     await sleep(3000);
-    const after = listState(await loadList(page, listId));
+    const after = listState(await readBack(() => loadList(page, listId)));
     const now = after.items.find((i) => i.item_id === itemId);
     const result = { before: item, after: now ?? null };
     const ok =
@@ -525,8 +533,8 @@ export const moveListItem: Flow = async (args, ctx) => {
       id: new RegExp(`^regItemMove_${itemId}_${toListId}$`),
     });
     await sleep(3500);
-    const after = listState(await loadList(page, listId));
-    const destination = listState(await loadList(page, toListId));
+    const after = listState(await readBack(() => loadList(page, listId)));
+    const destination = listState(await readBack(() => loadList(page, toListId)));
     const result = {
       item,
       source_after: after.items.length,
@@ -579,7 +587,7 @@ export const addToList: Flow = async (args, ctx) => {
       id: new RegExp(`^atwl-link-to-list-${listId}$`),
     });
     await sleep(3500);
-    const after = listState(await loadList(page, listId));
+    const after = listState(await readBack(() => loadList(page, listId)));
     const added = after.items.find((i) => i.asin === asin) ?? null;
     if (!added) {
       throw new RfError(

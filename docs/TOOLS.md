@@ -793,7 +793,9 @@ pacing class, which is also the class the registry names.
 > Add ONE specific offer to the cart, always in two steps: offer_id must come from
 > get_buying_options. Costs 4 page loads, checked before anything is touched: when they do not fit
 > it adds nothing and fails with throttled, and retry_after_s is the exact wait (the message says so
-> if the offer_id will have expired by then). Adds nothing and fails with needs_choice
+> if the offer_id will have expired by then). If an error has details.write "unverified", the
+> control was already clicked and only the check afterwards failed: the item may be in the cart, so
+> read it with get_cart before trying again. Adds nothing and fails with needs_choice
 > (details.reason) when the offer is gone (offer_gone), its price or seller changed (price_changed,
 > seller_changed), it is out of stock (out_of_stock, never addable), or it carries flags not all
 > listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). Adds exactly one
@@ -845,6 +847,11 @@ offer cannot be added as asked the call fails with `needs_choice` and nothing is
   control, through the click guard, and then clicks the offer's control. Opening it loads
   nothing new. Covered against the mock storefront; on the real site the control was checked
   against the click guard from a saved page but an add of a folded offer is **unverified**.
+- **A failure after the click.** If the cart cannot be read back after the click (Amazon's check
+  appears, a cap is hit, the page times out), the error is that failure, with `details.write`
+  `"unverified"` and a message saying the control had already been clicked. The item may be in
+  the cart: read it with `get_cart` before trying again, or the retry adds a second one. Every
+  write tool does this for its read-back.
 - **Four page loads, all or nothing.** The flow reads the cart, loads the product page, opens its
   offers panel and reads the cart again. If the four do not fit the pacing budget it adds nothing
   and fails with `throttled`; `retry_after_s` is the time until all four fit, and the message says

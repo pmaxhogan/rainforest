@@ -3,6 +3,7 @@ import { RfError } from "@rainforest/core";
 import { DEFAULT_COOLDOWN_MS, Pacer, type PageContext } from "@rainforest/browser";
 import { createBrowserController, type SessionProvider } from "../src/browser-controller.ts";
 import {
+  readBack,
   requireBudget,
   runWithBudget,
   setSettleScaleForTests,
@@ -277,5 +278,60 @@ describe("settle", () => {
       expect(await timed(100), String(bad)).toBeGreaterThanOrEqual(90);
     }
     setSettleScaleForTests(1);
+  });
+});
+
+describe("readBack", () => {
+  test("passes a successful read through untouched", async () => {
+    await expect(readBack(async () => ({ lines: 2 }))).resolves.toEqual({ lines: 2 });
+  });
+
+  test("a challenge on the read-back keeps its code and says the click was already made", async () => {
+    const challenge = new RfError("needs_human", "Amazon showed a soft challenge page", {
+      kind: "soft_challenge",
+      details: { while_opening: "/gp/cart/view.html", seen: "redirect" },
+    });
+    const error = await readBack(async () => {
+      throw challenge;
+    }, "the offer's Add to Cart control").then(
+      () => null,
+      (e: unknown) => e as RfError,
+    );
+    expect(error?.payload).toEqual({
+      code: "needs_human",
+      message:
+        "Amazon showed a soft challenge page; the offer's Add to Cart control had already been clicked, so the change may have been made: read the current state before trying again",
+      kind: "soft_challenge",
+      details: { while_opening: "/gp/cart/view.html", seen: "redirect", write: "unverified" },
+    });
+  });
+
+  test("a cap hit on the read-back keeps its retry time", async () => {
+    const error = await readBack(async () => {
+      throw new RfError("throttled", "pacing limit reached (hourly_cap)", { retry_after_s: 120 });
+    }).then(
+      () => null,
+      (e: unknown) => e as RfError,
+    );
+    expect(error?.payload.code).toBe("throttled");
+    expect(error?.payload.retry_after_s).toBe(120);
+    expect(error?.payload.details).toEqual({ write: "unverified" });
+    expect(error?.payload.message).toMatch(
+      /^pacing limit reached \(hourly_cap\); the control for this change had already been clicked/,
+    );
+  });
+
+  test("an unexpected failure becomes an internal error that still says so, without its own text", async () => {
+    const error = await readBack(async () => {
+      throw new Error("path /home/someone/leak");
+    }).then(
+      () => null,
+      (e: unknown) => e as RfError,
+    );
+    expect(error).toBeInstanceOf(RfError);
+    expect(error?.payload.code).toBe("internal");
+    expect(error?.payload.details).toEqual({ write: "unverified" });
+    expect(JSON.stringify(error?.payload)).not.toContain("leak");
+    expect(error?.payload.message).toMatch(/had already been clicked/);
   });
 });

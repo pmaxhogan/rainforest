@@ -430,6 +430,8 @@ export const TOOLS: readonly ToolDef[] = [
       "Add ONE specific offer to the cart, always in two steps: offer_id must come from get_buying_options. " +
       "Costs 4 page loads, checked before anything is touched: when they do not fit it adds nothing and fails with " +
       "throttled, and retry_after_s is the exact wait (the message says so if the offer_id will have expired by then). " +
+      'If an error has details.write "unverified", the control was already clicked and only the check afterwards ' +
+      "failed: the item may be in the cart, so read it with get_cart before trying again. " +
       "Adds nothing and fails with needs_choice (details.reason) when the offer is gone (offer_gone), its price or " +
       "seller changed (price_changed, seller_changed), it is out of stock (out_of_stock, never addable), or it " +
       "carries flags not all listed in `acknowledge` (flags; details list the flags and up to 8 alternatives). " +

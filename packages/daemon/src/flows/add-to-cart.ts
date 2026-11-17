@@ -11,7 +11,7 @@ import {
 } from "@rainforest/parsers";
 import { cartState, loadCart } from "./cart-writes.ts";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, runWithBudget, settle, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, readBack, runWithBudget, settle, type Flow } from "./common.ts";
 import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
 
 /**
@@ -334,7 +334,7 @@ export const addToCart: Flow = async (args, ctx) => {
       const landedPath = pathOf(page.page.url());
       const declined = await declineUpsells(page);
 
-      const after = await loadCart(page);
+      const after = await readBack(() => loadCart(page), "the offer's Add to Cart control");
       const beforeQty = before.active_items
         .filter((i) => i.asin === snapshot.asin)
         .reduce((n, i) => n + (i.quantity ?? 1), 0);

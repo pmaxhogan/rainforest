@@ -5,6 +5,7 @@ import { guardedClick } from "./click-guard.ts";
 import {
   AMAZON,
   clearCaptureCache,
+  readBack,
   readPage,
   runWithBudget,
   settle,
@@ -107,7 +108,7 @@ async function lineAction(
       name: new RegExp(`^submit\\.${spec.control}\\.${itemId}$`),
     });
     await settle(2500);
-    const after = await loadCart(page);
+    const after = await readBack(() => loadCart(page));
     const result = {
       before: cartState(before),
       after: cartState(after),
@@ -240,13 +241,15 @@ export const setCartQuantity: Flow = async (args, ctx) => {
         await settle(900);
         continue;
       }
-      const seen = (await loadCart(page)).active_items.find((i) => i.item_id === itemId)?.quantity;
+      const seen = (await readBack(() => loadCart(page))).active_items.find(
+        (i) => i.item_id === itemId,
+      )?.quantity;
       if (typeof seen !== "number" || seen === known) break;
       known = seen;
       clearCaptureCache();
     }
     await settle(1500);
-    const after = await loadCart(page);
+    const after = await readBack(() => loadCart(page));
     const now = after.active_items.find((i) => i.item_id === itemId)?.quantity ?? null;
     const result = { before: cartState(before), after: cartState(after), item: describe };
     if (now !== target) {
