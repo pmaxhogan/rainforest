@@ -81,16 +81,25 @@ the `HUB_DOMAIN` environment variable (`wrangler deploy --config packages/worker
 --domain "$HUB_DOMAIN"`).
 
 **Deploying on every push.** Instead of deploying by hand each time, connect the Worker to your
-repository with Cloudflare Workers Builds; every push to the branch you choose (normally `main`)
-then builds and deploys the hub. `npm run deploy:hub` exists for this: set it as the build's
-deploy command, leave the root directory at the repository root, and add `HUB_DOMAIN` as a build
-variable (a build variable is not a Worker secret, and it never goes in the repository). A build
-command is optional; one that runs `npm run check` keeps a commit that fails the checks from
-deploying. Workers Builds reports each deploy on the commit as a check named
+repository with Cloudflare Workers Builds (the Worker's Settings > Builds); every push to the
+production branch then runs the checks and deploys the hub. This project's own hub runs with
+these build settings:
+
+| Setting               | Value                                            |
+| --------------------- | ------------------------------------------------ |
+| Production branch     | `main`                                           |
+| Build command         | `npm run check`                                  |
+| Deploy command        | `npm run deploy:hub`                             |
+| Root directory        | `/`                                              |
+| Build watch paths     | include `*`; exclude `node_modules/**`, `.git/`  |
+| Variables and secrets | `HUB_DOMAIN` (your hostname), stored as a secret |
+
+The build command is the gate: the deploy command runs only after `npm run check` passes, so a
+commit that fails the checks is not deployed. `HUB_DOMAIN` is a build secret, which keeps the
+hostname out of the build logs; it is not one of the Worker's runtime secrets below, and it never
+goes in the repository. Workers Builds reports each deploy on the commit as a check named
 `Workers Builds: rainforest-hub`, next to the release workflow's checks, so one push ships both
-the hub and the daemon. This project's own hub is deployed this way. The settings named here are
-what the `deploy:hub` script was written for; the build settings of any one deployment live in
-its Cloudflare dashboard, not in this repository.
+the hub and the daemon.
 
 `wrangler.jsonc` deliberately holds no account id, route or hostname. `--domain` attaches the Worker
 as a custom domain on your zone (checked with `wrangler deploy --help`; the zone must be in the same
