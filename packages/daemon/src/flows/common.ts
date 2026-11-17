@@ -210,3 +210,26 @@ export function arrayKeys(body: Record<string, unknown>): string[] {
 export function maxCharsOf(args: Record<string, unknown>): number | undefined {
   return typeof args.max_chars === "number" ? args.max_chars : undefined;
 }
+
+/**
+ * Refuse to start a multi-step flow unless every page load it needs fits the pacing
+ * budget right now. A write that could not read the result back would be worse than a
+ * write that never started.
+ */
+export function requireBudget(
+  ctx: FlowContext,
+  loads: number,
+  type: Exclude<PageType, "none">,
+): void {
+  const headroom = ctx.browser.pacer().headroom(type);
+  if (headroom < loads) {
+    throw new RfError(
+      "throttled",
+      `this action needs ${loads} page loads and only ${headroom} fit the pacing budget right now`,
+      {
+        retry_after_s: 300,
+        details: { needed: loads, available: headroom },
+      },
+    );
+  }
+}

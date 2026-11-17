@@ -10,7 +10,7 @@ import {
 } from "@rainforest/parsers";
 import { cartState, loadCart } from "./cart-writes.ts";
 import { describeControl, assertClickAllowed, guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, type Flow } from "./common.ts";
+import { AMAZON, clearCaptureCache, requireBudget, type Flow } from "./common.ts";
 import { readOfferToken, type OfferSnapshot } from "./offer-token.ts";
 
 /**
@@ -156,6 +156,7 @@ export const addToCart: Flow = async (args, ctx) => {
     );
   }
   const acknowledge = Array.isArray(args.acknowledge) ? (args.acknowledge as string[]) : [];
+  requireBudget(ctx, 4, "cart");
   const session = await ctx.browser.session();
   return await session.run(async (page) => {
     const before = await loadCart(page);

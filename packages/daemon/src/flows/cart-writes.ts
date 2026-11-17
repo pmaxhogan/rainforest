@@ -2,7 +2,14 @@ import { RfError } from "@rainforest/core";
 import type { PageContext } from "@rainforest/browser";
 import { parseCart, type CartItem, type CartPage } from "@rainforest/parsers";
 import { guardedClick } from "./click-guard.ts";
-import { AMAZON, clearCaptureCache, readPage, type Flow, type FlowContext } from "./common.ts";
+import {
+  AMAZON,
+  clearCaptureCache,
+  readPage,
+  requireBudget,
+  type Flow,
+  type FlowContext,
+} from "./common.ts";
 
 /** Compact cart state used for before/after comparison in every cart write. */
 export interface CartState {
@@ -87,6 +94,7 @@ async function lineAction(
   const itemId = String(args.item_id);
   if (!ITEM_ID.test(itemId))
     throw new RfError("invalid_arguments", "item_id is not a cart item id from get_cart");
+  requireBudget(ctx, 2, "cart");
   const session = await ctx.browser.session();
   return await session.run(async (page) => {
     const before = await loadCart(page);

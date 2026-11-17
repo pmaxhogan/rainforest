@@ -112,3 +112,14 @@ test("the global cap bounds all page types together", () => {
   expect(!refused.ok && refused.reason).toBe("hourly_cap");
   expect(p.plan("none").ok).toBe(true);
 });
+
+test("headroom counts down with loads and is zero while cooling down", () => {
+  const c = clock();
+  const p = new Pacer({ now: c.now });
+  expect(p.headroom("cart")).toBe(BURST_CAP.loads);
+  p.record("cart");
+  p.record("product");
+  expect(p.headroom("cart")).toBe(BURST_CAP.loads - 2);
+  p.coolDown("captcha");
+  expect(p.headroom("cart")).toBe(0);
+});

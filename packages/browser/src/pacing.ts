@@ -150,6 +150,32 @@ export class Pacer {
     return { ok: true, waitMs };
   }
 
+  /**
+   * How many page loads of `type` could start right now without tripping any cap or the
+   * cool-down. Multi-step flows check this before they begin, so they never stall halfway.
+   */
+  headroom(type: Exclude<PageType, "none">): number {
+    const now = this.#now();
+    if (now < this.#state.coolingDownUntil) return 0;
+    const all = Object.values(this.#state.loads)
+      .flat()
+      .filter((t): t is number => typeof t === "number" && now - t < DAY);
+    const own = (this.#state.loads[type] ?? []).filter((t) => now - t < DAY);
+    const caps = this.#caps[type];
+    if (!caps) return 0;
+    const within = (list: number[], ms: number): number => list.filter((t) => now - t < ms).length;
+    return Math.max(
+      0,
+      Math.min(
+        BURST_CAP.loads - within(all, BURST_CAP.windowMs),
+        GLOBAL_CAPS.perHour - within(all, HOUR),
+        GLOBAL_CAPS.perDay - all.length,
+        caps.perHour - within(own, HOUR),
+        caps.perDay - own.length,
+      ),
+    );
+  }
+
   /** Record that a page load happened now. */
   record(type: PageType): void {
     const now = this.#now();
