@@ -1,4 +1,4 @@
-# stack-template: automerge/workflow-run@1 cbf85558d855
+# stack-template: automerge/workflow-run@2 93862fc347e2
 name: Dependabot auto-merge
 
 # Merge-on-green for repos where native auto-merge and rulesets do not exist
@@ -8,8 +8,14 @@ name: Dependabot auto-merge
 #   - minor and patch: merge
 #   - major: merge only when EVERY bumped package is @types/* or a dev-only
 #     dependency; production majors wait for a human
-#   - security updates (the `security` group): merge regardless of semver type
-#   - no semver update type (calendar-versioned artifacts): hold, ONE comment
+#   - security updates in the `security` group: merge regardless of semver type
+#   - single-package security updates: Dependabot writes no update type for
+#     them, so the type is worked out from the "from X to Y" versions and the
+#     rules above apply (minor and patch merge; a production major still waits
+#     for a human, because the workflow token cannot read Dependabot alerts to
+#     prove the PR is a security fix)
+#   - no semver update type and versions that are not plain x.y.z
+#     (calendar-versioned artifacts): hold, ONE comment
 # The coverage ratchet runs inside CI, so a bump that moves coverage turns CI
 # red and never reaches this workflow.
 on:
@@ -63,11 +69,36 @@ jobs:
           let cur = null;
           for (const line of msg.split("\n")) {
             const name = line.match(/^- dependency-name:\s*(\S+)/);
-            if (name) deps.push((cur = { name: name[1] }));
+            // YAML quotes scoped names ("@types/node"): drop the quotes.
+            if (name) deps.push((cur = { name: name[1].replace(/^(["'])(.*)\1$/, "$2") }));
             const type = line.match(/^\s+dependency-type:\s*(\S+)/);
             if (type && cur) cur.type = type[1];
             const upd = line.match(/^\s+update-type:\s*version-update:semver-(\w+)/);
             if (upd && cur) cur.update = upd[1];
+          }
+          // Dependabot writes no `update-type` for a security update. Work it out
+          // from the versions in the message ("Bumps [name](url) from 1.2.3 to
+          // 1.4.0." or "Updates `name` from 1.2.3 to 1.4.0"), the way
+          // dependabot/fetch-metadata does. Only plain x.y.z versions that go up
+          // count; anything else (calendar versions, SHAs, tags) stays unknown.
+          const semver = (v) => {
+            const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(v || "");
+            return m && Number(m[1]) < 1000 ? m.slice(1).map(Number) : null;
+          };
+          const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          for (const d of deps) {
+            if (d.update) continue;
+            const m = new RegExp(
+              "^(?:Bumps|Updates) (?:\\[" + esc(d.name) + "\\]\\([^)]*\\)|`" + esc(d.name) + "`) from (\\S+) to (\\S+?)\\.?$",
+              "m",
+            ).exec(msg);
+            const from = m && semver(m[1]);
+            const to = m && semver(m[2]);
+            if (!from || !to) continue;
+            const i = from.findIndex((n, k) => n !== to[k]);
+            if (i === -1 || to[i] < from[i]) continue;
+            d.update = ["major", "minor", "patch"][i];
+            d.inferred = true;
           }
           // grouped security PRs live on dependabot/<ecosystem>/security-<hash>
           const security = /^dependabot\/[\w-]+\/(?:[\w.-]+\/)*security-[0-9a-f]{6,}$/.test(process.env.HEAD_BRANCH || "");
