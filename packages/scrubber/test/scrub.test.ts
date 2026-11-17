@@ -11,6 +11,7 @@ import {
   yearGap,
 } from "../src/context.ts";
 import { AOD_HTML, PAGE_HTML, PLANTED, sampleCapture } from "./samples.ts";
+import { shift } from "../src/dates.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -391,7 +392,7 @@ describe("labels never protect names or places", () => {
       /aria-label="\d\.\d out of 5 stars, rating details"/,
     );
     expect(body("<p>1-16 of over 3,000 results for</p>")).toMatch(
-      /^<p>\d-\d{2} [a-z]+ [a-z]+ \d,\d{3} results for<\/p>$/,
+      /^<p>\d-\d{2} of over [\d,]+ results for<\/p>$/,
     );
   });
 
@@ -602,8 +603,9 @@ describe("leak classes found on real captures (invented values)", () => {
   });
 
   test("scientific notation keeps a lower-case exponent and fresh digits", () => {
-    const out = body("<p>ratio 2.7182818284590452E-4</p>");
-    expect(out).toMatch(/[a-z]+ \d\.\d{16}e-\d/);
+    const out = body("<p>2.7182818284590452E-4</p>");
+    // 16 decimals: a full-precision value, so the run becomes a placeholder.
+    expect(out).toMatch(/^<p>\d\.9\d{15}e-\d<\/p>$/);
     expect(out).not.toContain("7182818284590452");
   });
 
@@ -697,7 +699,7 @@ describe("leak classes found on real captures (invented values)", () => {
 
   test("caseless and full-width words become lower-case lorem", () => {
     const out = body("<p>123\u30c6\u30b9\u30c8\u30c7\u30fc\u30bf \uff21\uff22\uff23\uff24 x</p>");
-    expect(out).toMatch(/^<p>[a-z0-9 ]+<\/p>$/);
+    expect(out).toMatch(/^<p>[A-Za-z ]+<\/p>$/);
   });
 
   test("ISBN-shaped values in asin-named attributes become fake ASINs", () => {
@@ -741,10 +743,10 @@ describe("structure kept for parsers (invented values)", () => {
   });
 
   test("a card network next to card digits becomes one constant brand", () => {
-    expect(body("<p>Mastercard ending in 4321</p>")).toBe("<p>Visa ending in 0000</p>");
+    expect(body("<p>Mastercard ending in 4321</p>")).toBe("<p>Card ending in 0000</p>");
     // "Prime" before a free word is not a label lead: the word is free text too.
     expect(body("<p>Prime Amex \u2022\u2022\u2022\u2022 4321</p>")).toMatch(
-      /^<p>[A-Z][a-z]+ Visa &#x2022;&#x2022;&#x2022;&#x2022; 0000<\/p>$/,
+      /^<p>[A-Z][a-z]+ Card &#x2022;&#x2022;&#x2022;&#x2022; 0000<\/p>$/,
     );
   });
 
@@ -1044,12 +1046,91 @@ describe("blind review findings (invented values)", () => {
   });
 
   test("F8: a code split over spans scrubs like the same code written whole", () => {
-    const out = body("<p>UPC: 01234567</p><div><span>0123</span><span>4567</span></div>");
-    const whole = /: (\d{8})</.exec(out)?.[1];
-    const split = /<div><span>(\d{4})<\/span><span>(\d{4})<\/span><\/div>/.exec(out);
-    expect(whole).toBeDefined();
+    const out = body("<p>: 012345678901</p><div><span>012345</span><span>678901</span></div>");
+    const whole = /: (\d{12})</.exec(out)?.[1];
+    const split = /<div><span>(\d{6})<\/span><span>(\d{6})<\/span><\/div>/.exec(out);
+    expect(whole).toMatch(/^9\d{11}$/);
     expect(`${split?.[1]}${split?.[2]}`).toBe(whole);
-    expect(whole).not.toBe("01234567");
+  });
+});
+
+describe("blind review 2 findings (invented values)", () => {
+  test("F5: extension-injected nodes are stripped, and the gate fails on any left", () => {
+    const html =
+      '<!DOCTYPE html><html><body><div id="main">x</div>' +
+      '<div id="zorboClipperHighlightShadowHost"></div><span class="grammarly-btn">g</span>' +
+      '<div data-src="chrome-extension://abcdefghijklmnop/x.png">e</div>' +
+      "<next-route-announcer>n</next-route-announcer></body></html>";
+    const out = scrubCapture({ ...sampleCapture(), html, fragments: undefined }).capture.html;
+    expect(out).not.toMatch(/Clipper|grammarly|chrome-extension/i);
+    expect(out).toContain('id="main"');
+    expect(out).toContain("<next-route-announcer>");
+    const rules = (h: string) => auditScrubbed(h).map((f) => f.rule);
+    expect(rules('<div id="xRemnoteClipperShadowHost"></div>')).toContain("extension");
+    expect(rules('<div class="lastpass-icon"></div>')).toContain("extension");
+    expect(rules("<p>see moz-extension://x</p>")).toContain("extension");
+    expect(rules('<div id="honey-jar-product">text about honey</div>')).toContain("extension");
+    expect(rules("<p>honey and clippers in text are fine</p>")).not.toContain("extension");
+  });
+
+  test("F1: 9+ digit runs and 10+ decimal floats become placeholders everywhere", () => {
+    const out = body(
+      '<div data-ad-id="123412341234123" data-x="B0ABCD1234:432143214321432">a</div>' +
+        '<script type="application/json">{"qualifier":"1357913579","rs":1.2345678901234567,"n":123456789012,"ok":12}</script>',
+    );
+    expect(out).not.toMatch(/123412341234123|432143214321432|1357913579|1234567890|123456789012/);
+    expect(out).toMatch(/data-ad-id="9\d{14}"/);
+    expect(out).toMatch(/B0FAKE[0-9A-Z]{4}:9\d{14}/);
+    expect(out).toContain('"rs":1.5');
+    expect(out).toMatch(/"n":9\d{11}/);
+    expect(out).toMatch(/"ok":\d{2}[,}]/);
+  });
+
+  test("F2: digits glued to free words and slugs go with the words", () => {
+    const out = body(
+      '<p>Zorbo Widget (Gizmo-12321) 6.8"-9.9" 1/4" 74th</p><a href="/Zorbo-Widget-12x34-5678/dp/B0ABCD1234">x</a>',
+    );
+    expect(out).not.toMatch(/12321|6\.8|9\.9|1\/4|74th|12x34|5678/);
+    expect(body("<p>Only 3 left in stock - order soon.</p>")).toMatch(/Only [2-9] left/);
+    expect(body("<p>the 90-day median</p>")).toMatch(/\d\d-day/);
+  });
+
+  test("notes: widget id classes, account flags and body cohort classes", () => {
+    const html =
+      '<!DOCTYPE html><html class="a-js"><body class="a-m-us rufus-docked-only a-spacing-none"><div class="celwidget pd_rd_w-Ab3cD">x</div>' +
+      '<script type="application/json">{"isPinnacleCustomer":true,"hasMultipleAddresses":true,"isRfySubscriptionsSwapEnabled":true,"isSelected":true}</script></body></html>';
+    const out = scrubCapture({ ...sampleCapture(), html, fragments: undefined }).capture.html;
+    expect(out).toContain("pd_rd_w-rfwid");
+    expect(out).toContain('"isPinnacleCustomer":false');
+    expect(out).toContain('"hasMultipleAddresses":false');
+    expect(out).toContain('"isRfySubscriptionsSwapEnabled":false');
+    expect(out).toContain('"isSelected":true');
+    expect(out).toMatch(/<body class="a-m-us a-spacing-none">/);
+  });
+
+  test("notes: at most two synthetic names per fixture", () => {
+    const people = ["Ann Zorbo", "Bea Quux", "Cid Plonk", "Dov Frob", "Eve Wibble"];
+    const out = body(people.map((p) => `<span class="a-profile-name">${p}</span>`).join(""));
+    const names = new Set(
+      [...out.matchAll(/a-profile-name">([^<]+)</g)].map((m) => (m[1] ?? "").split(" ")[0]),
+    );
+    expect(names.size).toBeLessThanOrEqual(2);
+  });
+
+  test("the date offset never keeps a real month and day", () => {
+    for (let i = 0; i < 200; i++) {
+      const ctx = createContext(`md-${i}`, "2026-05-06T07:08:09Z");
+      for (const [m, d] of [
+        [0, 1],
+        [1, 29],
+        [5, 15],
+        [11, 31],
+      ] as const) {
+        const real = { y: 2024, m, d };
+        const fake = shift(ctx, real);
+        expect(fake.m === real.m && fake.d === real.d, `seed ${i} ${m}/${d}`).toBe(false);
+      }
+    }
   });
 });
 

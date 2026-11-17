@@ -46,6 +46,15 @@ export const SYNTHETIC = Object.freeze({
 /** URL hosts allowed anywhere inside fixtures/. www.w3.org is for SVG/XML namespaces. */
 export const ALLOWED_HOSTS = Object.freeze(["www.example.com", "images.example.com", "www.w3.org"]);
 
+/**
+ * Browser-extension DOM (a clipper's shadow host, a password manager's widget): nodes the
+ * site never served. Matched against tag names, ids and classes; extension URL schemes are
+ * matched anywhere. The scrubber strips such nodes and gate 2 fails a fixture holding one.
+ */
+export const EXTENSION_SIGNATURE =
+  /clipper|extension|grammarly|lastpass|1password|onepassword|dashlane|bitwarden|honey|darkreader|dark-reader|remnote|shadowhost|shadow-host|-ext-/i;
+export const EXTENSION_URL = /(?:chrome|moz|safari-web|ms-browser)-extension:/i;
+
 /** The only <script type> values that may survive: inert JSON data blobs. */
 export const SCRIPT_TYPES = Object.freeze(["application/json", "a-state"]);
 
@@ -278,6 +287,15 @@ function htmlFindings(text, push) {
       push("element", "meta", m.index);
   }
   for (const m of text.matchAll(/<!--/g)) push("comment", "<!--", m.index);
+  for (const m of text.matchAll(new RegExp(EXTENSION_URL.source, "gi"))) {
+    push("extension", "scheme", m.index);
+  }
+  for (const m of text.matchAll(/<([a-z][\w:-]*)\b([^>]*)>/gi)) {
+    const idClass = [...m[2].matchAll(/\s(?:id|class)\s*=\s*"([^"]*)"/gi)]
+      .map((a) => a[1])
+      .join(" ");
+    if (EXTENSION_SIGNATURE.test(`${m[1]} ${idClass}`)) push("extension", "node", m.index);
+  }
   // Attribute names are matched OUTSIDE quoted values: a quoted value is skipped whole, so
   // escaped markup inside an attribute (a JSON blob holding an HTML string) is not read as
   // attributes of the outer tag. A tag with an unbalanced quote is flagged on its own.

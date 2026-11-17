@@ -94,7 +94,8 @@ describe("date formats keep their style", () => {
 
 describe("tokens and numbers", () => {
   test("ordinals, phones, ASIN keys and mixed tokens", () => {
-    expect(text("the 21st time")).toMatch(/^[A-Za-z]+(?: [a-z]+)* \d+(st|nd|rd|th) time$/);
+    // An ordinal inside free text goes with it.
+    expect(text("the 21st time")).toMatch(/^[A-Za-z]+(?: [a-z]+)* time$/);
     expect(text("+1 999-555-1234")).toBe("+1 555-555-0100");
     expect(text("ASIN: 0123456789")).toBe("ASIN: B0FAKE0000");
     const mixed = text("Model Ab12cD34");

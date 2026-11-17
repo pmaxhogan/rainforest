@@ -183,6 +183,57 @@ export const DROPPED_ELEMENTS: readonly string[] = [
   "frameset",
 ];
 
+export interface TrimRule {
+  /** Name used in reports. */
+  name: string;
+  /** Page kinds the rule applies to ("*" for all). */
+  kinds: readonly string[];
+  /** One repeated item; its outermost wrapper holding no other item is what is removed. */
+  item: string;
+  /** The site's fixed page size: a group of exactly this size is left alone. */
+  standardSize?: number;
+  /** JSON-valued attributes holding the full id list of the collection (cut with it). */
+  idListAttrs?: readonly string[];
+  /** A removed unit may never contain (or be) one of these: the enclosing item's boundary. */
+  stopAt?: string;
+}
+
+/**
+ * Repeated item collections whose size is a fact about the account. Each group of 3 or
+ * more keeps a seeded random 2..min(6, n-1) of its items (see trim.ts).
+ */
+export const TRIM_RULES: readonly TrimRule[] = [
+  { name: "cart items", kinds: ["cart"], item: ".sc-list-item[data-itemid]" },
+  { name: "subscriptions", kinds: ["subscriptions"], item: "[data-edit-url]" },
+  {
+    name: "history cards",
+    kinds: ["browsing_history"],
+    item: "[id^='p13n-asin-index-']",
+    idListAttrs: ["data-client-recs-list"],
+  },
+  { name: "list items", kinds: ["list", "lists_index"], item: "li[data-itemid]" },
+  { name: "orders per page", kinds: ["order_list"], item: ".order-card", standardSize: 10 },
+  {
+    name: "shipments per order",
+    kinds: ["order_list"],
+    item: ".delivery-box",
+    stopAt: ".order-header",
+  },
+  { name: "items per order", kinds: ["order_list"], item: ".item-box", stopAt: ".delivery-box" },
+  {
+    name: "shipments per order",
+    kinds: ["order_details", "invoice"],
+    item: "[data-component='shipmentStatus']",
+  },
+  {
+    name: "items per shipment",
+    kinds: ["order_details", "invoice"],
+    item: "[data-component='purchasedItemsRightGrid']",
+    stopAt: "[data-component='shipmentStatus']",
+  },
+  { name: "carousel cards", kinds: ["*"], item: "li.a-carousel-card" },
+];
+
 /**
  * Size reduction (ScrubOptions.reduce, off by default). Subtrees removed before scrubbing:
  * site chrome no parser reads and recommendation rails. Removing more is always safe for

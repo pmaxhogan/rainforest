@@ -48,8 +48,14 @@ function scrubSegment(seg: string, prev: string, ctx: ScrubContext): string {
   }
   if (/^ref=/i.test(dec)) return "ref=rf";
   ctx.count("path_segment");
-  // Product slugs are titles: synthesize word by word, keeping the separators.
-  return encodeURIComponent(scrubText(dec, ctx)).replace(/%20/g, "-");
+  // Product slugs are titles: the whole slug is replaced by synthetic words (no digit, size
+  // or model token of the title survives), the same way for the same slug on the page.
+  // Only slugs (words joined by "-" or spaces); a single token can be an id the page and
+  // the parsers map consistently (a list id), which scrubText keeps doing.
+  if (!/[-\s]/.test(dec)) return encodeURIComponent(scrubText(dec, ctx)).replace(/%20/g, "-");
+  const words = dec.replace(/[^\p{L}]+/gu, " ").trim();
+  const slug = words === "" ? "item" : scrubText(words, ctx);
+  return encodeURIComponent(slug.replace(/[^A-Za-z ]+/g, "").trim() || "item").replace(/%20/g, "-");
 }
 
 function scrubPath(path: string, ctx: ScrubContext): string {
