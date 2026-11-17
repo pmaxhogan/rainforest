@@ -55,6 +55,21 @@ export function scanText(rules, text) {
   return hits;
 }
 
+// Identities allowed besides the configured owner identity: GitHub's own bots and the
+// GitHub web committer (used for merges made on github.com). Fixed list, not configurable.
+const GITHUB_WEB = "GitHub <noreply@github.com>";
+const BOT_AUTHORS = [
+  "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+  "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+];
+
+export function identityAllowed(author, committer, identity) {
+  if (author === identity && (committer === identity || committer === GITHUB_WEB)) return true;
+  if (BOT_AUTHORS.includes(author) && (committer === GITHUB_WEB || BOT_AUTHORS.includes(committer)))
+    return true;
+  return false;
+}
+
 function loadRules() {
   const path = process.env.RAINFOREST_DENYLIST || config("rainforest.denylist");
   const owner = config("rainforest.owner") === "true";
@@ -90,8 +105,8 @@ function scanCommits(rules, revArgs, failures) {
   for (const sha of shas) {
     const meta = git(["show", "-s", "--format=%an <%ae>%n%cn <%ce>%n%B", sha]);
     const [author, committer, ...body] = meta.split("\n");
-    if (identity && (author !== identity || committer !== identity)) {
-      failures.push(`${sha.slice(0, 10)}: author/committer is not the configured identity`);
+    if (identity && !identityAllowed(author, committer, identity)) {
+      failures.push(`${sha.slice(0, 10)}: author/committer is not an allowed identity`);
     }
     report(`${sha.slice(0, 10)}:message`, scanText(rules, body.join("\n")), failures);
     const tree = git(["ls-tree", "-r", "-z", sha]).split("\0").filter(Boolean);
