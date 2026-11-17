@@ -74,3 +74,12 @@ test("an unknown page type fails closed", () => {
   const p = new Pacer();
   expect(p.plan("bogus" as never).ok).toBe(false);
 });
+
+test("account friction pages are recognized and nothing else is", async () => {
+  const { accountFriction } = await import("../src/session.ts");
+  expect(accountFriction("https://www.amazon.com/checkpoint/continue")).toBe("soft_challenge");
+  expect(accountFriction("https://www.amazon.com/errors/validateCaptcha?x=1")).toBe("captcha");
+  expect(accountFriction("https://www.amazon.com/dp/B0FAKE0001")).toBeNull();
+  expect(accountFriction("https://www.example.com/checkpoint/continue")).toBeNull();
+  expect(accountFriction("not a url")).toBeNull();
+});

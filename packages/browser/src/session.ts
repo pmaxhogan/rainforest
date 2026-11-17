@@ -46,6 +46,25 @@ export interface PageContext {
   guard: Guard;
 }
 
+/**
+ * Amazon pages that mean "prove you are a person". Landing on one stops the queue and
+ * starts the cool-down; nothing here ever tries to get past them.
+ */
+export function accountFriction(url: string): HumanKind | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)amazon\.com$/i.test(parsed.hostname)) return null;
+  const path = parsed.pathname.toLowerCase();
+  if (path.startsWith("/errors/validatecaptcha") || path.includes("captcha")) return "captcha";
+  if (path.startsWith("/checkpoint") || path.startsWith("/ax/claim") || path.startsWith("/gp/aw/c"))
+    return "soft_challenge";
+  return null;
+}
+
 const DRAG_BACKOFF_MS = [0, 150, 300, 600, 1200, 2000];
 
 async function retryOnDrag<T>(
@@ -249,15 +268,23 @@ export class BrowserSession {
       });
     }
     // Second layer: whatever URL the tab ended up on must itself be allowed.
-    const landed = checkNavigation(page.url());
+    const landedUrl = page.url();
+    const landed = checkNavigation(landedUrl);
     if (!landed.allow) {
       await page.goto("about:blank").catch(() => {});
       if (landed.reason === "sign_in") this.#needsHuman("sign_in", "Amazon asked to sign in again");
+      const friction = accountFriction(landedUrl);
+      if (friction)
+        this.#needsHuman(friction, `Amazon showed a ${friction.replace("_", " ")} page`);
       throw new RfError(
         "blocked_by_policy",
         `the page landed on a refused URL (${landed.reason})`,
         {
-          details: { reason: landed.reason, rule: landed.rule },
+          details: {
+            reason: landed.reason,
+            rule: landed.rule,
+            landed: landedUrl.split("?")[0]!.slice(0, 120),
+          },
         },
       );
     }

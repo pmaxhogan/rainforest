@@ -221,7 +221,8 @@ export const MAIN_FRAME_ALLOWLIST: readonly AllowRule[] = [
     name: "tracking",
     host: AMAZON_HOST,
     path: new RegExp(
-      String.raw`^\/(progress-tracker\/package-tracking|gp\/your-account\/ship-track)` + REF,
+      String.raw`^\/(progress-tracker\/package|progress-tracker\/package-tracking|gp\/your-account\/ship-track)` +
+        REF,
     ),
   },
   {

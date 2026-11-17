@@ -3,6 +3,9 @@ import type { SessionProvider } from "../browser-controller.ts";
 import type { ToolContext, ToolOutput, ToolRouter } from "../interfaces.ts";
 import { getBrowsingHistory, getCart, listSubscriptions } from "./account.ts";
 import type { Flow } from "./common.ts";
+import { getList, listLists } from "./lists.ts";
+import { getInvoice, getOrder, listOrders } from "./orders.ts";
+import { getPriceHistory } from "./price.ts";
 
 /**
  * Typed flows only: each tool name maps to one function. There is no generic
@@ -12,6 +15,12 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   get_cart: getCart,
   list_subscriptions: listSubscriptions,
   get_browsing_history: getBrowsingHistory,
+  list_orders: listOrders,
+  get_order: getOrder,
+  get_invoice: getInvoice,
+  list_lists: listLists,
+  get_list: getList,
+  get_price_history: getPriceHistory,
 };
 
 export function createRouter(browser: SessionProvider, now: () => number = Date.now): ToolRouter {

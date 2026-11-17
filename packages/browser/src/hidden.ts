@@ -19,6 +19,19 @@ const MARK_SCRIPT = `(() => {
         shown = true;
       }
       if (!shown) {
+        // display:contents has no box of its own but its children render: descend instead.
+        let contents = false;
+        try {
+          contents = getComputedStyle(child).display === "contents";
+        } catch (e) {
+          contents = false;
+        }
+        if (contents) {
+          walk(child);
+          continue;
+        }
+        // Hidden form inputs carry state, not content: leave them readable.
+        if (tag === "INPUT" && child.type === "hidden") continue;
         child.setAttribute(ATTR, "1");
         marked++;
         continue;
