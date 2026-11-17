@@ -91,9 +91,10 @@ https). If someone controls that hostname's certificate, they are the hub.
 from an alphabet without look-alike characters, valid for 10 minutes. At most 5 pairings may be
 pending, and one per key.
 
-Nothing is trusted until you approve: you open `/admin` (behind Access), check that the code and
-device name match what the daemon printed, and press Approve. The page also shows a short
-fingerprint of the device's public key. The daemon proves it holds the key while it waits, by
+Nothing is trusted until you approve: you open `/admin` (behind Access) and type the code that
+the daemon printed. The page lists pending requests by name, OS and a short fingerprint of the
+device's public key, but never shows a code, so a request made by someone else cannot be approved
+by mistake: only the person at the computer knows its code. The daemon proves it holds the key while it waits, by
 signing a timestamped request to `/pair/status` (accepted within five minutes of the hub's
 clock). After approval, every connection authenticates with a fresh
 single-use nonce and a signature over the nonce, device id and protocol version. Revoking a device
@@ -261,8 +262,13 @@ seconds; if it does not, the previous version is restored and the new one is mar
 cannot start at all, the launcher restores the previous version after three unconfirmed starts.
 The key list is an array, so a key can rotate: add the new key, release, then drop the old one.
 
-Signing happens in CI in a separate job from the build: the build job installs dependencies with a
-read-only token and no secrets; the signing job holds the key but installs nothing.
+Signing happens in CI in a separate job from the build. The build job installs dependencies
+without running their install scripts, runs only the packager, and has a read-only token and no
+secrets. Tests and lint run in a third job, so no test tooling runs where the release bytes are
+produced. The signing job holds the key, installs nothing, and uses actions pinned to commits.
+Dependency updates merge automatically when CI is green, but only after a cooldown (5 days for
+minor and patch versions, 14 for majors), so a bad upstream release has time to be noticed and
+pulled before it can become a signed release. Security updates are not delayed.
 
 Anyone who forks the project and wants updates must generate their own key pair
 (`scripts/release-keygen.mjs`), commit the public half to

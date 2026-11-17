@@ -196,8 +196,9 @@ node packages/daemon/src/main.ts pair
 
 It creates the device key (once; it is never overwritten), sends only the public key to your hub,
 and prints an 8 character code and `Device name`. Open `https://<your-hostname>/admin` (sign in
-through Access), check that the pending pairing shows the same code and name, and press
-**Approve**. The daemon is waiting (up to 10 minutes) and then writes the new device id into
+through Access), check that the pending pairing shows the same name and key fingerprint, type
+the code the daemon printed into the approval box, and press **Approve**. The page does not show
+codes: anyone can request a pairing, and only the person at the computer knows its code. The daemon is waiting (up to 10 minutes) and then writes the new device id into
 `config.json`. If it says "the hub refused the pairing", the reason is in the parentheses (for
 example a pairing for this key is already pending, or too many are pending). The `--code` flag is
 accepted but not used.
