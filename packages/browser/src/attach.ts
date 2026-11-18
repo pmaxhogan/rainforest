@@ -26,8 +26,51 @@ export interface AttachOptions {
   extensionId: string;
   /** Name shown on the window's title tab and the tab group. */
   name?: string;
+  /** Where and how large to open the window. Omitted: the extension's own default. */
+  bounds?: WindowBounds;
   connectTimeoutMs?: number;
   log?: (line: string) => void;
+}
+
+/** A window's outer frame in screen coordinates (CSS pixels). */
+export interface WindowBounds {
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+}
+
+/**
+ * Accept only a plain, plausible rectangle: whole numbers, at least 640 x 480, nothing
+ * absurd. Anything else is no bounds at all, so the extension's default applies.
+ */
+export function sanitizeBounds(value: unknown): WindowBounds | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const whole = (n: unknown, min: number, max: number): number | null =>
+    typeof n === "number" && Number.isFinite(n) && Math.round(n) >= min && Math.round(n) <= max
+      ? Math.round(n)
+      : null;
+  const width = whole(v.width, 640, 16_384);
+  const height = whole(v.height, 480, 16_384);
+  const left = whole(v.left ?? 0, -32_768, 32_768);
+  const top = whole(v.top ?? 0, -32_768, 32_768);
+  if (width === null || height === null || left === null || top === null) return null;
+  return { width, height, left, top };
+}
+
+/**
+ * The usable area of the screen the tab is on (the screen minus menu bar, dock or
+ * taskbar), as the page itself reports it. A window with these bounds fills the screen the
+ * way an ordinary maximized browser window does.
+ */
+export async function readScreenArea(page: Page): Promise<WindowBounds | null> {
+  const raw = await page
+    .evaluate(
+      `({ width: screen.availWidth, height: screen.availHeight, left: screen.availLeft || 0, top: screen.availTop || 0 })`,
+    )
+    .catch(() => null);
+  return sanitizeBounds(raw);
 }
 
 export interface Attachment {
@@ -75,6 +118,7 @@ function installSpawnInterceptor(): void {
           // cannot close, so the window would outlive every detach. Without it the
           // automation tab is the window's only tab and closing it closes the window.
           minimized: false,
+          ...(pending.options.bounds ? { bounds: pending.options.bounds } : {}),
         })
         .then(
           () => pending.resolve(),

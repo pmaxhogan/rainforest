@@ -1,6 +1,6 @@
 import type { Page } from "playwright-core";
 import { RfError, type Capture, type HumanKind, type PageKind } from "@rainforest/core";
-import { attach, type Attachment } from "./attach.ts";
+import { attach, readScreenArea, type Attachment, type WindowBounds } from "./attach.ts";
 import type { Broker } from "./broker.ts";
 import { BrokerError } from "./broker.ts";
 import { installGuard, type Guard } from "./guard.ts";
@@ -33,9 +33,30 @@ export interface SessionOptions {
    * diagnostics only: the session keeps nothing, and a throwing receiver is ignored.
    */
   onPage?: (page: SeenPage) => void;
+  /**
+   * Open the automation window at the size of the screen it is on, like an ordinary
+   * maximized browser window, instead of the extension's fixed default size. `known` is
+   * the screen area seen on an earlier attach (so the window opens at the right size at
+   * once); `onChange` is told when the screen turns out to be a different size. Omitted:
+   * the extension's default size.
+   */
+  fitScreen?: {
+    known?: () => WindowBounds | null;
+    onChange?: (area: WindowBounds) => void;
+    /** Told the size the window really has, each time one is opened. */
+    onOpened?: (opened: { outerWidth: number; outerHeight: number }) => void;
+  };
   log?: (line: string) => void;
   sleep?: (ms: number) => Promise<void>;
 }
+
+const sameBounds = (a: WindowBounds | null, b: WindowBounds | null): boolean =>
+  a !== null &&
+  b !== null &&
+  a.width === b.width &&
+  a.height === b.height &&
+  a.left === b.left &&
+  a.top === b.top;
 
 /** One page or fragment as the session saw it. */
 export interface SeenPage {
@@ -267,17 +288,48 @@ export class BrowserSession {
       await this.#options.ensureInstance?.();
       let attachment: Attachment;
       try {
-        attachment = await retryOnDrag(
-          () =>
-            attach({
-              broker: this.#options.broker,
-              token: this.#options.token,
-              extensionId: this.#options.extensionId,
-              name: this.#options.name,
-              log: this.#options.log,
-            }),
-          this.#sleep,
-        );
+        const fit = this.#options.fitScreen;
+        const open = (bounds: WindowBounds | null): Promise<Attachment> =>
+          retryOnDrag(
+            () =>
+              attach({
+                broker: this.#options.broker,
+                token: this.#options.token,
+                extensionId: this.#options.extensionId,
+                name: this.#options.name,
+                log: this.#options.log,
+                ...(bounds ? { bounds } : {}),
+              }),
+            this.#sleep,
+          );
+        const known = fit?.known?.() ?? null;
+        attachment = await open(known);
+        if (fit) {
+          // The page says how large the screen really is. If that is not what the window
+          // was opened with (first run, or the display changed), open it again at that
+          // size, once: a window is sized when it is created.
+          const area = await readScreenArea(attachment.page);
+          if (area && !sameBounds(known, area)) {
+            fit.onChange?.(area);
+            await attachment.close().catch(() => {});
+            attachment = await open(area);
+          }
+          this.#options.log?.(
+            area
+              ? `window ${area.width}x${area.height} at ${area.left},${area.top} (the screen's usable area)`
+              : "window at the extension's default size (the screen size could not be read)",
+          );
+          const outer = (await attachment.page
+            .evaluate(`({ outerWidth: window.outerWidth, outerHeight: window.outerHeight })`)
+            .catch(() => null)) as { outerWidth: number; outerHeight: number } | null;
+          if (outer && Number.isFinite(outer.outerWidth) && Number.isFinite(outer.outerHeight)) {
+            try {
+              fit.onOpened?.(outer);
+            } catch {
+              // Diagnostics must never fail an attach.
+            }
+          }
+        }
       } catch (error) {
         if (error instanceof BrokerError) {
           throw new RfError(

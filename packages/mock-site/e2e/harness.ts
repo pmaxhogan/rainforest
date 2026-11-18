@@ -22,6 +22,7 @@ import {
   type PacingDecision,
   type PageType,
   type SeenPage,
+  type WindowBounds,
 } from "@rainforest/browser";
 import { RfError, TOOLS, type ToolDef } from "@rainforest/core";
 import { classifyInterstitial } from "@rainforest/parsers";
@@ -72,6 +73,8 @@ export interface Harness {
   log: string[];
   /** Every page, fragment and failure snapshot the session reported (newest last). */
   pages: SeenPage[];
+  /** The screen areas the session reported while sizing its window (normally exactly one). */
+  screens: WindowBounds[];
   mode: "fixed-port" | "patched-copy";
   /** The throwaway profile directory of the test browser. */
   userDataDir: string;
@@ -504,7 +507,13 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
     );
     cleanups.push(() => setSettleScaleForTests(1));
     const pages: SeenPage[] = [];
+    const screens: WindowBounds[] = [];
     const session = new BrowserSession({
+      // As the daemon does: open the window at the size of the screen it is on.
+      fitScreen: {
+        known: () => screens[screens.length - 1] ?? null,
+        onChange: (area) => void screens.push(area),
+      },
       onPage: (seen) => {
         pages.push(seen);
         if (pages.length > 400) pages.splice(0, pages.length - 400);
@@ -574,6 +583,7 @@ async function tryStart(options: HarnessOptions): Promise<HarnessStart> {
       },
       log,
       pages,
+      screens,
       mode: patched ? "patched-copy" : "fixed-port",
       userDataDir,
       close: cleanup,

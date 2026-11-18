@@ -90,6 +90,15 @@ const pageArchiveSchema = z.strictObject({
   max_mb: z.number().int().min(1).max(20_000).default(DEFAULT_PAGE_ARCHIVE.max_mb),
 });
 
+/**
+ * The automation window. By default it opens at the size of the screen it is on, like an
+ * ordinary maximized browser window; `fit_screen: false` keeps the extension's fixed
+ * default size (1280 x 900).
+ */
+const windowSchema = z.strictObject({
+  fit_screen: z.boolean().default(true),
+});
+
 export const configSchema = z.looseObject({
   hub_url: httpsUrl,
   device_id: z.string().min(8).max(64),
@@ -101,6 +110,7 @@ export const configSchema = z.looseObject({
   update: updateSchema,
   pacing: pacingSchema.optional(),
   page_archive: pageArchiveSchema.default(() => ({ ...DEFAULT_PAGE_ARCHIVE })),
+  window: windowSchema.default(() => ({ fit_screen: true })),
   idle_detach_s: z.number().int().min(0).max(86_400).default(DEFAULT_IDLE_DETACH_S),
 });
 
@@ -197,5 +207,6 @@ export function summarizeConfig(config: DaemonConfig): Record<string, unknown> {
     idle_detach_s: config.idle_detach_s,
     ...(config.pacing ? { pacing: config.pacing } : {}),
     page_archive: config.page_archive,
+    window: config.window,
   };
 }

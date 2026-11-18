@@ -268,3 +268,37 @@ test("burst reports the window and the loads still inside it", () => {
   c.advance(600_000 - 40_000 + 8_000); // 608 s after the first load: two have left
   expect(p.burst().used_at).toHaveLength(4);
 });
+
+test("window bounds: only a plain, plausible rectangle is accepted", async () => {
+  const { sanitizeBounds } = await import("../src/attach.ts");
+  expect(sanitizeBounds({ width: 1728, height: 1079, left: 0, top: 38 })).toEqual({
+    width: 1728,
+    height: 1079,
+    left: 0,
+    top: 38,
+  });
+  // Fractions are rounded; a missing position is the screen's origin.
+  expect(sanitizeBounds({ width: 2560.4, height: 1392.6 })).toEqual({
+    width: 2560,
+    height: 1393,
+    left: 0,
+    top: 0,
+  });
+  // A second monitor to the left has a negative origin.
+  expect(sanitizeBounds({ width: 1920, height: 1040, left: -1920, top: 0 })?.left).toBe(-1920);
+  for (const bad of [
+    null,
+    undefined,
+    "1280x900",
+    {},
+    { width: 100, height: 900 },
+    { width: 1280, height: 100 },
+    { width: 99_999, height: 900 },
+    { width: Number.NaN, height: 900 },
+    { width: "1280", height: 900 },
+    { width: 1280, height: 900, left: 999_999 },
+    { width: 1280, height: 900, top: "0" },
+  ]) {
+    expect(sanitizeBounds(bad), JSON.stringify(bad)).toBeNull();
+  }
+});

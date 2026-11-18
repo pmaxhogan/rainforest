@@ -152,6 +152,18 @@ describe("config", () => {
     }
   });
 
+  test("the automation window fits the screen by default and can keep the fixed size", () => {
+    expect(parseConfig(minimal).window).toEqual({ fit_screen: true });
+    expect(parseConfig({ ...minimal, window: { fit_screen: false } }).window).toEqual({
+      fit_screen: false,
+    });
+    for (const bad of [{ fit_screen: "yes" }, { width: 1280 }, { fit_screen: true, size: 1 }]) {
+      expect(() => parseConfig({ ...minimal, window: bad }), JSON.stringify(bad)).toThrow(
+        ConfigError,
+      );
+    }
+  });
+
   test("validation errors never echo the offending value", () => {
     let message = "";
     try {

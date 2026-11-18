@@ -8,8 +8,10 @@ import {
   Pacer,
   emptyPacingState,
   portInUse,
+  sanitizeBounds,
   type Broker,
   type PacingState,
+  type WindowBounds,
 } from "@rainforest/browser";
 import { classifyInterstitial } from "@rainforest/parsers";
 import { RfError } from "@rainforest/core";
@@ -182,6 +184,21 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
     if (traceLines.length > TRACE_LINES) traceLines.splice(0, traceLines.length - TRACE_LINES);
     log.debug(line);
   };
+  // The usable area of this computer's screen, as the browser last reported it. Kept on
+  // disk so the automation window opens at that size at once after a restart.
+  const screenFile = join(paths.root, "screen.json");
+  let screenArea: WindowBounds | null = null;
+  if (config.window.fit_screen && existsSync(screenFile)) {
+    try {
+      screenArea = sanitizeBounds(JSON.parse(readFileSync(screenFile, "utf8")));
+    } catch {
+      screenArea = null;
+    }
+  }
+  log.info("automation window", {
+    fit_screen: config.window.fit_screen,
+    ...(screenArea ? { screen: screenArea } : {}),
+  });
   let broker: Broker | null = null;
   let embedded: EmbeddedBroker | null = null;
   let session: BrowserSession | null = null;
@@ -284,6 +301,31 @@ export function createBrowserController(deps: ControllerDeps): BrowserController
       },
       onPacingChange: savePacing,
       ...(archive ? { onPage: (seen) => archive.save(seen) } : {}),
+      ...(config.window.fit_screen
+        ? {
+            fitScreen: {
+              known: () => screenArea,
+              onOpened: (opened: { outerWidth: number; outerHeight: number }) => {
+                log.info("automation window opened", {
+                  outer_width: opened.outerWidth,
+                  outer_height: opened.outerHeight,
+                  ...(screenArea ? { screen: screenArea } : {}),
+                });
+              },
+              onChange: (area: WindowBounds) => {
+                screenArea = area;
+                log.info("automation window sized to the screen", { screen: area });
+                try {
+                  atomicWriteJson(screenFile, area, 0o600);
+                } catch (error) {
+                  log.warn("could not persist the screen size", {
+                    error: String((error as Error).message),
+                  });
+                }
+              },
+            },
+          }
+        : {}),
       log: sessionLog,
     });
     return session;

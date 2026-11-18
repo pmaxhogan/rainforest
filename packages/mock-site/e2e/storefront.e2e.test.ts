@@ -750,6 +750,22 @@ if (!start.ok) {
       expect(h.log.some((line) => line === "goto product /dp/B0FAKE0001")).toBe(true);
     });
 
+    it("the automation window is opened at the size of the screen, not a fixed size", async () => {
+      const seen = (await h.session.run(async (ctx) =>
+        ctx.page.evaluate(
+          `({ outerW: window.outerWidth, outerH: window.outerHeight, availW: screen.availWidth, availH: screen.availHeight })`,
+        ),
+      )) as { outerW: number; outerH: number; availW: number; availH: number };
+      // The session read the screen once and has had no reason to change its mind.
+      expect(h.screens).toHaveLength(1);
+      expect(h.screens[0]).toMatchObject({ width: seen.availW, height: seen.availH });
+      // The window really has that size (a window manager may trim a few pixels), and it
+      // is not the extension's fixed 1280 x 900 unless the screen happens to be that.
+      expect(Math.abs(seen.outerW - seen.availW)).toBeLessThanOrEqual(24);
+      expect(Math.abs(seen.outerH - seen.availH)).toBeLessThanOrEqual(64);
+      expect(h.log.some((line) => /^window \d+x\d+ at -?\d+,-?\d+ /.test(line))).toBe(true);
+    });
+
     it("pacing gaps are honored with the real pacer", async () => {
       pacer.fast = false;
       pacer.state.loads = {};

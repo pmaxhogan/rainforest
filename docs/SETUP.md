@@ -318,6 +318,17 @@ The safe level is not known. The defaults sit well below the one observed case o
 a cap trades waiting time for a higher chance of such a checkpoint, which costs a 60 minute
 cool-down and a click by you, and the two-computer sum still applies.
 
+### 4e. The automation window (optional)
+
+The daemon works in a window of its own, opened without taking focus. It opens that window at
+the size of the screen it is on (the screen minus menu bar, dock or taskbar), the way an ordinary
+maximized browser window sits, because a window of one fixed, unusual size on every visit is
+itself a pattern. The daemon learns the size from the page (`screen.availWidth` and so on), keeps
+it in `screen.json` in the app directory, and opens the window again at the new size if the
+display changes. To keep the extension's fixed default instead (1280 x 900), put
+`"window": { "fit_screen": false }` in `config.json` and restart the daemon. `daemon.log` has an
+`automation window opened` line with the size each window really got.
+
 ## 5. Connect Claude
 
 The connector URL is `https://<your-hostname>/mcp`.
