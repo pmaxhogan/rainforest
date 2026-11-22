@@ -1163,7 +1163,8 @@ function parseCount_(
   return { text: t, count };
 }
 
-function parsePagination(
+/** The page's `ul.a-pagination` bar. Shared with the order search results page. */
+export function parsePagination(
   root: DomElement,
   consumed: Consumption,
   meta: ParseMeta,

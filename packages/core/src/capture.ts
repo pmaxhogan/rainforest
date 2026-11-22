@@ -14,6 +14,7 @@ export const PAGE_KINDS = [
   "reviews",
   "cart",
   "order_list",
+  "order_search",
   "order_details",
   "invoice",
   "returns",

@@ -52,7 +52,7 @@ repository documentation that tracks it, together with the Status table in docs/
 | Daemon: autostart (LaunchAgent / Scheduled Task)                                                                    | Implemented; the Windows hidden launch is unverified                                                                                          |
 | Daemon: signed self-update with rollback, install from an unpacked release                                          | Implemented                                                                                                                                   |
 | Rails: URL policy, network guard, navigation guard, click guard, pacing                                             | Implemented                                                                                                                                   |
-| Read tools (17), including search, orders, lists, reviews and price history                                         | Implemented                                                                                                                                   |
+| Read tools (18), including search, orders, lists, reviews and price history                                         | Implemented                                                                                                                                   |
 | Write tools: the cart writes, the list writes (`create_list` through `remove_from_list`); hand-off `show_on_screen` | Implemented                                                                                                                                   |
 | Planned options                                                                                                     | Planned: coupon clipping (`clip_coupon` on `add_to_cart`, accepted and ignored) and the copy mode of `move_list_item` (answers `unsupported`) |
 | `rainforestd doctor`                                                                                                | Implemented                                                                                                                                   |
@@ -112,7 +112,7 @@ See docs/ARCHITECTURE.md for the full picture.
 
 ## Tools
 
-The registry in `packages/core/src/tools.ts` defines 35 tools. One line each, from the registry;
+The registry in `packages/core/src/tools.ts` defines 36 tools. One line each, from the registry;
 arguments, results and errors are in docs/TOOLS.md.
 
 **Browsers**
@@ -137,6 +137,7 @@ arguments, results and errors are in docs/TOOLS.md.
 
 - `get_cart` - active cart items, subtotal and Saved for later.
 - `list_orders` - order history by year or range, paged.
+- `search_orders` - search the whole order history by product title or order number.
 - `get_order` - full order details, shipments and tracking.
 - `get_invoice` - invoice charge breakdown and payment transactions.
 - `list_subscriptions` - Subscribe & Save subscriptions and upcoming deliveries (read only).

@@ -23,7 +23,7 @@ import {
   updateListItem,
 } from "./list-writes.ts";
 import { getList, listLists } from "./lists.ts";
-import { getInvoice, getOrder, listOrders } from "./orders.ts";
+import { getInvoice, getOrder, listOrders, searchOrders } from "./orders.ts";
 import { getPriceHistory } from "./price.ts";
 import { getBuyingOptions, getProduct, search } from "./shopping.ts";
 
@@ -37,6 +37,7 @@ export const FLOWS: Readonly<Record<string, Flow>> = {
   get_browsing_history: getBrowsingHistory,
   get_search_history: getSearchHistory,
   list_orders: listOrders,
+  search_orders: searchOrders,
   get_order: getOrder,
   get_invoice: getInvoice,
   list_lists: listLists,

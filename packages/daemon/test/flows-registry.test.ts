@@ -10,7 +10,7 @@ describe("daemon flows cover the registry", () => {
     const flowNames = Object.keys(FLOWS).sort();
     const expected = TOOL_NAMES.filter((n) => !HUB_TOOLS.includes(n)).sort();
     expect(flowNames).toEqual(expected);
-    expect(flowNames).toHaveLength(31);
+    expect(flowNames).toHaveLength(32);
   });
 
   test("the list write tools have flows", () => {

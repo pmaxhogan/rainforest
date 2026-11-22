@@ -252,6 +252,12 @@ export const MAIN_FRAME_ALLOWLIST: readonly AllowRule[] = [
     path: new RegExp(String.raw`^\/cart\/smart-wagon` + REF),
   },
   { name: "orders", host: AMAZON_HOST, path: new RegExp(String.raw`^\/your-orders\/orders` + REF) },
+  // The results page of the order list's own search box.
+  {
+    name: "order-search",
+    host: AMAZON_HOST,
+    path: new RegExp(String.raw`^\/your-orders\/search` + REF),
+  },
   {
     name: "orders-legacy",
     host: AMAZON_HOST,

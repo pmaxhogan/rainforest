@@ -21,6 +21,7 @@ export {
 } from "./offers.ts";
 export { parseOrderDetails, type OrderDetails } from "./order-details.ts";
 export { parseOrderList, type OrderCard, type OrderListPage } from "./order-list.ts";
+export { parseOrderSearch, type OrderSearchHit, type OrderSearchPage } from "./order-search.ts";
 export {
   CAMEL_CHART_HOSTS,
   KEEPA_GRAPH_HOST,

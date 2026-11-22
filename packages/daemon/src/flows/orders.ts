@@ -1,8 +1,10 @@
+import { checkNavigation } from "@rainforest/browser";
 import { RfError } from "@rainforest/core";
 import {
   parseInvoice,
   parseOrderDetails,
   parseOrderList,
+  parseOrderSearch,
   type OrderCard,
 } from "@rainforest/parsers";
 import {
@@ -74,6 +76,45 @@ export const listOrders: Flow = async (args, ctx) => {
       body.next_page_cursor = `orders:${page + 1}:${timeFilter ?? ""}:${filter}`;
     }
     return fitToBudget(body, ["other_sections", "orders"], maxCharsOf(args), ctx.now());
+  });
+};
+
+/**
+ * The order list's own search box: page 1 is what its form submits, later pages are what
+ * the results page's pagination links to.
+ */
+export function orderSearchUrl(query: string, page: number): string {
+  const params = new URLSearchParams();
+  if (page > 1) {
+    params.set("page", String(page));
+    params.set("search", query);
+    return `${AMAZON}/your-orders/search?${params.toString()}`;
+  }
+  params.set("opt", "ab");
+  params.set("search", query);
+  return `${AMAZON}/your-orders/search/ref=ppx_yo2ov_dt_b_search?${params.toString()}`;
+}
+
+export const searchOrders: Flow = async (args, ctx) => {
+  const query = String(args.query).trim().replace(/\s+/g, " ");
+  const page = typeof args.page === "number" ? args.page : 1;
+  const url = orderSearchUrl(query, page);
+  // The purchase guard refuses some words anywhere in a URL. Say so before any page load,
+  // in terms of the query, rather than as a refused navigation.
+  if (!checkNavigation(url).allow) {
+    throw new RfError(
+      "invalid_arguments",
+      'that query cannot be searched: it contains wording the purchase guard refuses in any URL (for example "turbo" or "one-click"); use other words from the product title',
+    );
+  }
+  const session = await ctx.browser.session();
+  return await session.run(async (p) => {
+    const { result, capture } = await readPage(p, url, "account", "order_search", parseOrderSearch);
+    ctx.browser.setSignedIn(true);
+    const body = pageBody(result, capture);
+    body.page = page;
+    if (result.data.pagination?.has_next) body.next_page = page + 1;
+    return fitToBudget(body, ["other_sections", "results"], maxCharsOf(args), ctx.now());
   });
 };
 

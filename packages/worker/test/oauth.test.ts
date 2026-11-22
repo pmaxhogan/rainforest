@@ -40,6 +40,7 @@ const EXPECTED_TOOLS = [
   "get_price_history",
   "get_cart",
   "list_orders",
+  "search_orders",
   "get_order",
   "get_invoice",
   "list_subscriptions",

@@ -31,6 +31,7 @@ const EXPECTED_TOOLS = [
   "get_price_history",
   "get_cart",
   "list_orders",
+  "search_orders",
   "get_order",
   "get_invoice",
   "list_subscriptions",
@@ -183,6 +184,20 @@ describe("tool descriptions tell the truth", () => {
     expect(getTool("list_orders")!.input.safeParse({ filter: "archived" }).success).toBe(true);
   });
 
+  test("search_orders pages by number and bounds its query", () => {
+    const t = getTool("search_orders")!;
+    expect(t.kind).toBe("read");
+    expect(t.pacing).toBe("account");
+    expect(t.description).toContain("next_page");
+    expect(t.input.safeParse({ query: "desk lamp" }).success).toBe(true);
+    expect(t.input.safeParse({ query: "desk lamp", page: 3 }).success).toBe(true);
+    expect(t.input.safeParse({}).success).toBe(false);
+    expect(t.input.safeParse({ query: "" }).success).toBe(false);
+    expect(t.input.safeParse({ query: "   " }).success).toBe(false);
+    expect(t.input.safeParse({ query: "x".repeat(121) }).success).toBe(false);
+    expect(t.input.safeParse({ query: "desk lamp", page: 0 }).success).toBe(false);
+  });
+
   // Hardcoded: only these flows redeem a cursor (cursorOrThrow). Every other read tool can
   // return a next_cursor it cannot redeem, so its description must say how to get the rest.
   const WITH_CURSOR = [
@@ -198,6 +213,7 @@ describe("tool descriptions tell the truth", () => {
     "search",
     "get_buying_options",
     "get_reviews",
+    "search_orders",
     "get_order",
     "get_invoice",
     "list_lists",

@@ -17,7 +17,12 @@ import {
   renderMoveItemPopover,
   renderSettingsPopover,
 } from "./pages/lists.ts";
-import { renderInvoice, renderOrderDetails, renderOrderList } from "./pages/orders.ts";
+import {
+  renderInvoice,
+  renderOrderDetails,
+  renderOrderList,
+  renderOrderSearch,
+} from "./pages/orders.ts";
 import { renderPlanUpsell, renderProduct } from "./pages/product.ts";
 import { renderSearch } from "./pages/search.ts";
 import {
@@ -249,6 +254,7 @@ async function route(ctx: Ctx): Promise<void> {
     if (/^\/hz\/wishlist\/movetolist(\/|$)/.test(path))
       return send(res, 200, renderMoveItemPopover(session, url.searchParams));
     if (/^\/your-orders\/orders(\/|$)/.test(path)) return send(res, 200, renderOrderList(url));
+    if (/^\/your-orders\/search(\/|$)/.test(path)) return send(res, 200, renderOrderSearch(url));
     if (/^\/(gp\/your-account|your-orders)\/order-details(\/|$)/.test(path))
       return send(res, 200, renderOrderDetails(url.searchParams.get("orderID")));
     if (/^\/gp\/css\/summary\/print\.html(\/|$)/.test(path))

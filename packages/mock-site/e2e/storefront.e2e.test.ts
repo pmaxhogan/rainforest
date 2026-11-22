@@ -221,6 +221,28 @@ if (!start.ok) {
         "000-0000000-0000001",
         "000-0000000-0000002",
       ]);
+      const found = (await h.call("search_orders", { query: "canvas tote" })) as {
+        order_count: number;
+        results: { asin: string; order_id: string; ordered: { iso: string } }[];
+        next_page?: number;
+      };
+      expect(found.order_count).toBe(1);
+      expect(found.results.map((r) => [r.asin, r.order_id, r.ordered.iso])).toEqual([
+        ["B0FAKE0003", "000-0000000-0000001", "2026-11-02"],
+      ]);
+      expect(found.next_page).toBeUndefined();
+      const paged = (await h.call("search_orders", { query: "example" })) as {
+        results: unknown[];
+        next_page?: number;
+      };
+      expect(paged.results).toHaveLength(2);
+      expect(paged.next_page).toBe(2);
+      const nothing = (await h.call("search_orders", { query: "zzqx vvkk" })) as {
+        results: unknown[];
+        empty_text: string;
+      };
+      expect(nothing.results).toEqual([]);
+      expect(nothing.empty_text).toContain("No results found");
       const order = (await h.call("get_order", { order_id: "000-0000000-0000001" })) as {
         order_id: string;
       };

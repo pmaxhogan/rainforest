@@ -1,6 +1,6 @@
 import { ORDERS, orderSubtotal, product, SHIP_TO, type Order } from "../catalog.ts";
 import { esc, money } from "../util.ts";
-import { layout } from "./layout.ts";
+import { HIDDEN, layout } from "./layout.ts";
 
 /** Order list, order details and the printable invoice for a couple of invented orders. */
 
@@ -52,12 +52,93 @@ export function renderOrderList(url: URL): string {
   return layout({
     title: "Your Orders",
     body: `<section class="your-orders-content-container aok-relative js-yo-container"><div class="your-orders-content-container__content js-yo-main-content">
-<div class="a-row a-spacing-medium"><div class="a-column a-span6"><h1>Your Orders</h1></div></div>
+<div class="a-row a-spacing-medium"><div class="a-column a-span6"><h1>Your Orders</h1></div><div class="a-column a-span6 a-span-last"><div class="search-bar"><form method="get" action="/your-orders/search/ref=ppx_yo2ov_dt_b_search" class="a-spacing-none"><input type="hidden" name="opt" value="ab"><div class="search-bar__input-container"><input type="search" id="searchOrdersInput" name="search" placeholder="Search all orders"></div><div class="search-bar__button-container"><span class="a-button a-button-search"><span class="a-button-inner"><input class="a-button-input" type="submit"><span class="a-button-text">Search Orders</span></span></span></div></form></div></div></div>
 <div class="a-section a-spacing-medium page-tabs"><ul><li class="page-tabs__tab page-tabs__tab--selected">Orders</li><li class="page-tabs__tab"><a class="a-link-normal" href="/your-orders/orders?orderFilter=open">Not Yet Shipped</a></li></ul></div>
 <div class="a-row a-spacing-base"><div class="a-column a-span8"><form method="get" action="/your-orders/orders" class="js-time-filter-form a-spacing-none"><label for="time-filter" class="a-form-label time-filter__label aok-inline-block a-text-normal"><b>${ORDERS.length} orders</b> placed in</label><span class="a-dropdown-container"><select name="timeFilter" autocomplete="off" id="time-filter" class="a-native-dropdown">${options}</select><span class="a-button a-button-dropdown"><span class="a-button-inner"><span class="a-button-text a-declarative"><span class="a-dropdown-prompt">${selectedLabel}</span></span></span></span></span></form></div></div>
 ${ORDERS.map(orderCard).join("")}
 <div class="a-row"><div class="a-text-center"><ul class="a-pagination"><li class="a-disabled">&larr; Previous<span class="a-letter-space"></span></li><li class="a-selected"><a href="/your-orders/orders?timeFilter=${esc(timeFilter)}&amp;page=0">1</a></li><li class="a-last a-disabled">Next &rarr;<span class="a-letter-space"></span></li></ul></div></div>
 </div></section>`,
+  });
+}
+
+/**
+ * How many rows a results page of the order search holds. The real page holds ten; the
+ * invented order history is three items long, so two keeps its pagination reachable.
+ */
+export const ORDER_SEARCH_PAGE_SIZE = 2;
+
+interface SearchRow {
+  order: Order;
+  asin: string;
+  title: string;
+}
+
+/** Items whose title holds every word of the query, or every item of the order it names. */
+function searchRows(query: string): SearchRow[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const rows: SearchRow[] = [];
+  for (const order of ORDERS) {
+    for (const line of order.lines) {
+      const title = product(line.asin)?.title ?? line.asin;
+      const hay = title.toLowerCase();
+      if (query.trim() === order.id || words.every((w) => hay.includes(w)))
+        rows.push({ order, asin: line.asin, title });
+    }
+  }
+  return rows;
+}
+
+function searchRow(r: SearchRow, n: number): string {
+  const title = esc(r.title);
+  return `<div class="a-section a-spacing-large a-spacing-top-large"><div class="a-fixed-left-grid"><div class="a-fixed-left-grid-inner"><div class="a-text-center a-fixed-left-grid-col a-col-left"><div><a class="a-link-normal" href="/dp/${r.asin}?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_${n}"><img alt="${title}" title="${title}" src="https://images.example.com/placeholder.png" height="90" width="90"></a></div></div><div class="a-fixed-left-grid-col a-col-right">
+<div class="a-row a-spacing-small"><a class="a-link-normal" href="/your-orders/order-details?orderID=${r.order.id}&amp;ref_=ppx_hzsearch_conn_dt_b_fed_order_details_${n}"><span>View order details</span></a><i class="a-icon a-icon-text-separator" role="presentation"></i><span>Ordered on ${r.order.placed}</span></div>
+<div class="a-row a-spacing-small"><div class="a-section a-spacing-none"><a class="a-link-normal" href="/dp/${r.asin}?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_${n}"><p>${title}</p></a></div></div>
+<div class="a-row"><div class="a-section a-spacing-none"><span class="a-button a-button-primary"><span class="a-button-inner"><a href="/gp/buyagain?ats=FAKETOKEN${r.asin}" class="a-button-text">Buy it again</a></span></span> <span class="a-button a-button-base"><span class="a-button-inner"><a href="/your-orders/pop?orderId=${r.order.id}&amp;asin=${r.asin}" class="a-button-text">View your item</a></span></span></div></div>
+</div></div></div></div>`;
+}
+
+function searchPagination(current: number, last: number, query: string): string {
+  const href = (p: number): string =>
+    `/your-orders/search?page=${p}&amp;search=${esc(encodeURIComponent(query))}&amp;ref_=ppx_hzsearch_pagination_dt_b_pg_${current}`;
+  const numbers = Array.from({ length: last }, (_, i) => i + 1)
+    .map(
+      (p) =>
+        `<li class="${p === current ? "a-selected" : "a-normal"}"><a href="${href(p)}">${p}</a></li>`,
+    )
+    .join("");
+  const prev =
+    current <= 1
+      ? `<li class="a-disabled"><span ${HIDDEN}>&larr;</span>Previous</li>`
+      : `<li><a href="${href(current - 1)}"><span ${HIDDEN}>&larr;</span>Previous</a></li>`;
+  const next =
+    current >= last
+      ? `<li class="a-disabled a-last">Next<span ${HIDDEN}>&rarr;</span></li>`
+      : `<li class="a-last"><a href="${href(current + 1)}">Next<span ${HIDDEN}>&rarr;</span></a></li>`;
+  return `<nav class="a-text-center"><ul class="a-pagination">${prev}${numbers}${next}</ul></nav>`;
+}
+
+/** The results page of the order list's search box: one row per matching item. */
+export function renderOrderSearch(url: URL): string {
+  const query = (url.searchParams.get("search") ?? "").trim();
+  const rows = searchRows(query);
+  const last = Math.max(1, Math.ceil(rows.length / ORDER_SEARCH_PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1), last);
+  const shown = rows.slice((page - 1) * ORDER_SEARCH_PAGE_SIZE, page * ORDER_SEARCH_PAGE_SIZE);
+  const orders = new Set(rows.map((r) => r.order.id)).size;
+  const results =
+    rows.length === 0
+      ? `<div class="a-section a-spacing-small"><p class="a-text-bold" role="heading">No results found. Please try another search.</p><p>You can search by product title, order number, address, or recipient.</p></div>`
+      : `<div class="a-section a-spacing-small"><p class="hzsearch-results-summary" role="heading">${orders} ${orders === 1 ? "order" : "orders"} matching "<strong>${esc(query)}</strong>"</p></div>`;
+  return layout({
+    title: "Search results",
+    body: `<div class="a-section a-spacing-large hzsearch-content-container" role="main">
+<div class="a-section a-spacing-medium a-spacing-top-small"><ul class="a-unordered-list a-horizontal hzsearch-breadcrumbs"><li class="hzsearch-breadcrumbs__crumb"><span class="a-list-item"><a class="a-link-normal" href="/gp/css/homepage.html">Your Account</a></span></li><li class="hzsearch-breadcrumbs__crumb hzsearch-breadcrumbs__crumb--divider"><span class="a-list-item">&rsaquo;</span></li><li class="hzsearch-breadcrumbs__crumb"><span class="a-list-item"><a class="a-link-normal" href="/your-orders/orders">Your Orders</a></span></li><li class="hzsearch-breadcrumbs__crumb hzsearch-breadcrumbs__crumb--divider"><span class="a-list-item">&rsaquo;</span></li><li class="hzsearch-breadcrumbs__crumb hzsearch-breadcrumbs__crumb--current"><span class="a-list-item"><span class="a-color-state">Search results</span></span></li></ul></div>
+<div class="a-row a-spacing-mini"><div class="a-column a-span6"><div class="a-section a-spacing-none"><h1>Search results</h1></div></div><div class="a-column a-span6 a-span-last"><div class="a-section a-spacing-none"><div class="search-bar"><form method="get" action="/your-orders/search"><div class="search-bar__input-container"><div class="a-search a-span12 a-spacing-none"><i class="a-icon a-icon-search"></i><input type="search" name="search" value="${esc(query)}" class="a-input-text a-span12 hzsearch-text-input"></div><input type="hidden" name="ref_" value="ppx_hzsearch_sb_dt_b"></div><div class="search-bar__button-container"><span class="a-button a-button-search"><span class="a-button-inner"><input class="a-button-input" type="submit"><span class="a-button-text">Search Orders</span></span></span></div></form></div></div></div></div>
+${results}
+<div class="a-section a-spacing-none a-padding-small">${shown.map((r, i) => searchRow(r, i + 1)).join(`<hr class="a-divider-normal">`)}</div>
+${last > 1 ? searchPagination(page, last, query) : ""}
+</div>`,
   });
 }
 

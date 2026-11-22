@@ -4,6 +4,7 @@ import { RfError, type Capture, type PageKind } from "@rainforest/core";
 import type { SessionProvider } from "../../daemon/src/browser-controller.ts";
 import { addToCart } from "../../daemon/src/flows/add-to-cart.ts";
 import { clearCaptureCache, type FlowContext } from "../../daemon/src/flows/common.ts";
+import { orderSearchUrl, searchOrders } from "../../daemon/src/flows/orders.ts";
 import { getBuyingOptions, getProduct, search } from "../../daemon/src/flows/shopping.ts";
 import { startSite, type Client } from "./helpers.ts";
 
@@ -177,6 +178,77 @@ describe("get_buying_options page loads", () => {
     await getProduct({ asin: ASIN }, r.ctx);
     await getBuyingOptions({ asin: ASIN }, r.ctx);
     expect(r.loads()).toEqual({ search: 4, product: 1, offers: 1 });
+  });
+});
+
+describe("search_orders", () => {
+  interface Found {
+    query: string;
+    order_count?: number;
+    page: number;
+    next_page?: number;
+    empty_text?: string;
+    truncated: boolean;
+    results: { asin: string; order_id: string; ordered: { iso: string } }[];
+  }
+
+  it("builds the form's URL for page 1 and the pagination URL after it", () => {
+    expect(orderSearchUrl("desk lamp", 1)).toBe(
+      "https://www.amazon.com/your-orders/search/ref=ppx_yo2ov_dt_b_search?opt=ab&search=desk+lamp",
+    );
+    expect(orderSearchUrl("desk lamp", 3)).toBe(
+      "https://www.amazon.com/your-orders/search?page=3&search=desk+lamp",
+    );
+    // The query is data: it cannot add a parameter or leave the path.
+    expect(orderSearchUrl("a&page=9#x/../y", 1)).toBe(
+      "https://www.amazon.com/your-orders/search/ref=ppx_yo2ov_dt_b_search?opt=ab&search=a%26page%3D9%23x%2F..%2Fy",
+    );
+  });
+
+  it("finds a past purchase in one account load and names the next page", async () => {
+    const r = rig();
+    const first = (await searchOrders({ query: "  Example  " }, r.ctx)) as unknown as Found;
+    expect(first.query).toBe("Example");
+    expect(first.order_count).toBe(2);
+    expect(first.page).toBe(1);
+    expect(first.next_page).toBe(2);
+    expect(first.truncated).toBe(false);
+    expect(first.results.map((h) => [h.asin, h.order_id, h.ordered.iso])).toEqual([
+      ["B0FAKE0001", "000-0000000-0000001", "2026-11-02"],
+      ["B0FAKE0003", "000-0000000-0000001", "2026-11-02"],
+    ]);
+    expect(r.loads()).toEqual({ account: 1 });
+    expect(await r.hits("/your-orders/search/ref=ppx_yo2ov_dt_b_search")).toBe(1);
+
+    const second = (await searchOrders(
+      { query: "Example", page: first.next_page },
+      r.ctx,
+    )) as unknown as Found;
+    expect(second.page).toBe(2);
+    expect(second.next_page).toBeUndefined();
+    expect(second.results.map((h) => h.order_id)).toEqual(["000-0000000-0000002"]);
+    expect(r.loads()).toEqual({ account: 2 });
+  });
+
+  it("answers a search with no match as an empty result, not an error", async () => {
+    const r = rig();
+    const none = (await searchOrders({ query: "zzqx vvkk" }, r.ctx)) as unknown as Found;
+    expect(none.results).toEqual([]);
+    expect(none.empty_text).toContain("No results found");
+    expect(none.next_page).toBeUndefined();
+  });
+
+  it("refuses a query the purchase guard would block, before any load", async () => {
+    const r = rig();
+    for (const query of ["turbo fan", "one-click remote", "BuyNow sticker"]) {
+      const error = await refused(searchOrders({ query }, r.ctx));
+      expect(error.payload.code, query).toBe("invalid_arguments");
+      expect(error.payload.message, query).toContain("purchase guard");
+    }
+    expect(r.loads()).toEqual({});
+    // Words that only deny a PATH are fine in a query.
+    const ok = (await searchOrders({ query: "cancel returns address" }, r.ctx)) as unknown as Found;
+    expect(ok.results).toEqual([]);
   });
 });
 

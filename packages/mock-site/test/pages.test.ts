@@ -8,6 +8,7 @@ import {
   parseOffers,
   parseOrderDetails,
   parseOrderList,
+  parseOrderSearch,
   parseProduct,
   parseSearch,
   parseVariants,
@@ -208,6 +209,64 @@ describe("pages parse", () => {
       "Compare scanners first",
     ]);
     expect((await c.get("/hz/wishlist/ls/ZZZZZZZZZZZZ")).status).toBe(404);
+  });
+
+  it("order search: one row per matching item, pagination, and the no-match page", async () => {
+    // The order list carries the search box whose form the search flow mirrors.
+    const list = parseOrderList(await c.capture("order_list", "/your-orders/orders"));
+    expect(list.data.search).toEqual({
+      action_path: "/your-orders/search",
+      method: "get",
+      query_param: "search",
+      hidden: { opt: "ab" },
+    });
+
+    const first = parseOrderSearch(
+      await c.capture(
+        "order_search",
+        "/your-orders/search/ref=ppx_yo2ov_dt_b_search?opt=ab&search=example",
+      ),
+    );
+    expect(first.meta.warnings).toEqual([]);
+    expect(first.meta.unparsed_text_chars).toBe(0);
+    expect(first.other_sections).toEqual([]);
+    expect(first.data.query).toBe("example");
+    expect(first.data.order_count).toBe(2);
+    expect(first.data.results.map((h) => [h.asin, h.order_id, h.ordered?.iso])).toEqual([
+      ["B0FAKE0001", "000-0000000-0000001", "2026-11-02"],
+      ["B0FAKE0003", "000-0000000-0000001", "2026-11-02"],
+    ]);
+    expect(first.data.results[0]!.title).toBe("Example Bamboo Cutting Board, Large");
+    expect(first.data.results[0]!.order_details_path).toBe(
+      "/your-orders/order-details?orderID=000-0000000-0000001",
+    );
+    expect(first.data.pagination).toMatchObject({
+      has_prev: false,
+      has_next: true,
+      next_path: "/your-orders/search?page=2&search=example",
+    });
+
+    const second = parseOrderSearch(
+      await c.capture("order_search", "/your-orders/search?page=2&search=example"),
+    );
+    expect(second.data.results.map((h) => [h.asin, h.order_id])).toEqual([
+      ["B0FAKE0007", "000-0000000-0000002"],
+    ]);
+    expect(second.data.pagination).toMatchObject({ has_prev: true, has_next: false });
+
+    const byOrder = parseOrderSearch(
+      await c.capture("order_search", "/your-orders/search?search=000-0000000-0000002"),
+    );
+    expect(byOrder.data.results.map((h) => h.asin)).toEqual(["B0FAKE0007"]);
+    expect(byOrder.data.order_count).toBe(1);
+    expect(byOrder.data.pagination).toBeUndefined();
+
+    const none = parseOrderSearch(
+      await c.capture("order_search", "/your-orders/search?search=zzqx+vvkk"),
+    );
+    expect(none.data.results).toEqual([]);
+    expect(none.data.empty_text).toContain("No results found");
+    expect(none.meta.unparsed_text_chars).toBe(0);
   });
 
   it("orders, details and invoice", async () => {

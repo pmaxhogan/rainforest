@@ -359,6 +359,32 @@ export const TOOLS: readonly ToolDef[] = [
     }),
   }),
   tool({
+    name: "search_orders",
+    title: "Search orders",
+    kind: "read",
+    pacing: "account",
+    description:
+      "Search the whole order history with Amazon's own order search box, one results page per call. Amazon " +
+      "matches the query against product titles, order numbers, addresses and recipients. Use this to find a past " +
+      "purchase instead of paging through list_orders. Each result is one purchased item with its order_id and " +
+      "order date (an order with several matching items appears once per item); pass the order_id to get_order " +
+      "for prices, shipments and tracking. order_count is the number of matching orders across all pages. When " +
+      "there are more results the response has next_page: repeat the call with that `page`. No match answers " +
+      "with empty results and empty_text, not an error." +
+      CUT_RAISE_MAX_CHARS,
+    input: z.object({
+      browser,
+      query: z
+        .string()
+        .min(1)
+        .max(120)
+        .regex(/\S/)
+        .describe("Words from the product title, or an order number"),
+      page: z.number().int().min(1).max(100).optional(),
+      max_chars: maxChars,
+    }),
+  }),
+  tool({
     name: "get_order",
     title: "Get order",
     kind: "read",

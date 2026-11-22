@@ -10,18 +10,18 @@ heading form for tools only.
 
 ## Status
 
-The registry describes 35 tools. Four are answered by the hub and 31 are implemented in the daemon
+The registry describes 36 tools. Four are answered by the hub and 32 are implemented in the daemon
 (exactly the keys of `FLOWS` in `packages/daemon/src/flows/index.ts`); no tool is planned as a
 whole. This table is the one place that records which options are still planned; check `FLOWS` for
 the current set.
 
-| Where it runs      | Tools                                                                                                                                                                                                                                                                                     | State                                                                              |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                          | Implemented                                                                        |
-| Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                        |
-| Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                          | Implemented                                                                        |
-| Daemon, writes     | `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, `remove_from_list`                                                       | Implemented                                                                        |
-| Planned            | coupon clipping (the `clip_coupon` option of `add_to_cart`); the copy mode of `move_list_item`                                                                                                                                                                                            | Planned: `clip_coupon` is accepted and ignored; `copy: true` answers `unsupported` |
+| Where it runs      | Tools                                                                                                                                                                                                                                                                                                      | State                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Worker (hub tools) | `list_browsers`, `select_browser`, `get_status`, `get_audit_log`                                                                                                                                                                                                                                           | Implemented                                                                        |
+| Daemon, reads      | `search`, `get_product`, `get_variants`, `get_buying_options`, `get_media`, `get_reviews`, `get_review_summary`, `get_price_history`, `get_cart`, `list_orders`, `search_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `list_lists`, `get_list`, `get_browsing_history`, `get_search_history` | Implemented                                                                        |
+| Daemon, hand-off   | `show_on_screen`                                                                                                                                                                                                                                                                                           | Implemented                                                                        |
+| Daemon, writes     | `add_to_cart`, `set_cart_quantity`, `remove_from_cart`, `save_for_later`, `move_to_cart`, `delete_saved_item`, `create_list`, `update_list`, `delete_list`, `add_to_list`, `update_list_item`, `move_list_item`, `remove_from_list`                                                                        | Implemented                                                                        |
+| Planned            | coupon clipping (the `clip_coupon` option of `add_to_cart`); the copy mode of `move_list_item`                                                                                                                                                                                                             | Planned: `clip_coupon` is accepted and ignored; `copy: true` answers `unsupported` |
 
 Every section below describes what the code does. `get_search_history` is best effort. Archived
 orders are reported `unsupported`; cancelled orders appear inline in the order list.
@@ -93,10 +93,11 @@ Only tools that have a `cursor` argument can continue a cut result: `get_product
 `get_cart`, `list_subscriptions`, `get_list`, `get_browsing_history` and `list_orders`. Pass
 `next_cursor` as `cursor` to continue the same parsed page without loading Amazon again; a
 continuation returns only the paged lists. The other read tools (`search`, `get_buying_options`,
-`get_reviews`, `get_order`, `get_invoice`, `list_lists`, `get_media`, `get_review_summary`) can still
+`get_reviews`, `search_orders`, `get_order`, `get_invoice`, `list_lists`, `get_media`,
+`get_review_summary`) can still
 return a `next_cursor`, but their flows never redeem one, so the registry gives them no `cursor`
 argument. Their descriptions say how to get the rest: raise `max_chars` where the tool has one
-(`search`, `get_buying_options`, `get_reviews`, `get_order`); `get_invoice`, `list_lists`,
+(`search`, `get_buying_options`, `get_reviews`, `search_orders`, `get_order`); `get_invoice`, `list_lists`,
 `get_media` and `get_review_summary` have neither argument and the rest cannot be fetched.
 
 ### Pacing classes
@@ -142,7 +143,7 @@ bursts: one search plus one cart add (1 + 2 + 4 loads) is already 7.
 | `product`       | 15       | 120     | `get_product`, `get_variants`, `get_media`, `get_review_summary`, the product page of `get_buying_options` and `add_to_cart`, the Amazon source of `get_price_history` |
 | `offers`        | 15       | 100     | the all-offers fragment of `get_buying_options`                                                                                                                        |
 | `reviews`       | 15       | 120     | `get_reviews` (each "show more" expansion counts as a load)                                                                                                            |
-| `account`       | 12       | 80      | `list_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `get_browsing_history`                                                                                |
+| `account`       | 12       | 80      | `list_orders`, `search_orders`, `get_order`, `get_invoice`, `list_subscriptions`, `get_browsing_history`                                                               |
 | `cart`          | 15       | 120     | `get_cart` and the cart write tools                                                                                                                                    |
 | `list`          | 12       | 80      | `list_lists`, `get_list` and the list write tools                                                                                                                      |
 | `price_history` | 6        | 30      | the CamelCamelCamel source of `get_price_history`                                                                                                                      |
@@ -632,6 +633,45 @@ the cancelled ones on each page (and says so in `filter_note`); continue with th
 more. `archived` is answered `unsupported`: Amazon's current order list has no archived view, and
 archived orders still appear under their year. Two kinds of cursor go in `cursor`: `next_page_cursor`
 fetches the next page of Amazon's list, and `next_cursor` continues a result that was cut for size.
+
+### `search_orders`
+
+> Search the whole order history with Amazon's own order search box, one results page per call.
+> Amazon matches the query against product titles, order numbers, addresses and recipients. Use this
+> to find a past purchase instead of paging through list_orders. Each result is one purchased item
+> with its order_id and order date (an order with several matching items appears once per item);
+> pass the order_id to get_order for prices, shipments and tracking. order_count is the number of
+> matching orders across all pages. When there are more results the response has next_page: repeat
+> the call with that `page`. No match answers with empty results and empty_text, not an error. A
+> result over the budget is cut (truncated: true); this tool takes no cursor, so raise max_chars to
+> get the rest.
+
+Kind: runs on a computer; read only; pacing: account.
+
+| Argument    | Type                  | Required | Notes                                                 |
+| ----------- | --------------------- | -------- | ----------------------------------------------------- |
+| `browser`   | string (max 64 chars) | no       | Browser id, name or alias; see Browser selection      |
+| `query`     | string (1..120 chars) | yes      | Words from the product title, or an order number      |
+| `page`      | integer 1..100        | no       | Results page, from a previous response's `next_page`  |
+| `max_chars` | integer 2000..120000  | no       | Size budget in characters (default 40000, cap 120000) |
+
+**Result.** Implemented. `heading`, `breadcrumbs`, `requested`, `query` (as the page's own search
+box shows it), `match_text`, `order_count`, `results` (each row: `index`, `asin`, `title`,
+`url_path`, `image_url`, `order_id`, `order_details_path`, `ordered`, `actions`), `pagination`,
+`empty_text` and `page`, then `other_sections`, `meta` and the truncation fields (see Read results).
+When Amazon has a further page the result also has `next_page`.
+
+**Errors.** `needs_human`, `throttled`, `blocked_by_policy`, `layout_unrecognized`, `timeout`,
+`invalid_arguments` (a query the purchase guard refuses; nothing is loaded).
+
+**Notes.** This is the search box of the order list: page 1 loads what its form submits and later
+pages load what the results page's pagination links to. A results page lists items, ten to a page,
+so an order with two matching items takes two rows and `order_count` can be below the number of
+rows. Rows carry no price, quantity or delivery status: `get_order` has those. A search that
+matches nothing is a normal result with `empty_text`; a results page with no rows that does not say
+so is `layout_unrecognized`, never an empty result. The URL policy refuses a few purchase words
+anywhere in a URL (`turbo`, `one-click`, `buynow` and the like), so a query containing one is
+answered `invalid_arguments` before any page load: search with other words from the title.
 
 ### `get_order`
 
